@@ -164,11 +164,47 @@
     lastClickTs: 0,
     lastErrorTs: 0,
     notFoundTs: 0,
+    audioSwitchTs: 0,
     reportedClosed: false,
     reportedFailed: false,
     stopped: false,
     busy: false
   };
+
+  /** إيجاد زر ⟳ التحدي الجديد */
+  function findReloadButton() {
+    return D.first(C.SEL.recaptcha.reload);
+  }
+
+  /** هل التحدي الصوري مفتوح حالياً؟ */
+  function imageOpen() {
+    return !!D.first(C.SEL.recaptcha.imageChallenge);
+  }
+
+  /** هل التحدي الصوتي مفتوح حالياً؟ */
+  function audioOpen() {
+    return !!(D.first(C.SEL.recaptcha.audioChallenge) || D.first(C.SEL.recaptcha.audioInput));
+  }
+
+  /** هل نافذة التحدي مفتوحة أصلاً (صوتي أو صوري أو زر التحدي الجديد موجود)؟ */
+  function challengeOpen() {
+    return !!(imageOpen() || audioOpen() || findReloadButton());
+  }
+
+  /** تحويل التحدي الصوري لصوتي (زر السماعة) عشان زر Buster يظهر ويحل */
+  function switchToAudio() {
+    const btn = D.first(C.SEL.recaptcha.audioSwitch);
+    if (!btn) { return false; }
+    D.click(btn, 'recaptcha-audio-switch');
+    return true;
+  }
+
+  /** تسجيل محاولة ضغط Buster ورفعها للمحرك (عدّاد المحاولات الحي) */
+  function reportAttempt(stage) {
+    S.attempts += 1;
+    S.lastClickTs = Date.now();
+    D.msg.send(C.MSG.CAPTCHA_ATTEMPT, { attempt: S.attempts, stage: stage, frameUrl: href });
+  }
 
   /** مسح نطاق واحد (مستند أو shadow root) عن أي أثر للشخص البرتقالي */
   function scanScope(scope) {
@@ -291,6 +327,17 @@
           D.msg.send(C.MSG.CAPTCHA_CHALLENGE_CLOSED, { frameUrl: href });
         }
         return;
+      }
+
+      // (أ-2) التحدي صوري من غير زر Buster؟ حوّله لصوتي (زر السماعة) مرة كل 5 ثوانٍ
+      if (imageOpen() && !audioOpen()) {
+        const now = Date.now();
+        if (!S.audioSwitchTs || now - S.audioSwitchTs > 5000) {
+          S.audioSwitchTs = now;
+          switchToAudio();
+          await D.humanSleep(700, 250);
+          return;
+        }
       }
 
       // (ب) الدور الوحيد: زر Buster (الشخص البرتقالي) — ندوسه وسيبه هو يحل

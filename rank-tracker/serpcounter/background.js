@@ -1,15 +1,6 @@
-chrome.alarms.get('myAlarm', function(alarm) {
-    if (alarm == null) {
-        chrome.alarms.create('myAlarm', {
-            periodInMinutes: 1
-        });
-    }
-});
-
-chrome.alarms.onAlarm.addListener(function(alarm) {
-    chrome.storage.local.get('enabled', function(result) {
-        if (result.enabled) {
-            console.log('Show notification');
-        }
-    });
-});
+/**
+ * SERP Counter — خلفية معطّلة عمداً في الإضافة الموحدة.
+ * النسخة الأصلية كانت تصنع Alarm كل دقيقة بلا فائدة حقيقية (تصحّي الـ Service Worker
+ * كل دقيقة وتستهلك موارد). عدّاد النتائج يعمل بالكامل من سكربت المحتوى (content.js)
+ * ولا يحتاج أي خلفية.
+ */
