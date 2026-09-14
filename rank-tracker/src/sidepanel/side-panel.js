@@ -422,17 +422,11 @@ async function main() {
   // Keep-Alive: يبقي الـ Service Worker حياً طوال فتح اللوحة
   SRT.msg.connectKeepalive('srt-sidepanel');
 
-  // ⚠️ تحذير أول فتح — يظهر مرة واحدة فقط ثم يُحفظ العلم في التخزين المحلي
-  try {
-    const warn = await chrome.storage.local.get('srt.firstOpenWarning');
-    if (!warn || !warn['srt.firstOpenWarning']) {
-      $('warnOverlay').classList.remove('hidden');
-      $('btnWarnOk').addEventListener('click', async () => {
-        $('warnOverlay').classList.add('hidden');
-        try { await chrome.storage.local.set({ 'srt.firstOpenWarning': Date.now() }); } catch (_) {}
-      });
-    }
-  } catch (_) {}
+  // ⚠️ تحذير يظهر عند كل فتحة للوحة — على طول في البداية
+  $('warnOverlay').classList.remove('hidden');
+  $('btnWarnOk').addEventListener('click', () => {
+    $('warnOverlay').classList.add('hidden');
+  });
 
   bindConfigForm();
 
