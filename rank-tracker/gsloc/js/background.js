@@ -15,6 +15,7 @@ const settings = {
   'regions': 'United States - English'
 };
 const knownPlaces = [settings];
+var gsMenuIds = []; // عناصر القائمة السياقية بتاعتنا — نمسحها بس عند إعادة البناء
 
 chrome.runtime.onStartup.addListener(function() {
   chrome.storage.sync.get(null, (data) => {
@@ -140,31 +141,38 @@ function compareTimestamp(a, b) {
 }
 function setupContextMenu(allPlaces) {
   var contextPlaces = allPlaces.sort(compareTimestamp).slice(Math.max(allPlaces.length - options.contextnumber, 0));
-  chrome.contextMenus.removeAll(function() {
-    parent = chrome.contextMenus.create({"title": "change location", "id": "window"}, () => chrome.runtime.lastError);
-    chrome.contextMenus.create({"title": "🚫 disable fake location", "id": "disable","parentId": parent}, () => chrome.runtime.lastError);
-    chrome.contextMenus.create({"type": "separator", "id": "s1", "parentId": parent}, () => chrome.runtime.lastError);
-    if (settings.enabled && settings.location) {
-      chrome.contextMenus.create({"title": "📍"+settings.location, "id": settings.placeId, "parentId": parent}, () => chrome.runtime.lastError);
-      chrome.contextMenus.create({"type": "separator", "id": "s2", "parentId": parent}, () => chrome.runtime.lastError);
-    } else {
-      if (settings.location) {
-        chrome.contextMenus.create({"title": settings.location, "id": settings.placeId, "parentId": parent}, () => chrome.runtime.lastError);
-      }
-    }
-    contextPlaces.forEach(function (item) {
-      if (!item.placeId) {
-        return;
-      }
-      if (!item.location) {
-        return;
-      }
-      if (item.placeId != settings.placeId) {
-        chrome.contextMenus.create({"title": item.location, "id": item.placeId, "parentId": parent}, () => chrome.runtime.lastError);
-      }
-    });
-    chrome.contextMenus.onClicked.addListener(genericOnClick);
+  // إزالة عناصرنا بس (من غير removeAll عشان ما نمسحش قوائم الأدوات التانية في الإضافة الموحدة)
+  ['window', 'disable', 's1', 's2'].forEach(function (id) {
+    chrome.contextMenus.remove(id, () => chrome.runtime.lastError);
   });
+  gsMenuIds.forEach(function (id) { chrome.contextMenus.remove(id, () => chrome.runtime.lastError); });
+  gsMenuIds = [];
+  parent = chrome.contextMenus.create({"title": "change location", "id": "window"}, () => chrome.runtime.lastError);
+  chrome.contextMenus.create({"title": "🚫 disable fake location", "id": "disable","parentId": parent}, () => chrome.runtime.lastError);
+  chrome.contextMenus.create({"type": "separator", "id": "s1", "parentId": parent}, () => chrome.runtime.lastError);
+  if (settings.enabled && settings.location) {
+    gsMenuIds.push(String(settings.placeId));
+    chrome.contextMenus.create({"title": "📍"+settings.location, "id": String(settings.placeId), "parentId": parent}, () => chrome.runtime.lastError);
+    chrome.contextMenus.create({"type": "separator", "id": "s2", "parentId": parent}, () => chrome.runtime.lastError);
+  } else {
+    if (settings.location) {
+      gsMenuIds.push(String(settings.placeId));
+      chrome.contextMenus.create({"title": settings.location, "id": String(settings.placeId), "parentId": parent}, () => chrome.runtime.lastError);
+    }
+  }
+  contextPlaces.forEach(function (item) {
+    if (!item.placeId) {
+      return;
+    }
+    if (!item.location) {
+      return;
+    }
+    if (item.placeId != settings.placeId) {
+      gsMenuIds.push(String(item.placeId));
+      chrome.contextMenus.create({"title": item.location, "id": String(item.placeId), "parentId": parent}, () => chrome.runtime.lastError);
+    }
+  });
+  chrome.contextMenus.onClicked.addListener(genericOnClick);
 }
 
 function deleteUULE() {
