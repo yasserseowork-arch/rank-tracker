@@ -62,7 +62,9 @@
       langBtn: 'EN',
       warnTitle: '⚠️ تحذير مهم',
       warnText: 'الإضافة دي بتمسح بيانات المتصفح كاملة (كوكيز، تاريخ، وكاش) قبل كل جولة فحص. فرجاء استخدامها في حساب جيست جديد بدون تسجيل الدخول عشان تحمي حساباتك وبياناتك.',
-      btnWarnOk: 'فهمت'
+      btnWarnOk: 'فهمت',
+      tabMain: '🏠 الرئيسية', tabGsloc: '📍 الموقع', tabBeyondten: '💯 النتائج', tabSerp: '🔢 SERP', tabBuster: '🧩 Buster',
+      openInTab: '↗ فتح في تبويب'
     },
     en: {
       appName: 'SEO Kw Tracker', panelTitle: 'Rank Tracking Panel',
@@ -119,7 +121,9 @@
       langBtn: 'ع',
       warnTitle: '⚠️ Important warning',
       warnText: 'This extension deletes ALL browser data (cookies, history and cache) before every checking run. Please use it in a new Guest account without signing in, to keep your accounts and data safe.',
-      btnWarnOk: 'I understand'
+      btnWarnOk: 'I understand',
+      tabMain: '🏠 Home', tabGsloc: '📍 Location', tabBeyondten: '💯 Results', tabSerp: '🔢 SERP', tabBuster: '🧩 Buster',
+      openInTab: '↗ Open in tab'
     }
   };
 

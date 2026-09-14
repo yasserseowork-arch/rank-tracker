@@ -422,6 +422,22 @@ async function main() {
   // Keep-Alive: يبقي الـ Service Worker حياً طوال فتح اللوحة
   SRT.msg.connectKeepalive('srt-sidepanel');
 
+  // ⚙️ تبويبات الأدوات المدمجة (الرئيسية / الموقع / النتائج / SERP / Buster)
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.tab-pane').forEach((pane) => {
+        pane.classList.toggle('hidden', pane.id !== btn.dataset.pane);
+      });
+      window.dispatchEvent(new Event('resize')); // إعادة رسم الشارت عند العودة للرئيسية
+    });
+  });
+  document.querySelectorAll('.open-tool').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL(btn.dataset.url) });
+    });
+  });
+
   // ⚠️ تحذير يظهر عند كل فتحة للوحة — على طول في البداية
   $('warnOverlay').classList.remove('hidden');
   $('btnWarnOk').addEventListener('click', () => {

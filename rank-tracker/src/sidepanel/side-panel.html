@@ -33,6 +33,15 @@
     </div>
   </header>
 
+  <nav class="tab-bar" id="tabBar">
+    <button class="tab-btn active" data-pane="paneMain" data-i18n="tabMain">🏠 الرئيسية</button>
+    <button class="tab-btn" data-pane="paneGsloc" data-i18n="tabGsloc">📍 الموقع</button>
+    <button class="tab-btn" data-pane="paneBeyondten" data-i18n="tabBeyondten">💯 النتائج</button>
+    <button class="tab-btn" data-pane="paneSerp" data-i18n="tabSerp">🔢 SERP</button>
+    <button class="tab-btn" data-pane="paneBuster" data-i18n="tabBuster">🧩 Buster</button>
+  </nav>
+
+  <div id="paneMain" class="tab-pane">
   <section class="controls">
     <button id="btnStart" class="btn btn-primary" data-i18n="btnStart">▶ بدء الفحص</button>
     <button id="btnPause" class="btn btn-warn" data-i18n="btnPause" disabled>⏸ إيقاف مؤقت</button>
@@ -146,6 +155,25 @@
     <span class="footer-copy" dir="ltr" data-i18n="footerCopy">© 2026 SEO Kw Tracker. جميع الحقوق محفوظة.</span>
     <span class="footer-by" dir="ltr"><a class="li-badge" href="https://www.linkedin.com/in/muhammed-yasser-seo-specialist/" target="_blank" rel="noopener" aria-label="LinkedIn profile of Muhammed Yasser">in</a>&nbsp;By: Muhammed Yasser</span>
   </footer>
+  </div><!-- /paneMain -->
+
+  <!-- ⚙️ تبويبات الأدوات المدمجة: واجهة كل أداة محمّلة في إطار + زرار فتح مستقل -->
+  <div id="paneGsloc" class="tab-pane hidden">
+    <iframe id="frameGsloc" src="../../gsloc/popup.html" class="tool-frame" data-tool="gsloc"></iframe>
+    <button class="btn btn-ghost btn-sm open-tool" data-url="gsloc/popup.html" data-i18n="openInTab">↗ فتح في تبويب</button>
+  </div>
+  <div id="paneBeyondten" class="tab-pane hidden">
+    <iframe id="frameBeyondten" src="../../beyondten/popup/popup.html" class="tool-frame" data-tool="beyondten"></iframe>
+    <button class="btn btn-ghost btn-sm open-tool" data-url="beyondten/popup/popup.html" data-i18n="openInTab">↗ فتح في تبويب</button>
+  </div>
+  <div id="paneSerp" class="tab-pane hidden">
+    <iframe id="frameSerp" src="../../serpcounter/popup.html" class="tool-frame" data-tool="serp"></iframe>
+    <button class="btn btn-ghost btn-sm open-tool" data-url="serpcounter/popup.html" data-i18n="openInTab">↗ فتح في تبويب</button>
+  </div>
+  <div id="paneBuster" class="tab-pane hidden">
+    <iframe id="frameBuster" src="../../buster/src/options/index.html" class="tool-frame" data-tool="buster"></iframe>
+    <button class="btn btn-ghost btn-sm open-tool" data-url="buster/src/options/index.html" data-i18n="openInTab">↗ فتح في تبويب</button>
+  </div>
 
   <!-- ⚠️ تحذير يظهر عند كل فتحة للوحة في البداية -->
   <div id="warnOverlay" class="modal-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="warnTitle">
