@@ -10,6 +10,7 @@ import * as tabctl from './core/tabctl.js';
 import * as scheduler from './core/scheduler.js';
 import { QueueEngine } from './core/queue.js';
 import { createRouter } from './core/router.js';
+import './embedded.js'; // الأدوات المدمجة: Buster + SERP Counter + Show 100 + gs location changer
 
 const engine = new QueueEngine();
 

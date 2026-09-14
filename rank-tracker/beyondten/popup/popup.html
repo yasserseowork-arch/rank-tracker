@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BeyondTen – 100 results at once</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="serp-popup">
+    <div class="header">
+      <div class="logo-title">
+        <svg width="28" height="28" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M24 4C13.5 4 5 12.5 5 23C5 33.5 13.5 42 24 42C34.5 42 43 33.5 43 23C43 21.4 42.8 19.8 42.4 18.3H24V26H35.8C34.3 31.1 29.5 35 24 35C17.9 35 13 30.1 13 24C13 17.9 17.9 13 24 13C27 13 29.6 14.2 31.6 16.1L37 10.6C33.8 7.5 29.1 5.5 24 5.5V4Z" fill="#0B72E7"/>
+          <circle cx="36" cy="36" r="6.5" fill="#0B72E7" stroke="#ffffff" stroke-width="1"/>
+          <path d="M36 33V39M33 36H39" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <h1>BeyondTen</h1>
+      </div>
+      <label class="top-toggle">
+        <input type="checkbox" id="extToggle" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <p class="subtitle">Customize your Google results per page:</p>
+
+    <div class="selector">
+      <label for="resultCount">Results per page</label>
+      <select id="resultCount">
+        <option value="10">10 results</option>
+        <option value="20">20 results</option>
+        <option value="50">50 results</option>
+        <option value="100">100 results</option>
+      </select>
+    </div>
+
+    <p id="statusText" class="status-line">Currently showing 100 results</p>
+
+    <button id="applyNow">Apply Now</button>
+
+    <footer>
+      Made with ❤️ by <strong><a href="https://ayubansary.com/" target="_blank" rel="noopener noreferrer">Ayub Ansary</a></strong>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

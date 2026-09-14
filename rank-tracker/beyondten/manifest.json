@@ -1,0 +1,120 @@
+{
+   "action": {
+      "default_icon": {
+         "128": "icons/icon128.png",
+         "16": "icons/icon16.png",
+         "48": "icons/icon48.png"
+      },
+      "default_popup": "popup/popup.html"
+   },
+   "background": {
+      "service_worker": "background.js"
+   },
+   "content_scripts": [
+      {
+         "js": [
+            "content/params.js",
+            "content/state.js",
+            "content/fetch.js",
+            "content/parser.js",
+            "content/purge.js",
+            "content/renderer.js",
+            "content/index.js"
+         ],
+         "matches": [
+            "https://*.google.com/search*",
+            "https://*.google.ae/search*",
+            "https://*.google.co.uk/search*",
+            "https://*.google.de/search*",
+            "https://*.google.fr/search*",
+            "https://*.google.in/search*",
+            "https://*.google.com.bd/search*",
+            "https://*.google.sa/search*",
+            "https://*.google.qa/search*",
+            "https://*.google.om/search*",
+            "https://*.google.bh/search*",
+            "https://*.google.kw/search*",
+            "https://*.google.jo/search*",
+            "https://*.google.lb/search*",
+            "https://*.google.iq/search*",
+            "https://*.google.il/search*",
+            "https://*.google.tr/search*",
+            "https://*.google.at/search*",
+            "https://*.google.be/search*",
+            "https://*.google.cz/search*",
+            "https://*.google.dk/search*",
+            "https://*.google.fi/search*",
+            "https://*.google.gr/search*",
+            "https://*.google.hu/search*",
+            "https://*.google.ie/search*",
+            "https://*.google.it/search*",
+            "https://*.google.nl/search*",
+            "https://*.google.no/search*",
+            "https://*.google.pl/search*",
+            "https://*.google.pt/search*",
+            "https://*.google.ro/search*",
+            "https://*.google.sk/search*",
+            "https://*.google.si/search*",
+            "https://*.google.es/search*",
+            "https://*.google.se/search*",
+            "https://*.google.ch/search*"
+         ],
+         "run_at": "document_idle"
+      }
+   ],
+   "content_security_policy": {
+      "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none';"
+   },
+   "description": "View up to 100 Google search results per page. Choose 10, 20, 50, or 100. Toggle anytime. Works across all Google domains.",
+   "host_permissions": [
+      "https://*.google.com/*",
+      "https://*.google.ae/*",
+      "https://*.google.co.uk/*",
+      "https://*.google.de/*",
+      "https://*.google.fr/*",
+      "https://*.google.in/*",
+      "https://*.google.com.bd/*",
+      "https://*.google.sa/*",
+      "https://*.google.qa/*",
+      "https://*.google.om/*",
+      "https://*.google.bh/*",
+      "https://*.google.kw/*",
+      "https://*.google.jo/*",
+      "https://*.google.lb/*",
+      "https://*.google.iq/*",
+      "https://*.google.il/*",
+      "https://*.google.tr/*",
+      "https://*.google.at/*",
+      "https://*.google.be/*",
+      "https://*.google.cz/*",
+      "https://*.google.dk/*",
+      "https://*.google.fi/*",
+      "https://*.google.gr/*",
+      "https://*.google.hu/*",
+      "https://*.google.ie/*",
+      "https://*.google.it/*",
+      "https://*.google.nl/*",
+      "https://*.google.no/*",
+      "https://*.google.pl/*",
+      "https://*.google.pt/*",
+      "https://*.google.ro/*",
+      "https://*.google.sk/*",
+      "https://*.google.si/*",
+      "https://*.google.es/*",
+      "https://*.google.se/*",
+      "https://*.google.ch/*"
+   ],
+   "icons": {
+      "128": "icons/icon128.png",
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvkNhzrs7KrTs0xGeJhlnwsCGj4rut8HlcrS+84Q7IacJoP5ZhQP+A1zDUG4Tx9gJdJKlBOQtEyfUg1+xv61FzQ6KYkBisIdNFyfI7gQvjbos0ahsTNpMa754OpRDmIsvwHlN/CBXjq73FED5bfEA8RVONoNhWnzj+ht+0ATUmqVFVTar7zd5OhRY63WWjq146T7XMnLIrOYiEre/NUuok7uvHH46jwyHBCU9yi8xMz5Bo9VmMWtX+AMUQx4+vQs0eB+or8mSdR7HQUPsoSAEr0V5mNjKa+WoN23MmOsQ161AvhHI21biarBEtCYwBUGonohNs8WoZKpk2hQgcc4l1QIDAQAB",
+   "manifest_version": 3,
+   "name": "BeyondTen: Show 100 Google Search Results Per Page Instantly",
+   "permissions": [
+      "storage"
+   ],
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "2.2.2"
+}
