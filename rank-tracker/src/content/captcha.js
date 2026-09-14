@@ -76,7 +76,17 @@
     function click(stage) {
       const found = findBusterButton();
       if (!found) { return false; }
-      D.click(found.button, 'buster-' + scopeName);
+      const mk = found.marker;
+      const needsCoords = !(mk.tagName === 'BUTTON' || (mk.closest && mk.closest('button')))
+        || (mk.tagName === 'IFRAME') || (mk.tagName === 'IMG' && String(mk.src || '').indexOf('chrome-extension://') === 0);
+      if (needsCoords) {
+        // زرار جوّه iframe/shadow بتاع إضافة تانية: ضغطة DOM مش هتوصله
+        // (وزرار Buster أصلاً بيشتغل بضغطة حقيقية بس) → ضغطة ماوس موثوقة بالإحداثيات
+        const c = topCoordsOf(found.marker);
+        D.msg.send(C.MSG.CAPTCHA_COORD_CLICK, { x: c.x, y: c.y, stage: stage + '-' + scopeName });
+      } else {
+        D.click(found.button, 'buster-' + scopeName);
+      }
       S2.clicked += 1;
       D.msg.send(C.MSG.CAPTCHA_ATTEMPT, { attempt: S2.clicked, stage: stage + '-' + scopeName, frameUrl: href });
       return true;
@@ -165,6 +175,9 @@
     lastErrorTs: 0,
     notFoundTs: 0,
     audioSwitchTs: 0,
+    lastReloadTs: 0,
+    solveTried: false,   // هل جرّبنا الحل جوه التحدي الحالي؟
+    verifyTs: 0,         // وقت آخر ضغطة تحقق (لحساب مهلة الحكم)
     reportedClosed: false,
     reportedFailed: false,
     stopped: false,
@@ -316,6 +329,128 @@
     return true;
   }
 
+  /** انتظار ظهور مصدر صوت التحدي (audio#audio-source) برابط http */
+  async function waitAudioSrc(timeoutMs) {
+    return D.waitFor(() => {
+      const a = D.qs('audio#audio-source');
+      return a && String(a.src || '').indexOf('http') === 0 ? a : null;
+    }, { timeoutMs: timeoutMs || 12000, intervalMs: 300, desc: 'audio-src' });
+  }
+
+  /** عنصر استضافة زرار Buster (الشخص البرتقالي) — موجود بس لو سكربت Buster اشتغل هنا.
+   *  سكربت Buster بيشيل #recaptcha-help-button وبيعلّق زراره جوه shadow root مغلق —
+   *  فلما الزر الأصلي يختفي نعرف إن زرار Buster اتعلّق مكانه. */
+  function busterHolder() {
+    const holder = D.qs('.help-button-holder');
+    if (holder && !D.qs('#recaptcha-help-button')) { return holder; }
+    return null;
+  }
+
+  /** نسخ صوت التحدي لنص — بنستخدم خدمة النسخ بتاعة Buster نفسها
+   *  (مدمجة في خلفية الإضافة: offscreen + نموذج صوتي محلي) */
+  function transcribe(audioUrl, lang, timeoutMs) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (v) => {
+        if (settled) { return; }
+        settled = true;
+        clearTimeout(timer);
+        resolve(v);
+      };
+      const timer = setTimeout(() => finish(null), timeoutMs || 60000);
+      try {
+        chrome.runtime.sendMessage({ id: 'transcribeAudio', audioUrl: audioUrl, lang: lang || 'en' }, (resp) => {
+          if (chrome.runtime.lastError) { finish(null); return; }
+          if (typeof resp === 'string') { finish(resp.trim() || null); return; }
+          if (resp && (resp.text || resp.result)) { finish(String(resp.text || resp.result).trim() || null); return; }
+          finish(null);
+        });
+      } catch (_) { finish(null); }
+    });
+  }
+
+  /** كتابة النص في خانة الإجابة بطريقة reCAPTCHA بيسمعها فعلاً */
+  function fillResponse(text) {
+    const input = D.qs('#audio-response');
+    if (!input) { return false; }
+    try {
+      const proto = Object.getPrototypeOf(input);
+      const setter = proto && Object.getOwnPropertyDescriptor(proto, 'value');
+      if (setter && setter.set) { setter.set.call(input, text); }
+      else { input.value = text; }
+    } catch (_) { input.value = text; }
+    try {
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (_) {}
+    return true;
+  }
+
+  /** تحدي جديد: ⟳ + تجهيز المحاولة الجاية */
+  async function newChallenge() {
+    const reload = findReloadButton();
+    if (reload) {
+      D.click(reload, 'recaptcha-reload');
+      await D.humanSleep(900, 300);
+      return true;
+    }
+    await D.humanSleep(600, 200);
+    return false;
+  }
+
+  /** دورة حل واحدة كاملة: نسخ الصوت → كتابة النص → ضغط تحقق */
+  async function solveAudioOnce() {
+    // 1) نستنى ظهور مصدر الصوت
+    const audio = await waitAudioSrc(12000);
+    if (!audio) {
+      reportAttempt('no-audio-src');
+      return { ok: false, why: 'no-audio-src' };
+    }
+
+    // 2) نسخ الصوت لنص (نفس محرك Buster المدمج في خلفية الإضافة)
+    const src = String(audio.src || '');
+    let text = null;
+    if (src.indexOf('blob:') !== 0) {
+      text = await transcribe(src, (document.documentElement && document.documentElement.lang) || 'en', 60000);
+    }
+
+    if (!text) {
+      // 3-أ) البديل: ضغطة ماوس حقيقية (موثوقة) على زرار Buster لو متعلّق — هو اللي يحل بنفسه
+      const holder = busterHolder();
+      if (holder) {
+        const c = topCoordsOf(holder);
+        D.msg.send(C.MSG.CAPTCHA_COORD_CLICK, { x: c.x, y: c.y, stage: 'audio-no-transcript' });
+        reportAttempt('buster-coords');
+        S.verifyTs = Date.now(); // بنعتبرها محاولة كاملة — لو ما حلتش هنتحدى من جديد
+        return { ok: true, via: 'buster-coords' };
+      }
+      reportAttempt('transcribe-failed');
+      return { ok: false, why: 'no-transcript' };
+    }
+
+    // 3-ب) نكتب النص ونضغط تحقق
+    if (!fillResponse(text)) {
+      reportAttempt('no-input');
+      return { ok: false, why: 'no-input' };
+    }
+    reportAttempt('audio-solve');
+    const verify = D.first(C.SEL.recaptcha.verify);
+    if (verify) {
+      D.click(verify, 'recaptcha-verify');
+    } else {
+      // من غير زرار تحقق؟ Enter في خانة الإجابة
+      const input = D.qs('#audio-response');
+      if (input) {
+        try {
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+          input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        } catch (_) {}
+      }
+    }
+    S.verifyTs = Date.now();
+    return { ok: true, via: 'audio' };
+  }
+
   async function step() {
     if (S.stopped || S.busy) { return; }
     S.busy = true;
@@ -329,64 +464,59 @@
         return;
       }
 
-      // (أ-2) التحدي صوري من غير زر Buster؟ حوّله لصوتي (زر السماعة) مرة كل 5 ثوانٍ
+      // (ب) التحدي صوري؟ حوّله لصوتي (زر السماعة) مرة كل 5 ثوانٍ — الصوت هو اللي بنعرف نحله
       if (imageOpen() && !audioOpen()) {
         const now = Date.now();
         if (!S.audioSwitchTs || now - S.audioSwitchTs > 5000) {
           S.audioSwitchTs = now;
           switchToAudio();
           await D.humanSleep(700, 250);
+        }
+        return; // بنستنى ظهور التحدي الصوتي
+      }
+
+      // (ج) التحدي الصوتي مفتوح → الحل الذاتي الحقيقي (نسخ الصوت → كتابة النص → تحقق)
+      if (audioOpen()) {
+        const max = Math.max(1, cfg.captchaMaxAttempts || 4);
+
+        // رصد رسالة فشل الاستماع (لو ظهرت) عشان السجل يبقى واضح
+        const err = D.first(C.SEL.recaptcha.audioError);
+        if (err && err.__srtSeen !== true && D.textOf(err)) {
+          err.__srtSeen = true;
+          S.lastErrorTs = Date.now();
+          D.msg.send(C.MSG.CAPTCHA_ERROR, { text: D.textOf(err), frameUrl: href });
+        }
+
+        // استُنفدت المحاولات → أعلن الفشل مرة واحدة (attempts exhausted → announce failure once)
+        if (S.attempts >= max) {
+          if (!S.reportedFailed) {
+            S.reportedFailed = true;
+            D.msg.send(C.MSG.CAPTCHA_FAILED, { attempts: S.attempts, frameUrl: href });
+          }
           return;
         }
-      }
 
-      // (ب) الدور الوحيد: زر Buster (الشخص البرتقالي) — ندوسه وسيبه هو يحل
-      const buster = findBusterButton();
-      if (!buster) {
-        if (Date.now() - S.notFoundTs > 10000) {
-          S.notFoundTs = Date.now();
-          D.msg.send(C.MSG.CAPTCHA_BUSTER_NOT_FOUND, { frameUrl: href });
+        // محاولة حل واحدة لكل تحدي (نستنى نسخ الصوت والرد)
+        if (!S.solveTried) {
+          S.solveTried = true;
+          await solveAudioOnce();
+          return;
         }
+
+        // ضغطنا تحقق والحكم لسه نازل → صبر قصير
+        if (S.verifyTs && Date.now() - S.verifyTs < 4500) { return; }
+
+        // التحدي لسه مفتوح بعد التحقق = الإجابة غلط → تحدي جديد ⟳ ومحاولة تانية
+        S.verifyTs = 0;
+        S.solveTried = false;
+        await newChallenge();
         return;
       }
 
-      // (ج) رصد رسالة فشل الاستماع (في وضع الصوت)
-      const err = D.first(C.SEL.recaptcha.audioError);
-      if (err && err.__srtSeen !== true && D.textOf(err)) {
-        err.__srtSeen = true;
-        S.lastErrorTs = Date.now();
-        D.msg.send(C.MSG.CAPTCHA_ERROR, { text: D.textOf(err), frameUrl: href });
-      }
-
-      const max = Math.max(1, cfg.captchaMaxAttempts || 4);
-      const timeout = cfg.captchaAttemptTimeoutMs || 35000;
-
-      // (هـ) أول ضغطة Buster تلقائية (first automatic Buster press)
-      if (S.attempts === 0) {
-        clickBuster('auto-first');
-        return;
-      }
-
-      // (و) استُنفدت المحاولات → أعلن الفشل مرة واحدة (attempts exhausted → announce failure once)
-      if (S.attempts >= max) {
-        if (!S.reportedFailed) {
-          S.reportedFailed = true;
-          D.msg.send(C.MSG.CAPTCHA_FAILED, { attempts: S.attempts, frameUrl: href });
-        }
-        return;
-      }
-
-      // (ز) فشل واضح أو مهلة انتهت → تحدي جديد ⟳ ثم Buster مجدداً (clear failure or timeout ended → new challenge ⟳ then Buster again)
-      const needRetry = (S.lastErrorTs > S.lastClickTs) || (Date.now() - S.lastClickTs > timeout);
-      if (needRetry) {
-        const reload = findReloadButton();
-        if (reload) {
-          D.click(reload, 'recaptcha-reload');
-          await D.humanSleep(900, 300);
-        } else {
-          await D.humanSleep(800, 300);
-        }
-        clickBuster('after-reload');
+      // (د) تحدي مفتوح بس مش صوتي ولا صوري (حالة انتقالية نادرة) — ريلود كل 15 ثانية
+      if (!S.lastReloadTs || Date.now() - S.lastReloadTs > 15000) {
+        S.lastReloadTs = Date.now();
+        await newChallenge();
       }
     } finally {
       S.busy = false;
@@ -398,13 +528,10 @@
   /* أوامر المحرك تبقى كخط احتياطي (engine commands remain as a backup line) */
   D.msg.on(C.MSG.CAPTCHA_CMD_NEXT, async () => {
     S.stopped = false;
-    const reload = findReloadButton();
-    if (reload) {
-      D.click(reload, 'recaptcha-reload');
-      await D.humanSleep(900, 300);
-    }
-    const ok = clickBuster('cmd-next');
-    return { ok: ok, attempts: S.attempts };
+    S.solveTried = false;
+    S.verifyTs = 0;
+    await newChallenge(); // الآلة بتلقط التحدي الجديد وبتكمل الحل لوحدها
+    return { ok: true, attempts: S.attempts };
   });
 
   D.msg.on(C.MSG.CAPTCHA_CMD_STOP, async () => {
@@ -414,7 +541,7 @@
 
   D.msg.on(C.MSG.CAPTCHA_CMD_PROBE, async () => ({
     role: 'buster',
-    busterFound: !!findBusterButton(),
+    busterFound: !!findBusterButton() || !!busterHolder(),
     attempts: S.attempts,
     audioOpen: audioOpen(),
     imageOpen: imageOpen(),

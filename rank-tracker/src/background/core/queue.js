@@ -100,7 +100,7 @@ export class QueueEngine {
     });
 
     bus.on(C.MSG.CAPTCHA_ATTEMPT, (m) => {
-      logger.info('captcha', `Buster بدأ الاستماع (محاولة مُبلّغ عنها من الإطار) —_tab:${m.tabId}`);
+      logger.info('captcha', `محاولة حل من الآلة الذاتية (${m.stage || '?'}) — tab:${m.tabId}`);
       if (this.currentTabId === m.tabId) {
         state.setRun({ captcha: Object.assign({}, { tabId: m.tabId, attempts: m.attempt, since: Date.now() }) });
         this.broadcast();
