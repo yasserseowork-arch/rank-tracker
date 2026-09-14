@@ -178,11 +178,9 @@ window.BT = window.BT || {};
   }
 
   function renumberAll(offset) {
-    // structural finding of all result blocks
-    const all = findOrganicBlocksInPage();
-    all.forEach((el, i) => {
-      stampSerial(el, (offset || 0) + i + 1);
-    });
+    // ⚙️ الترقيم المرئي معطّل بقرار المستخدم (SERP Counter هو المسؤول عن الترقيم)
+    // — جلب الصفحات ودمج النتائج حتى 100 يظل يعمل كما هو بدون أرقام.
+    void offset;
   }
 
   window.BT.render = {

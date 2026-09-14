@@ -393,15 +393,22 @@ export class QueueEngine {
       const first = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
       if (first.type === 'aborted') { return this.abortKeyword(kw, 'paused'); }
 
-      // 4) كابتشا ظهرت؟ مفيش حل ولا استماع: مسح بيانات المتصفح + نفس الكلمة في تاب جديد
+      // 4) كابتشا ظهرت؟ أولاً: حل تلقائي بالكامل (Buster مدمجة + إطار التحدي ذاتي القيادة) — بدون أي تدخل منك
       if (first.type === 'captcha') {
+        const auto = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
+        if (auto === 'solved') {
+          const sAfter = await this.waitSerp(tab.id, C.LIMITS.SERP_AFTER_CAPTCHA_MS, signal);
+          if (sAfter) { return this.recordResult(kw, sAfter, cfg, 'captcha-auto-solved'); }
+        }
+        if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        // فشل الحل التلقائي: الخطة الاحتياطية — مسح بيانات المتصفح + نفس الكلمة في تاب جديد
         if (captchaClears >= maxClears) {
-          await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — كابتشا حتى بعد مسح البيانات؛ سُجلت كغير موجود`);
+          await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — كابتشا حتى بعد محاولة الحل التلقائي ومسح البيانات؛ سُجلت كغير موجود`);
           return this.recordExhausted(kw, cfg);
         }
         captchaClears += 1;
-        await this.notify('🧩 كابتشا', `مسح بيانات المتصفح وبدء "${kw.keyword}" في تاب جديد (${captchaClears}/${maxClears})`);
-        await logger.warn('queue', `🧩 كابتشا — مسح بيانات المتصفح (${captchaClears}/${maxClears}) وفتح تاب جديد لنفس الكلمة`);
+        await this.notify('🧩 كابتشا', `فشل الحل التلقائي — مسح بيانات المتصفح وبدء "${kw.keyword}" في تاب جديد (${captchaClears}/${maxClears})`);
+        await logger.warn('queue', `🧩 كابتشا — فشل الحل التلقائي: مسح بيانات المتصفح (${captchaClears}/${maxClears}) وفتح تاب جديد لنفس الكلمة`);
         try {
           await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
         } catch (_) {}
@@ -437,7 +444,7 @@ export class QueueEngine {
             return this.recordResult(kw, lastRace.payload, cfg, 'new-tab');
           }
           if (lastRace.type === 'captcha') {
-            const h2 = await this.handleCaptcha(tab.id, kw, cfg, signal, true);
+            const h2 = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
             if (h2 === 'solved') {
               const s2 = await this.waitSerp(tab.id, C.LIMITS.SERP_AFTER_CAPTCHA_MS, signal);
               if (s2) { return this.recordResult(kw, s2, cfg, 'new-tab-captcha'); }
@@ -568,7 +575,7 @@ export class QueueEngine {
     }
 
     if (result.outcome === 'no-buster') {
-      await logger.warn('captcha', 'Buster غير موجودة — المحرك الصوتي المدمج (self-audio) هو اللي بيحل دلوقتي، ولو استنفد محاولاته هتجيلك notification للحل اليدوي.');
+      await logger.warn('captcha', 'زر Buster لم يظهر في إطار التحدي — الانتقال للخطة الاحتياطية (مسح بيانات + تبويب جديد) بدون أي تدخل يدوي.');
     }
 
     // فشل: إيقاف مؤقت للتنبيه أو تخطٍّ أو ريفرش ومحاولة جديدة
