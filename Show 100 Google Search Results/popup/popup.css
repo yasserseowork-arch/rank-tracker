@@ -1,0 +1,137 @@
+.serp-popup {
+  font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+  background: linear-gradient(145deg, rgba(11,114,231,0.08), rgba(0,77,153,0.08));
+  backdrop-filter: blur(4px);
+  color: #333;
+  width: 300px;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.logo-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.serp-popup h1 {
+  font-size: 18px;
+  margin: 0;
+  color: #0B72E7;
+  font-weight: 600;
+}
+
+.top-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+}
+
+.top-toggle input {
+  display: none;
+}
+
+.top-toggle .slider {
+  background-color: #ccc;
+  border-radius: 20px;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transition: 0.3s;
+}
+
+.top-toggle .slider:before {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 2px;
+  left: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.top-toggle input:checked + .slider {
+  background-color: #0B72E7;
+}
+
+.top-toggle input:checked + .slider:before {
+  transform: translateX(16px);
+}
+
+.serp-popup .subtitle {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 14px;
+}
+
+.serp-popup .selector {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.serp-popup label {
+  font-size: 12px;
+  color: #444;
+  display: block;
+  margin-bottom: 5px;
+}
+
+.serp-popup select {
+  width: 100%;
+  padding: 8px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #222;
+  font-weight: 500;
+}
+
+.status-line {
+  font-size: 12px;
+  color: #555;
+  margin: 6px 0 14px;
+  text-align: left;
+}
+
+.serp-popup button {
+  padding: 10px;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background-color: #0B72E7;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.25s ease;
+}
+
+.serp-popup button:hover {
+  background-color: #095ec0;
+}
+
+.serp-popup footer {
+  text-align: center;
+  font-size: 11px;
+  color: #888;
+  margin-top: 12px;
+}
+
+.serp-popup footer a {
+  text-decoration: none;
+  color: #888;
+  font-weight: 600;
+}
