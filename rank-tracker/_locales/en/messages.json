@@ -1,0 +1,377 @@
+{
+  "appName": {
+    "message": "SEO Kw Tracker"
+  },
+  "appShortName": {
+    "message": "Kw Tracker"
+  },
+  "appDesc": {
+    "message": "Automated Google rank tracking: keywords in, positions out — human-like browsing & captcha solving. © BY: Muhammed Yasser"
+  },
+  "panelTitle": {
+    "message": "Rank Tracking Panel"
+  },
+  "statusIdle": {
+    "message": "Idle"
+  },
+  "statusRunning": {
+    "message": "Checking…"
+  },
+  "statusPaused": {
+    "message": "Paused"
+  },
+  "statusCaptcha": {
+    "message": "Solving captcha"
+  },
+  "btnStart": {
+    "message": "▶ Start"
+  },
+  "btnPause": {
+    "message": "⏸ Pause"
+  },
+  "btnResume": {
+    "message": " Resume"
+  },
+  "btnStop": {
+    "message": "⏹ Stop"
+  },
+  "btnShowTab": {
+    "message": "Show tab"
+  },
+  "captchaLiveTitle": {
+    "message": "Captcha being solved…"
+  },
+  "captchaLiveText": {
+    "message": "Buster is listening to the audio challenge. On failure we press a new challenge and retry automatically."
+  },
+  "captchaFailedTitle": {
+    "message": "Automatic captcha solving failed"
+  },
+  "captchaFailedText": {
+    "message": "Solve it manually in the tab (auto-resume) or press Resume to skip this keyword."
+  },
+  "captchaAttemptsLabel": {
+    "message": "Attempts:"
+  },
+  "statChecked": {
+    "message": "Checked"
+  },
+  "statFound": {
+    "message": "Store found"
+  },
+  "statAvg": {
+    "message": "Avg position"
+  },
+  "statCaptcha": {
+    "message": "Captchas solved"
+  },
+  "chartTitle": {
+    "message": "Position trend"
+  },
+  "chartEmpty": {
+    "message": "No data yet — start a run to see the trend."
+  },
+  "targetTitle": {
+    "message": "🎯 Target & geo"
+  },
+  "lblDomain": {
+    "message": "Store domain"
+  },
+  "lblName": {
+    "message": "Store name (text match)"
+  },
+  "lblMatch": {
+    "message": "Match mode"
+  },
+  "matchBoth": {
+    "message": "Domain or name"
+  },
+  "matchDomain": {
+    "message": "Domain only"
+  },
+  "matchName": {
+    "message": "Name only"
+  },
+  "lblGl": {
+    "message": "Google region (gl)"
+  },
+  "lblHl": {
+    "message": "Results language (hl)"
+  },
+  "lblNum": {
+    "message": "Results count (up to 100)"
+  },
+  "rhythmTitle": {
+    "message": "⏱ Human rhythm & captcha"
+  },
+  "lblDelay": {
+    "message": "Delay before each keyword (ms)"
+  },
+  "lblJitter": {
+    "message": "Human jitter ± (ms)"
+  },
+  "lblCooldownEvery": {
+    "message": "Long break every N keywords"
+  },
+  "lblCooldownMs": {
+    "message": "Break duration (ms)"
+  },
+  "lblCapAttempts": {
+    "message": "Max Buster attempts"
+  },
+  "lblCapTimeout": {
+    "message": "Per-attempt timeout (ms)"
+  },
+  "lblForeground": {
+    "message": "Foreground tab while checking"
+  },
+  "lblReuseTab": {
+    "message": "One permanent tab + type keyword in search box"
+  },
+  "lblPauseCap": {
+    "message": "Pause when captcha fails"
+  },
+  "lblAutoResume": {
+    "message": "Auto-resume after manual solve"
+  },
+  "kwTitle": {
+    "message": " Keywords"
+  },
+  "kwPlaceholder": {
+    "message": "Paste keywords here (one per line, or a sheet column)"
+  },
+  "btnAddKw": {
+    "message": "＋ Add keywords"
+  },
+  "btnImportCsv": {
+    "message": "📄 Import CSV"
+  },
+  "btnClearKw": {
+    "message": "🗑 Clear all"
+  },
+  "btnFetchSheet": {
+    "message": "⬇ Fetch from sheet"
+  },
+  "sheetPlaceholder": {
+    "message": "https://docs.google.com/spreadsheets/d/…"
+  },
+  "sheetHint": {
+    "message": "Fetching works for link-shared sheets. Otherwise paste or import CSV."
+  },
+  "sheetBadUrl": {
+    "message": "Invalid sheet URL — paste the full sheets.google.com link."
+  },
+  "sheetFetchFail": {
+    "message": "Sheet fetch failed:"
+  },
+  "thKeyword": {
+    "message": "Keyword"
+  },
+  "thStatus": {
+    "message": "Status"
+  },
+  "thPosition": {
+    "message": "Position"
+  },
+  "thUrl": {
+    "message": "URL"
+  },
+  "thTime": {
+    "message": "Time"
+  },
+  "resTitle": {
+    "message": "📊 Results"
+  },
+  "btnExportCsv": {
+    "message": "⬇ Export CSV"
+  },
+  "btnCopyTsv": {
+    "message": "📋 Copy for sheet paste"
+  },
+  "btnClearRes": {
+    "message": "🗑 Clear results"
+  },
+  "logTitle": {
+    "message": "🖥 Live log"
+  },
+  "btnClearLogs": {
+    "message": "Clear log"
+  },
+  "footerNote": {
+    "message": "Rank checking automation — © BY: Muhammed Yasser"
+  },
+  "kwEmpty": {
+    "message": "No keywords yet — paste above or import CSV."
+  },
+  "resEmpty": {
+    "message": "No results yet."
+  },
+  "notFound": {
+    "message": "Not found"
+  },
+  "kwPending": {
+    "message": "Pending"
+  },
+  "kwRunning": {
+    "message": "Checking"
+  },
+  "kwDone": {
+    "message": "Done"
+  },
+  "kwCaptcha": {
+    "message": "Captcha"
+  },
+  "kwFailed": {
+    "message": "Failed"
+  },
+  "kwSkipped": {
+    "message": "Skipped"
+  },
+  "btnRemove": {
+    "message": "Remove"
+  },
+  "confirmClearKw": {
+    "message": "Clear all keywords?"
+  },
+  "confirmClearRes": {
+    "message": "Clear all results?"
+  },
+  "copyDone": {
+    "message": "Copied — paste into the matching sheet column."
+  },
+  "errNoTarget": {
+    "message": "Set the store domain or name first."
+  },
+  "errNoKeywords": {
+    "message": "Add keywords first."
+  },
+  "errDailyCap": {
+    "message": "Daily check cap reached (Google-rules protection). Raise it in advanced settings or wait until tomorrow."
+  },
+  "lblBatchSettle": {
+    "message": "Batch settle = loading finished (ms)"
+  },
+  "lblSelfFetch": {
+    "message": "Self-fetch remaining batches in background (no navigation)"
+  },
+  "lblRescan": {
+    "message": "Periodic page rescan interval (ms)"
+  },
+  "lblDailyCap": {
+    "message": "Daily check cap (0 = unlimited)"
+  },
+  "optionsTitle": {
+    "message": "Advanced settings"
+  },
+  "optionsSubtitle": {
+    "message": "Advanced settings & backup"
+  },
+  "optReadTitle": {
+    "message": "SERP reading"
+  },
+  "lblSettle": {
+    "message": "Results settle time (ms)"
+  },
+  "lblScrollStep": {
+    "message": "Scroll step (ms)"
+  },
+  "lblMaxWait": {
+    "message": "Max results wait (ms)"
+  },
+  "lblCapGap": {
+    "message": "Captcha attempt gap (ms)"
+  },
+  "lblVerbose": {
+    "message": "Verbose logs"
+  },
+  "optBackupTitle": {
+    "message": "Backup & restore"
+  },
+  "optBackupHint": {
+    "message": "Export everything (keywords + results + config) as JSON or restore from it."
+  },
+  "btnExportJson": {
+    "message": "⬇ Export JSON"
+  },
+  "btnImportJson": {
+    "message": "⬆ Import JSON"
+  },
+  "btnResetAll": {
+    "message": "☢ Full reset"
+  },
+  "optAboutTitle": {
+    "message": "About"
+  },
+  "aboutVersion": {
+    "message": "Version"
+  },
+  "aboutLi1": {
+    "message": "No external API or proxy server — everything runs locally in your browser."
+  },
+  "aboutLi2": {
+    "message": "Geo targeting via Google parameters (gl/hl) — no VPN needed."
+  },
+  "aboutLi3": {
+    "message": "Captcha solving cooperates with your installed Buster extension."
+  },
+  "importDone": {
+    "message": "Imported successfully."
+  },
+  "importFail": {
+    "message": "Import failed"
+  },
+  "confirmReset": {
+    "message": "Wipe all data permanently?"
+  },
+  "sheetCardTitle": {
+    "message": "📄 Sheet: sync & auto-write"
+  },
+  "lblSheetUrl": {
+    "message": "Google Sheet URL"
+  },
+  "lblStartCell": {
+    "message": "Position column start cell"
+  },
+  "lblClearBeforeRun": {
+    "message": "Clear browsing data before each run"
+  },
+  "lblSheetAutoSync": {
+    "message": "Fetch keywords from sheet on start"
+  },
+  "lblSheetWriteBack": {
+    "message": "Write positions into an existing sheet on finish (optional)"
+  },
+  "lblMapsCheck": {
+    "message": "Check local/map results"
+  },
+  "btnWriteSheet": {
+    "message": "📝 Write results to sheet now"
+  },
+  "sheetWriteHint": {
+    "message": "Writing goes through the sheet UI itself (name box + paste) — if it fails use copy-for-paste."
+  },
+  "sheetWriteOk": {
+    "message": "✔ Position column written to sheet"
+  },
+  "sheetWriteFail": {
+    "message": "Auto-write failed — use “Copy for sheet paste”"
+  },
+  "btnMakeXlsx": {
+    "message": "📊 Build ranks sheet (XLSX)"
+  },
+  "makeXlsxOk": {
+    "message": "✔ Excel ranks sheet created & downloaded"
+  },
+  "lblAutoXlsx": {
+    "message": "Auto-download Excel ranks sheet when the run finishes"
+  },
+  "kwAddedOk": {
+    "message": "✔ {n} keyword(s) added/queued"
+  },
+  "kwAddFail": {
+    "message": "✖ Failed to add keywords"
+  },
+  "kwNone": {
+    "message": "Box is empty — paste keywords first"
+  }
+}

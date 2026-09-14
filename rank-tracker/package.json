@@ -1,0 +1,11 @@
+{
+  "name": "saudi-rank-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome MV3 extension: automated Google.sa SERP position tracking with Buster captcha cooperation",
+  "scripts": {
+    "test": "node --test tests/",
+    "check": "node tools/syntax-check.mjs"
+  }
+}

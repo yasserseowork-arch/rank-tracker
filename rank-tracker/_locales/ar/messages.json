@@ -1,0 +1,377 @@
+{
+  "appName": {
+    "message": "SEO Kw Tracker"
+  },
+  "appShortName": {
+    "message": "Kw Tracker"
+  },
+  "appDesc": {
+    "message": "أتمتة فحص الترتيب في جوجل: كلمات تدخل، ترتيبات تخرج — تصفح بشري، حل كابتشا، وتصدير شيت. © BY: Muhammed Yasser"
+  },
+  "panelTitle": {
+    "message": "لوحة تتبع الترتيب"
+  },
+  "statusIdle": {
+    "message": "خامل"
+  },
+  "statusRunning": {
+    "message": "جارٍ الفحص…"
+  },
+  "statusPaused": {
+    "message": "متوقف مؤقتاً"
+  },
+  "statusCaptcha": {
+    "message": "كابتشا قيد الحل"
+  },
+  "btnStart": {
+    "message": "▶ بدء الفحص"
+  },
+  "btnPause": {
+    "message": "⏸ إيقاف مؤقت"
+  },
+  "btnResume": {
+    "message": "⏩ استئناف"
+  },
+  "btnStop": {
+    "message": "⏹ إيقاف"
+  },
+  "btnShowTab": {
+    "message": "عرض التبويب"
+  },
+  "captchaLiveTitle": {
+    "message": "كابتشا قيد الحل…"
+  },
+  "captchaLiveText": {
+    "message": "Buster يستمع للتحدي الصوتي ويحاول الحل. إن فشل سنضغط تحدي جديد ونعيد المحاولة تلقائياً."
+  },
+  "captchaFailedTitle": {
+    "message": "فشل حل الكابتشا تلقائياً"
+  },
+  "captchaFailedText": {
+    "message": "حل الكابتشا يدوياً في التبويب وسيستأنف الفحص تلقائياً، أو اضغط استئناف لتخطي الكلمة."
+  },
+  "captchaAttemptsLabel": {
+    "message": "المحاولات:"
+  },
+  "statChecked": {
+    "message": "كلمات فُحصت"
+  },
+  "statFound": {
+    "message": "ظهور المتجر"
+  },
+  "statAvg": {
+    "message": "متوسط الترتيب"
+  },
+  "statCaptcha": {
+    "message": "كابتشا محلولة"
+  },
+  "chartTitle": {
+    "message": "منحنى الترتيب عبر الفحوصات"
+  },
+  "chartEmpty": {
+    "message": "لا توجد بيانات بعد — ابدأ الفحص لرؤية المنحنى."
+  },
+  "targetTitle": {
+    "message": "🎯 الهدف والاستهداف الجغرافي"
+  },
+  "lblDomain": {
+    "message": "دومين المتجر"
+  },
+  "lblName": {
+    "message": "اسم المتجر (للمطابقة النصية)"
+  },
+  "lblMatch": {
+    "message": "نمط المطابقة"
+  },
+  "matchBoth": {
+    "message": "الدومين أو الاسم"
+  },
+  "matchDomain": {
+    "message": "الدومين فقط"
+  },
+  "matchName": {
+    "message": "الاسم فقط"
+  },
+  "lblGl": {
+    "message": "منطقة جوجل (gl)"
+  },
+  "lblHl": {
+    "message": "لغة النتائج (hl)"
+  },
+  "lblNum": {
+    "message": "عدد النتائج (حتى 100)"
+  },
+  "rhythmTitle": {
+    "message": "⏱ الإيقاع البشري والكابتشا"
+  },
+  "lblDelay": {
+    "message": "مهلة قبل كل كلمة (ملي ثانية)"
+  },
+  "lblJitter": {
+    "message": "تذبذب بشري ± (ملي ثانية)"
+  },
+  "lblCooldownEvery": {
+    "message": "استراحة بعد كل N كلمة"
+  },
+  "lblCooldownMs": {
+    "message": "مدة الاستراحة (ملي ثانية)"
+  },
+  "lblCapAttempts": {
+    "message": "محاولات Buster القصوى"
+  },
+  "lblCapTimeout": {
+    "message": "مهلة المحاولة الواحدة (ملي ثانية)"
+  },
+  "lblForeground": {
+    "message": "تبويب أمامي أثناء الفحص"
+  },
+  "lblReuseTab": {
+    "message": "تبويب واحد دائم + الكلمة من صندوق البحث"
+  },
+  "lblPauseCap": {
+    "message": "إيقاف مؤقت عند فشل الكابتشا"
+  },
+  "lblAutoResume": {
+    "message": "استئناف تلقائي بعد الحل اليدوي"
+  },
+  "kwTitle": {
+    "message": "🔑 الكلمات المفتاحية"
+  },
+  "kwPlaceholder": {
+    "message": "الصق الكلمات هنا (سطر لكل كلمة، أو عمود من الشيت)"
+  },
+  "btnAddKw": {
+    "message": "＋ إضافة الكلمات"
+  },
+  "btnImportCsv": {
+    "message": "📄 استيراد CSV"
+  },
+  "btnClearKw": {
+    "message": "🗑 مسح الكل"
+  },
+  "btnFetchSheet": {
+    "message": "⬇ جلب من الشيت"
+  },
+  "sheetPlaceholder": {
+    "message": "https://docs.google.com/spreadsheets/d/…"
+  },
+  "sheetHint": {
+    "message": "الجلب يعمل للشيتات المشاركة برابط (أي شخص لديه الرابط). غير ذلك استخدم اللصق أو CSV."
+  },
+  "sheetBadUrl": {
+    "message": "رابط الشيت غير صالح — الصق رابط sheets.google.com كاملاً."
+  },
+  "sheetFetchFail": {
+    "message": "فشل جلب الشيت:"
+  },
+  "thKeyword": {
+    "message": "الكلمة"
+  },
+  "thStatus": {
+    "message": "الحالة"
+  },
+  "thPosition": {
+    "message": "الترتيب"
+  },
+  "thUrl": {
+    "message": "الرابط"
+  },
+  "thTime": {
+    "message": "الوقت"
+  },
+  "resTitle": {
+    "message": "📊 النتائج"
+  },
+  "btnExportCsv": {
+    "message": "⬇ تصدير CSV"
+  },
+  "btnCopyTsv": {
+    "message": "📋 نسخ للصق في الشيت"
+  },
+  "btnClearRes": {
+    "message": "🗑 مسح النتائج"
+  },
+  "logTitle": {
+    "message": "🖥 السجل الحي"
+  },
+  "btnClearLogs": {
+    "message": "مسح السجل"
+  },
+  "footerNote": {
+    "message": "أتمتة فحص الترتيب — © BY: Muhammed Yasser"
+  },
+  "kwEmpty": {
+    "message": "لا توجد كلمات بعد — الصق كلماتك أعلاه أو استورد CSV."
+  },
+  "resEmpty": {
+    "message": "لا نتائج بعد."
+  },
+  "notFound": {
+    "message": "غير موجود"
+  },
+  "kwPending": {
+    "message": "بالانتظار"
+  },
+  "kwRunning": {
+    "message": "جارٍ الفحص"
+  },
+  "kwDone": {
+    "message": "تم"
+  },
+  "kwCaptcha": {
+    "message": "كابتشا"
+  },
+  "kwFailed": {
+    "message": "فشل"
+  },
+  "kwSkipped": {
+    "message": "تخطٍ"
+  },
+  "btnRemove": {
+    "message": "حذف"
+  },
+  "confirmClearKw": {
+    "message": "مسح كل الكلمات المفتاحية؟"
+  },
+  "confirmClearRes": {
+    "message": "مسح كل النتائج؟"
+  },
+  "copyDone": {
+    "message": "تم النسخ — الصق الآن في عمود الشيت المقابل."
+  },
+  "errNoTarget": {
+    "message": "حدّد دومين المتجر أو اسمه أولاً من قسم الهدف."
+  },
+  "errNoKeywords": {
+    "message": "أضف كلمات مفتاحية أولاً."
+  },
+  "errDailyCap": {
+    "message": "بلغت سقف الفحوصات اليومي (حماية من قواعد جوجل). ارفعه من الإعدادات المتقدمة أو انتظر الغد."
+  },
+  "lblBatchSettle": {
+    "message": "ثبات الدفعات = انتهاء التحميل (ملي ثانية)"
+  },
+  "lblSelfFetch": {
+    "message": "جلب باقي الدفعات خلفيةً بدون تنقّل"
+  },
+  "lblRescan": {
+    "message": "فترة المسح الدوري للصفحة (ملي ثانية)"
+  },
+  "lblDailyCap": {
+    "message": "سقف الفحوصات اليومي (0 = بدون)"
+  },
+  "optionsTitle": {
+    "message": "الإعدادات المتقدمة"
+  },
+  "optionsSubtitle": {
+    "message": "الإعدادات المتقدمة والنسخ الاحتياطي"
+  },
+  "optReadTitle": {
+    "message": "قراءة SERP"
+  },
+  "lblSettle": {
+    "message": "زمن استقرار النتائج (ملي ثانية)"
+  },
+  "lblScrollStep": {
+    "message": "خطوة التمرير (ملي ثانية)"
+  },
+  "lblMaxWait": {
+    "message": "أقصى انتظار للنتائج (ملي ثانية)"
+  },
+  "lblCapGap": {
+    "message": "فاصل محاولات الكابتشا (ملي ثانية)"
+  },
+  "lblVerbose": {
+    "message": "سجلات تفصيلية (verbose)"
+  },
+  "optBackupTitle": {
+    "message": "نسخ احتياطي واستعادة"
+  },
+  "optBackupHint": {
+    "message": "صدّر كل البيانات (كلمات + نتائج + إعدادات) كملف JSON أو استعدها منه."
+  },
+  "btnExportJson": {
+    "message": "⬇ تصدير JSON"
+  },
+  "btnImportJson": {
+    "message": "⬆ استيراد JSON"
+  },
+  "btnResetAll": {
+    "message": "☢ تصفير كامل"
+  },
+  "optAboutTitle": {
+    "message": "عن الإضافة"
+  },
+  "aboutVersion": {
+    "message": "الإصدار"
+  },
+  "aboutLi1": {
+    "message": "لا تستخدم أي API خارجي أو خادم وسيط — كل شيء محلي داخل المتصفح."
+  },
+  "aboutLi2": {
+    "message": "الاستهداف الجغرافي عبر معاملات جوجل (gl/hl) بدون الحاجة لـ VPN."
+  },
+  "aboutLi3": {
+    "message": "حل الكابتشا يتم بالتعاون مع إضافة Buster المثبتة لديك."
+  },
+  "importDone": {
+    "message": "تم الاستيراد بنجاح."
+  },
+  "importFail": {
+    "message": "فشل الاستيراد"
+  },
+  "confirmReset": {
+    "message": "تصفير كل البيانات نهائياً؟"
+  },
+  "sheetCardTitle": {
+    "message": "📄 الشيت: مزامنة وكتابة تلقائية"
+  },
+  "lblSheetUrl": {
+    "message": "رابط شيت جوجل"
+  },
+  "lblStartCell": {
+    "message": "خلية بداية عمود الترتيب"
+  },
+  "lblClearBeforeRun": {
+    "message": "مسح بيانات التصفح قبل كل جولة"
+  },
+  "lblSheetAutoSync": {
+    "message": "جلب الكلمات من الشيت عند البدء"
+  },
+  "lblSheetWriteBack": {
+    "message": "كتابة الترتيب في شيت موجود عند الانتهاء (اختياري)"
+  },
+  "lblMapsCheck": {
+    "message": "فحص النتائج المحلية (خرائط)"
+  },
+  "btnWriteSheet": {
+    "message": "📝 اكتب النتائج في الشيت الآن"
+  },
+  "sheetWriteHint": {
+    "message": "الكتابة تتم عبر واجهة الشيت نفسها (مربع الاسم + لصق) — إن تعذرت استخدم زر نسخ للصق."
+  },
+  "sheetWriteOk": {
+    "message": "✔ كُتب عمود الترتيب في الشيت"
+  },
+  "sheetWriteFail": {
+    "message": "تعذرت الكتابة التلقائية — استخدم زر «نسخ للصق في الشيت»"
+  },
+  "btnMakeXlsx": {
+    "message": "📊 اعمل شيت بالترتيب (XLSX)"
+  },
+  "makeXlsxOk": {
+    "message": "✔ اتعمل شيت Excel بالترتيب واتحمّل"
+  },
+  "lblAutoXlsx": {
+    "message": "تنزيل شيت Excel تلقائياً عند انتهاء الجولة"
+  },
+  "kwAddedOk": {
+    "message": "✔ اتضافت/اتجهزت {n} كلمة للفحص"
+  },
+  "kwAddFail": {
+    "message": "✖ فشل إضافة الكلمات"
+  },
+  "kwNone": {
+    "message": "مفيش كلمات في المربع — الصق الكلمات الأول"
+  }
+}

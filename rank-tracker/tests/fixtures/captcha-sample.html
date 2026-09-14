@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<!--
+  fixture: بنية صفحة الكابتشا (google.com/sorry) مصغّرة للتوثيق والاختبار اليدوي.
+  الأدوار الثلاثة التي يحقن فيها captcha.js ظاهرة هنا بتعليقات واضحة.
+-->
+<html lang="ar" dir="rtl">
+<body>
+  <!-- ═══ الدور 1: الإطار الأعلى /sorry/ ═══ -->
+  <p>تعذرنا على اكتشاف حركة مرور غير عادية على شبكة الكمبيوتر الخاصة بك.</p>
+
+  <!-- iframe الـ anchor: منها نراقب علامة الحل -->
+  <iframe
+    title="reCAPTCHA"
+    src="https://www.google.com/recaptcha/api2/anchor?ar=1&amp;k=KEY&amp;co=aHR0cHM6&amp;hl=ar&amp;v=xxx&amp;size=normal&amp;cb=abc"
+    width="304" height="78">
+    <!-- ═══ الدور 2: مستند الـ anchor ═══ -->
+    <div id="rc-anchor">
+      <div id="recaptcha-anchor" role="checkbox" aria-checked="false"
+           class="recaptcha-checkbox borderRadius" tabindex="0">
+        <div class="recaptcha-checkbox-border"></div>
+        <div class="recaptcha-checkbox-checked" style="display:none"></div>
+      </div>
+      <span class="rc-anchor-normal-msg">أنا لست برنامج روبوت</span>
+    </div>
+  </iframe>
+
+  <!-- iframe الـ bframe: نافذة التحدي الصوتي حيث يعيش زر Buster -->
+  <iframe
+    src="https://www.google.com/recaptcha/api2/bframe?hl=ar&amp;v=xxx&amp;k=KEY"
+    width="100%" height="500">
+    <!-- ═══ الدور 3: مستند التحدي الصوتي ═══ -->
+    <div class="rc-audiochallenge">
+      <div class="rc-audiochallenge-play-button">
+        <button id="recaptcha-play-button" class="rc-button rc-button-default">PLAY</button>
+      </div>
+      <div class="rc-audiochallenge-tdownload-link">Press PLAY to listen</div>
+      <div class="rc-audiochallenge-input">
+        <label>Enter what you hear</label>
+        <input id="audio-response" type="text" />
+      </div>
+      <div class="rc-audiochallenge-button-row">
+        <button id="recaptcha-reload-button" title="Get a new challenge">⟳</button>
+        <button id="recaptcha-audio-help">؟</button>
+        <!-- زر Buster المحقون من إضافة أخرى: نكتشفه بـ img[src^="chrome-extension://"] -->
+        <button class="buster-button">
+          <img src="chrome-extension://mcbpblocgmgfnpjjppndjkmgjaogfceg/images/icon-32.png" alt="Buster" />
+        </button>
+        <button id="recaptcha-verify-button" class="rc-button rc-button-submit">VERIFY</button>
+      </div>
+      <div class="rc-audiochallenge-error-message" style="display:none"></div>
+    </div>
+  </iframe>
+</body>
+</html>

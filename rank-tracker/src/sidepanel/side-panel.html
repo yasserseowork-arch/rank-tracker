@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="panelTitle">لوحة تتبع الترتيب</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="side-panel.css" />
+  <script src="../lib/constants.js"></script>
+  <script src="../lib/messaging.js"></script>
+  <script src="../lib/csv.js"></script>
+  <script src="../lib/url.js"></script>
+  <script src="../lib/xlsxkit.js"></script>
+  <script src="../lib/i18n-ui.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <img src="avatar.jpg" alt="Muhammed Yasser" class="brand-avatar" />
+      <div class="brand-text">
+        <h1 data-i18n="appName">SEO Kw Tracker</h1>
+        <div class="signature">Muhammed Yasser</div>
+      </div>
+    </div>
+    <div class="header-side">
+      <button id="btnLang" class="btn btn-ghost btn-sm" title="Language">EN</button>
+      <div class="status-pill" id="statusPill" data-status="idle">
+        <span class="dot"></span>
+        <span id="statusText">خامل</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="controls">
+    <button id="btnStart" class="btn btn-primary" data-i18n="btnStart">▶ بدء الفحص</button>
+    <button id="btnPause" class="btn btn-warn" data-i18n="btnPause" disabled>⏸ إيقاف مؤقت</button>
+    <button id="btnResume" class="btn btn-primary" data-i18n="btnResume" disabled>⏩ استئناف</button>
+    <button id="btnStop" class="btn btn-danger" data-i18n="btnStop" disabled>⏹ إيقاف</button>
+  </section>
+
+  <div id="captchaBanner" class="banner hidden">
+    <div class="banner-icon">🧩</div>
+    <div class="banner-body">
+      <strong id="captchaBannerTitle">كابتشا قيد الحل…</strong>
+      <p id="captchaBannerText">Buster يستمع للتحدي الصوتي ويحاول الحل تلقائياً.</p>
+      <div class="banner-meta">
+        <span id="captchaAttempts">المحاولات: 0</span>
+        <button id="btnFocusCaptcha" class="btn btn-ghost btn-sm" data-i18n="btnShowTab">عرض التبويب</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="stats-grid">
+    <div class="stat-card"><span class="stat-value" id="statChecked">0</span><span class="stat-label" data-i18n="statChecked">كلمات فُحصت</span></div>
+    <div class="stat-card"><span class="stat-value ok" id="statFound">0</span><span class="stat-label" data-i18n="statFound">ظهور المتجر</span></div>
+    <div class="stat-card"><span class="stat-value" id="statAvg">—</span><span class="stat-label" data-i18n="statAvg">متوسط الترتيب</span></div>
+    <div class="stat-card"><span class="stat-value warn" id="statCaptcha">0</span><span class="stat-label" data-i18n="statCaptcha">كابتشا محلولة</span></div>
+  </section>
+
+  <section class="card chart-card">
+    <h2 data-i18n="chartTitle">منحنى الترتيب عبر الفحوصات</h2>
+    <canvas id="positionChart" width="640" height="220"></canvas>
+    <p class="muted" id="chartEmpty" data-i18n="chartEmpty">لا توجد بيانات بعد — ابدأ الفحص لرؤية المنحنى.</p>
+  </section>
+
+  <details class="card" open>
+    <summary data-i18n="targetTitle">🎯 الهدف والاستهداف الجغرافي</summary>
+    <div class="form-grid">
+      <label>
+        <span data-i18n="lblDomain">دومين المتجر</span>
+        <input type="text" id="cfgDomain" dir="ltr" placeholder="example.com.sa" />
+      </label>
+      <label>
+        <span data-i18n="lblName">اسم المتجر</span>
+        <input type="text" id="cfgName" placeholder="متجر مثال" />
+      </label>
+      <label style="grid-column: 1 / -1;">
+        <span data-i18n="lblMatch">نمط المطابقة</span>
+        <select id="cfgMatch">
+          <option value="both" data-i18n="matchBoth">الدومين أو الاسم</option>
+          <option value="domain" data-i18n="matchDomain">الدومين فقط</option>
+          <option value="name" data-i18n="matchName">الاسم فقط</option>
+        </select>
+      </label>
+    </div>
+  </details>
+
+
+  <details class="card" open>
+    <summary data-i18n="kwTitle">🔑 الكلمات المفتاحية</summary>
+    <textarea id="kwInput" rows="4" data-i18n-ph="kwPlaceholder" placeholder="الصق الكلمات هنا (سطر لكل كلمة، أو عمود من الشيت)&#10;مثال:&#10;عبايات نسائية&#10;فساتين سهرة الرياض"></textarea>
+    <div class="btn-row">
+      <button id="btnAddKw" class="btn btn-primary btn-sm" data-i18n="btnAddKw">＋ إضافة الكلمات</button>
+      <button id="btnImportCsv" class="btn btn-ghost btn-sm" data-i18n="btnImportCsv">📄 استيراد CSV</button>
+      <input type="file" id="csvFile" accept=".csv,.tsv,.txt" class="hidden" />
+      <button id="btnClearKw" class="btn btn-danger btn-sm" data-i18n="btnClearKw">🗑 مسح الكل</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="kwTable">
+        <thead>
+          <tr>
+            <th data-i18n="thKeyword">الكلمة</th>
+            <th data-i18n="thStatus">الحالة</th>
+            <th data-i18n="thPosition">الترتيب</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="kwBody"></tbody>
+      </table>
+    </div>
+  </details>
+
+  <details class="card" open>
+    <summary data-i18n="resTitle">📊 النتائج</summary>
+    <div class="btn-row">
+      <button id="btnMakeXlsx" class="btn btn-primary btn-sm" data-i18n="btnMakeXlsx">📊 اعمل شيت بالترتيب (XLSX)</button>
+      <button id="btnExportCsv" class="btn btn-ghost btn-sm" data-i18n="btnExportCsv">⬇ تصدير CSV</button>
+      <button id="btnCopyTsv" class="btn btn-ghost btn-sm" data-i18n="btnCopyTsv">📋 نسخ للصق في الشيت</button>
+      <button id="btnClearRes" class="btn btn-danger btn-sm" data-i18n="btnClearRes">🗑 مسح النتائج</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="resTable">
+        <thead>
+          <tr>
+            <th data-i18n="thKeyword">الكلمة</th>
+            <th data-i18n="thPosition">الترتيب</th>
+            <th data-i18n="thUrl">الرابط</th>
+            <th data-i18n="thTime">الوقت</th>
+          </tr>
+        </thead>
+        <tbody id="resBody"></tbody>
+      </table>
+    </div>
+  </details>
+
+
+  <details class="card">
+    <summary data-i18n="logTitle">🖥 السجل الحي</summary>
+    <div id="logConsole" class="log-console"></div>
+    <button id="btnClearLogs" class="btn btn-ghost btn-sm" data-i18n="btnClearLogs">مسح السجل</button>
+  </details>
+
+  <footer class="app-footer">
+    <span class="footer-copy" dir="ltr" data-i18n="footerCopy">© 2026 SEO Kw Tracker. جميع الحقوق محفوظة.</span>
+    <span class="footer-by" dir="ltr"><a class="li-badge" href="https://www.linkedin.com/in/muhammed-yasser-seo-specialist/" target="_blank" rel="noopener" aria-label="LinkedIn profile of Muhammed Yasser">in</a>&nbsp;By: Muhammed Yasser</span>
+  </footer>
+
+  <script type="module" src="side-panel.js"></script>
+</body>
+</html>

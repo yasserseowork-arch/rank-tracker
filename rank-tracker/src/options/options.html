@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title data-i18n="optionsTitle">الإعدادات المتقدمة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="options.css" />
+  <script src="../lib/constants.js"></script>
+  <script src="../lib/i18n-ui.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <img src="../../icons/icon48.png" alt="" />
+      <div>
+        <h1 data-i18n="appName">متتبع الترتيب — SEO Rank Tracker</h1>
+        <p data-i18n="optionsSubtitle">إعدادات إضافية ونسخ احتياطي</p>
+      </div>
+      <button id="btnLang" class="btn" style="margin-inline-start:auto;">EN</button>
+    </header>
+
+    <section class="card">
+      <h2 data-i18n="advTargetTitle">🌍 الاستهداف</h2>
+      <div class="form-grid">
+        <label><span data-i18n="lblGl">منطقة جوجل (gl)</span><input type="text" id="cfgGl" dir="ltr" /></label>
+        <label><span data-i18n="lblHl">لغة النتائج (hl)</span><input type="text" id="cfgHl" dir="ltr" /></label>
+        <label><span data-i18n="lblNum">عدد النتائج (حتى 100)</span><input type="number" id="cfgNum" min="10" max="100" step="10" /></label>
+        <label><span data-i18n="lblDailyCap">سقف الفحوصات اليومي (0 = بدون)</span><input type="number" id="cfgDailyCap" min="0" step="10" /></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="advRhythmTitle">⏱ الإيقاع البشري والكابتشا</h2>
+      <div class="form-grid">
+        <label><span data-i18n="lblJitter">تذبذب بشري ± (ملي ثانية)</span><input type="number" id="cfgJitter" min="0" step="250" /></label>
+        <label><span data-i18n="lblCooldownEvery">استراحة بعد كل N كلمة</span><input type="number" id="cfgCooldownEvery" min="0" /></label>
+        <label><span data-i18n="lblCooldownMs">مدة الاستراحة (ملي ثانية)</span><input type="number" id="cfgCooldownMs" min="0" step="5000" /></label>
+        <label><span data-i18n="lblCapAttempts">محاولات الحل القصوى</span><input type="number" id="cfgCapAttempts" min="1" max="10" /></label>
+        <label><span data-i18n="lblCapTimeout">مهلة المحاولة الواحدة (ملي ثانية)</span><input type="number" id="cfgCapTimeout" min="10000" step="5000" /></label>
+        <label><span data-i18n="lblCapGap">فاصل محاولات الكابتشا (ملي ثانية)</span><input type="number" id="cfgCapGap" min="500" step="500" /></label>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="cfgForeground" /><span data-i18n="lblForeground">تبويب أمامي أثناء الفحص</span></label>
+        <label class="toggle"><input type="checkbox" id="cfgReuse" /><span data-i18n="lblReuseTab">تبويب واحد دائم + الكلمة من صندوق البحث</span></label>
+        <label class="toggle"><input type="checkbox" id="cfgPauseCap" /><span data-i18n="lblPauseCap">إيقاف مؤقت عند فشل الكابتشا</span></label>
+        <label class="toggle"><input type="checkbox" id="cfgAutoResume" /><span data-i18n="lblAutoResume">استئناف تلقائي بعد الحل اليدوي</span></label>
+        <label class="toggle"><input type="checkbox" id="cfgClearRun" /><span data-i18n="lblClearBeforeRun">مسح بيانات التصفح قبل كل جولة</span></label>
+        <label class="toggle"><input type="checkbox" id="cfgMaps" /><span data-i18n="lblMapsCheck">فحص النتائج المحلية (خرائط)</span></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="optReadTitle">قراءة SERP</h2>
+      <div class="form-grid">
+        <label><span data-i18n="lblMaxWait">أقصى انتظار للكلمة (ملي ثانية) — بعدها تُعتبر غير موجودة</span><input type="number" id="cfgMaxWait" min="5000" step="5000" /></label>
+        <label><span data-i18n="lblBatchSettle">ثبات الدفعات = انتهاء التحميل (ملي ثانية)</span><input type="number" id="cfgBatchSettle" min="2000" step="1000" /></label>
+        <label><span data-i18n="lblRescan">فترة المسح الدوري (ملي ثانية)</span><input type="number" id="cfgRescan" min="500" step="250" /></label>
+        <label><span data-i18n="lblSettle">زمن استقرار النتائج (ملي ثانية)</span><input type="number" id="cfgSettle" min="500" step="200" /></label>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="cfgVerbose" /><span data-i18n="lblVerbose">سجلات تفصيلية</span></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="optBackupTitle">نسخ احتياطي</h2>
+      <p class="muted" data-i18n="optBackupHint">صدّر كل بياناتك كملف JSON أو استعدها منه.</p>
+      <div class="btn-row">
+        <button id="btnExportJson" class="btn" data-i18n="btnExportJson">⬇ تصدير JSON</button>
+        <button id="btnImportJson" class="btn" data-i18n="btnImportJson">⬆ استيراد JSON</button>
+        <input type="file" id="jsonFile" accept=".json" class="hidden" />
+        <button id="btnResetAll" class="btn btn-danger" data-i18n="btnResetAll">☢ تصفير كامل</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="optAboutTitle">عن الإضافة</h2>
+      <p class="signature" style="text-align:center;">© 2026 SEO Kw Tracker — By: Muhammed Yasser</p>
+      <p class="muted" id="aboutText"></p>
+      <ul class="muted small">
+        <li data-i18n="aboutLi1">كل شيء محلي داخل متصفحك — بدون أي خادم أو API خارجي.</li>
+        <li data-i18n="aboutLi2">استهداف أي منطقة/لغة عبر معاملات جوجل (gl/hl) بدون VPN.</li>
+        <li data-i18n="aboutLi3">حل الكابتشا ذاتياً أو بالتعاون مع Buster المثبتة لديك.</li>
+      </ul>
+    </section>
+
+    <footer class="page-footer"><span data-i18n="footerNote">أتمتة فحص الترتيب — © BY: Muhammed Yasser</span></footer>
+  </div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>
