@@ -18,6 +18,12 @@ const TOOLS = [
 ];
 
 try {
+  // أيقونة الإضافة الموحدة: نثبّتها على لوجو SEO Kw Tracker عند كل تشغيل —
+  // حتى لو أي أداة مدمجة أو حالة قديمة حاولت تغييرها بتبقى أيقونتنا هي اللي ظاهرة دايماً
+  chrome.action.setIcon({
+    path: { 16: 'icons/icon16.png', 48: 'icons/icon48.png', 128: 'icons/icon128.png' }
+  }, () => void chrome.runtime.lastError);
+
   // gs location changer: الوضع الداكن (بهوية اللوحة) كافتراضي أول تشغيل — والمستخدم يقدر يرجّعه فاتح من زراره
   chrome.storage.sync.get('theme', (r) => {
     if (!r || !r.theme) { chrome.storage.sync.set({ theme: 'dark' }); }

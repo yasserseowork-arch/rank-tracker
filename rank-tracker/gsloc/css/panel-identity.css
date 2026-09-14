@@ -93,3 +93,8 @@ body.popup-mode {
   min-width: 0 !important;
   overflow-x: hidden !important;
 }
+
+/* 7) الخانات أضيق من اللوحة: 70% من العرض بس — كل حاجة باينة من غير سحب */
+body.popup-mode .input-group {
+  max-width: 70% !important;
+}
