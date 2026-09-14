@@ -7,7 +7,7 @@ window.BT = window.BT || {};
     seen: new Set(),
     loadedPages: new Set(),
     aborter: null,
-    settings: { target: 100, enabled: true, autoLoad: true, pureMode: true },
+    settings: { target: 100, enabled: true, autoLoad: true, pureMode: false },
     lastHref: location.href,
     concurrency: 6
   };

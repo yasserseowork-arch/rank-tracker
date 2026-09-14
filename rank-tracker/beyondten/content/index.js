@@ -35,7 +35,7 @@
       state.settings.target = Number(d.resultsCount || '100');
       state.settings.enabled = d.extensionEnabled !== false;
       state.settings.autoLoad = d.autoLoad !== false;
-      state.settings.pureMode = d.pureMode !== false;
+      state.settings.pureMode = d.pureMode === true; // إيقاف افتراضي: عدم إخفاء أي مناطق من صفحة النتائج
       if (!state.settings.enabled) return;
 
       const ctx = getContext();

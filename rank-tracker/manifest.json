@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "short_name": "__MSG_appShortName__",
-  "version": "1.15.5",
+  "version": "1.15.6",
   "default_locale": "ar",
   "description": "__MSG_appDesc__",
   "minimum_chrome_version": "123",
@@ -21,7 +21,6 @@
     "webNavigation",
     "nativeMessaging",
     "offscreen",
-    "declarativeNetRequestWithHostAccess",
     "cookies",
     "contextMenus"
   ],
@@ -428,11 +427,7 @@
       "matches": [
         "http://*/*",
         "https://*/*"
-      ],
-      "use_dynamic_url": true
+      ]
     }
-  ],
-  "declarative_net_request": {
-    "rule_resources": []
-  }
+  ]
 }
