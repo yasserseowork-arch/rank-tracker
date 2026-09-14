@@ -39,7 +39,7 @@ body {
   padding: 12px 12px 24px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
 }
 
 .hidden { display: none !important; }
@@ -92,7 +92,7 @@ body {
   height: 430px;
   border: 1px solid var(--card-edge);
   border-radius: var(--radius);
-  background: #fff;
+  background: #031c2e;
 }
 #frameGsloc { height: 600px; }
 .tool-pane-head {
@@ -188,7 +188,7 @@ body {
 }
 .btn-sm { padding: 6px 9px; font-size: .8rem; border-radius: 8px; }
 
-.btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 
 /* ------------------------------- البانر ------------------------------- */
 .banner {
@@ -229,7 +229,7 @@ body {
 .card > summary {
   cursor: pointer;
   font-weight: 800;
-  padding: 2px 0 10px;
+  padding: 2px 0 12px;
   user-select: none;
   color: var(--gold-light);
 }
@@ -239,7 +239,7 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--muted); }
 .form-grid input, .form-grid select, textarea, .sheet-row input {

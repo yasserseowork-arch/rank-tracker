@@ -170,3 +170,14 @@ body { background: #031c2e; margin: 0; }
   font-weight: 700;
   color: #e2b67a;
 }
+
+/* توسيط كارت الإعدادات في نص الإطار */
+html, body { height: 100%; }
+body {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12px 0;
+  box-sizing: border-box;
+}
+.serp-popup { margin: 0 auto; max-width: 100%; }

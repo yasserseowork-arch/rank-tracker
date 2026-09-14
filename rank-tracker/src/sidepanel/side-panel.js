@@ -175,7 +175,7 @@ function renderResults() {
   for (const row of list) {
     const tr = document.createElement('tr');
     if (row.topHosts && row.topHosts.length) {
-      tr.title = 'أول النطاقات المقروءة: ' + row.topHosts.join(' | ');
+      tr.title = 'أول النطاقات اللي ظهرت: ' + row.topHosts.join(' | ');
     }
 
     const tdKw = document.createElement('td');
@@ -394,7 +394,7 @@ function maybeAutoXlsx(run, config) {
   if (!config || config.autoXlsx === false) { return; }
   if (!(snapshot.results || []).length) { return; }
   makeXlsx(true);
-  appendLog({ level: 'info', time: new Date().toTimeString().slice(0, 8), scope: 'panel', text: '📊 نُزّل شيت Excel بالترتيب تلقائياً' });
+  appendLog({ level: 'info', time: new Date().toTimeString().slice(0, 8), scope: 'panel', text: '📊 اتجهز شيت Excel بالترتيب واتحمّل لوحده' });
 }
 
 /* --------------------------------- التحديث --------------------------------- */

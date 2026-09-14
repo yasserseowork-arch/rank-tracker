@@ -1,4 +1,18 @@
-/* panel-identity.css — هوية اللوحة الموحدة (كحلي #053960 + ذهبي #c2924d) فوق الوضع الداكن لأداة الموقع */
+/* panel-identity.css — هوية اللوحة الموحدة (كحلي + ذهبي) + ضبط العرض جوه اللوحة الجانبية */
+
+/* 1) ألوان الهوية تُفرض دايماً جوه اللوحة (حتى قبل تحميل الثيم المحفوظ) */
+body.popup-mode {
+  --bg-color: #031c2e;
+  --panel-bg: #07304c;
+  --text-main: #eaf2f8;
+  --text-muted: #9db4c6;
+  --border-color: #0d4a77;
+  --accent-color: #c2924d;
+  --accent-glow: rgba(194, 146, 77, .22);
+  --shadow: 0 6px 24px rgba(2, 20, 34, .45);
+  background: #031c2e !important;
+  color: #eaf2f8;
+}
 body.dark-mode {
   --bg-color: #031c2e;
   --panel-bg: #07304c;
@@ -9,33 +23,50 @@ body.dark-mode {
   --accent-glow: rgba(194, 146, 77, .22);
   --shadow: 0 6px 24px rgba(2, 20, 34, .45);
 }
-body.dark-mode .form-control,
-body.dark-mode .input-group-text,
-body.dark-mode .tt-input {
-  background-color: var(--panel-bg);
-  border-color: var(--border-color);
-  color: var(--text-main);
-}
-body.dark-mode .input-group-text {
-  color: var(--gold-light, #e2b67a);
-}
 
-/* ═══ عرض صديق للوحة الجانبية: حشو أقل + صفوف كاملة العرض تحت بعض ═══ */
-body.popup-mode {
-  background: transparent !important;
-}
+/* 2) ضبط العرض: الصفوف تاخد العرض كله من غير ما تطلع بره الشاشة */
 body.popup-mode .container-fluid {
   max-width: 100% !important;
   padding: 10px !important;
+  overflow-x: hidden;
 }
-/* كل عمود يشغل السطر كامل — الحقول تحت بعض بدل جنب بعض */
-body.popup-mode .row > .col-6,
+/* المارجن السالب بتاع Bootstrap بيخلي الصفوف تخرج عن حدود الشاشة — بنشيله */
+body.popup-mode .row {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+/* كل عمود يشغل سطر كامل — الحقول تحت بعض */
 body.popup-mode .row > [class*="col-"] {
   flex: 0 0 100% !important;
   max-width: 100% !important;
   padding: 0 0 6px 0 !important;
 }
-/* زرار الثيم شكلي بحت هنا — الهوية موحدة من اللوحة */
+
+/* 3) حقول صغيرة ومضبوطة جوه الشاشة */
+body.popup-mode .input-group { width: 100% !important; }
+body.popup-mode .input-group-text {
+  min-width: 0 !important;
+  padding: 5px 8px !important;
+  font-size: .72rem !important;
+  white-space: nowrap;
+  background: var(--panel-bg) !important;
+  border-color: var(--border-color) !important;
+  color: #e2b67a !important;
+}
+body.popup-mode .form-control,
+body.popup-mode .tt-input {
+  min-width: 0 !important;
+  font-size: .8rem !important;
+  padding: 6px 8px !important;
+  background: var(--panel-bg) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-main) !important;
+}
+body.popup-mode .btn {
+  font-size: .75rem !important;
+  padding: 5px 8px !important;
+}
+
+/* 4) زرار الثيم مش محتاجينه هنا — الهوية موحدة من اللوحة */
 #theme-toggle-container { display: none !important; }
-/* المفضلة وزرار الحفظ يبانوا كويس */
 #favoritesList { max-height: 180px !important; }
