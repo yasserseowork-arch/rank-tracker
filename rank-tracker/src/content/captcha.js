@@ -48,9 +48,98 @@
 
   D.msg.startHeartbeat('captcha:' + role);
 
+  /* ------------------------------------------------------------------ *
+   * جسر الترحيل الداخلي (postMessage) بين الإطارات والصفحة العليا
+   * ------------------------------------------------------------------ *
+   * إطارات reCAPTCHA منفصلة الأصل عن بعض وعن صفحة /sorry/، ورسايل المحرك
+   * (tabs.sendMessage) بتوصل للصفحة العليا بس — الآلة (bframe) بتبعت حالتها
+   * لفوق (الوالد)، والـ anchor بيوصّلها للصفحة، والصفحة بتخزّن آخر حالة وترد
+   * على أوامر المحرك فوراً — كده المحرك عمره ما يستنى رد مفيش.
+   * ------------------------------------------------------------------ */
+
+  /** إزاحة إطارنا جوه والدنا (0,0 لو إحنا الصفحة العليا) */
+  function ownFrameOffset() {
+    try {
+      const fe = window.frameElement;
+      if (fe) {
+        const r = fe.getBoundingClientRect();
+        return { x: Math.round(r.left), y: Math.round(r.top) };
+      }
+    } catch (_) {}
+    return { x: 0, y: 0 };
+  }
+
+  function findChildBframes() {
+    return D.qsa('iframe[src*="recaptcha"]').filter((f) => /bframe/.test(f.src || ''));
+  }
+
+  /** إرسال رسالة سريعة لفوق (الوالد) من غير استثناءات */
+  function postUp(data) {
+    try { window.parent.postMessage(data, '*'); } catch (_) {}
+  }
+
+  /** إرسال أمر تحت (الأبناء) من غير استثناءات */
+  function postDown(data) {
+    for (const f of findChildBframes()) {
+      try { if (f.contentWindow) { f.contentWindow.postMessage(data, '*'); } } catch (_) {}
+    }
+  }
+
+  /** آخر حالة وصلت من إطار التحدي (بتتخزّن في الصفحة العليا للرد على أوامر المحرك فوراً) */
+  let stateCache = { state: null, at: 0 };
+
+  window.addEventListener('message', (ev) => {
+    const d = ev.data;
+    if (!d || d.srt !== 1) { return; }
+
+    // الدور: الآلة (bframe) — بتنفذ أوامر المحرك الواصلة من فوق
+    if (role === 'buster') {
+      if (d.cmd === 'probe') { pushStateUp(); return; }
+      if (d.cmd === 'next') {
+        S.stopped = false;
+        S.solveTried = false;
+        S.verifyTs = 0;
+        newChallenge().catch(() => {});
+        return;
+      }
+      if (d.cmd === 'stop') { S.stopped = true; return; }
+      return;
+    }
+
+    // الدور: الـ anchor — بيوصّل حالة الآلة وضغطات الإحداثيات من ابنه لفوق
+    if (role === 'anchor') {
+      if (d.cmd) { postDown(d); return; }
+      if (d.act === 'verify-click' || d.act === 'coord-click') {
+        const off = ownFrameOffset();
+        postUp(Object.assign({}, d, { x: (d.x || 0) + off.x, y: (d.y || 0) + off.y }));
+        return;
+      }
+      if (d.state) { postUp(d); return; }
+      return;
+    }
+
+    // الدور: الصفحة العليا — تخزين آخر حالة + تنفيذ ضغطات الإحداثيات عبر المحرك
+    if (role === 'page') {
+      if (d.state) {
+        stateCache = { state: d.state, at: Date.now() };
+        return;
+      }
+      if (d.act === 'verify-click') {
+        D.msg.send(C.MSG.CAPTCHA_VERIFY_CLICK, { x: d.x, y: d.y, stage: 'verify-button' });
+        return;
+      }
+      if (d.act === 'coord-click') {
+        D.msg.send(C.MSG.CAPTCHA_COORD_CLICK, { x: d.x, y: d.y, stage: d.stage || 'relay' });
+        return;
+      }
+      return;
+    }
+  });
+
   /** الإعدادات من المحرك (حد المحاولات والمهلة) */
   let cfg = { captchaMaxAttempts: 4, captchaAttemptTimeoutMs: 35000 };
   D.msg.send(C.MSG.GET_CONFIG).then((r) => { if (r && r.config) { cfg = r.config; } });
+
 
 
   /**
@@ -128,6 +217,33 @@
     }, { childList: true, subtree: true });
     // الزر بيتحقن في صفحتنا دي (enterprise overlay) → نحن اللي نضغطه
     busterDriver('page');
+
+    // الصفحة العليا هي اللي بتستقبل رسايل المحرك (tabs.sendMessage) — بنرد فوراً
+    // بآخر حالة وصلت من إطار التحدي + بنوصّل الأوامر تحت للإطارات
+    D.msg.on(C.MSG.CAPTCHA_CMD_PROBE, async () => {
+      const cached = (stateCache && stateCache.state) || {};
+      const alive = !!D.qs('iframe[src*="recaptcha"]');
+      return {
+        role: 'page',
+        busterFound: cached.busterFound === true || cached.hasBuster === true,
+        attempts: cached.attempts || 0,
+        audioOpen: cached.audioOpen === true,
+        imageOpen: cached.imageOpen === true,
+        challengeOpen: cached.challengeOpen === true || alive,
+        frameUrl: href
+      };
+    });
+    D.msg.on(C.MSG.CAPTCHA_CMD_NEXT, async () => {
+      postDown({ srt: 1, cmd: 'next' });
+      return { ok: true, via: 'page-relay' };
+    });
+    D.msg.on(C.MSG.CAPTCHA_CMD_STOP, async () => {
+      postDown({ srt: 1, cmd: 'stop' });
+      return { ok: true, via: 'page-relay' };
+    });
+
+    // استحثاث دوري: نسأل الأبناء عن حالتهم كل ثانيتين (الآلة بترد فوراً)
+    setInterval(() => postDown({ srt: 1, cmd: 'probe' }), 2000);
     return;
   }
 
@@ -217,6 +333,23 @@
     S.attempts += 1;
     S.lastClickTs = Date.now();
     D.msg.send(C.MSG.CAPTCHA_ATTEMPT, { attempt: S.attempts, stage: stage, frameUrl: href });
+  }
+
+  /** بث حالة الآلة لفوق (الوالد → الصفحة العليا → ردود أوامر المحرك) */
+  function pushStateUp() {
+    postUp({
+      srt: 1,
+      state: {
+        role: 'buster',
+        attempts: S.attempts,
+        audioOpen: audioOpen(),
+        imageOpen: imageOpen(),
+        challengeOpen: challengeOpen(),
+        busterFound: !!findBusterButton(),
+        hasBuster: !!busterHolder(),
+        verifyTs: S.verifyTs
+      }
+    });
   }
 
   /** مسح نطاق واحد (مستند أو shadow root) عن أي أثر للشخص البرتقالي */
@@ -319,9 +452,12 @@
     const needsCoords = !(mk.tagName === 'BUTTON' || (mk.closest && mk.closest('button')))
       || (mk.tagName === 'IFRAME') || (mk.tagName === 'IMG' && String(mk.src || '').indexOf('chrome-extension://') === 0);
     if (needsCoords) {
-      // الشخص جوّه iframe بتاع إضافة تانية: الضغطة DOM مش هتوصله → ضغطة ماوس حقيقية بالإحداثيات
-      const c = topCoordsOf(found.marker);
-      D.msg.send(C.MSG.CAPTCHA_COORD_CLICK, { x: c.x, y: c.y, stage: stage });
+      // الشخص جوّه iframe/shadow بتاع إضافة تانية: الضغطة DOM مش هتوصله
+      // (وزرار Buster أصلاً بيشتغل بضغطة حقيقية بس) → ضغطة ماوس موثوقة بالإحداثيات
+      // عبر سلسلة الترحيل (كل إطار بيضيف إزاحته) والمحرك بينفذها بـ debugger
+      const r = mk.getBoundingClientRect();
+      const off = ownFrameOffset();
+      postUp({ srt: 1, act: 'coord-click', x: Math.round(r.left + r.width / 2) + off.x, y: Math.round(r.top + r.height / 2) + off.y, stage: stage });
     } else {
       D.click(found.button, 'buster-button');
     }
@@ -415,11 +551,13 @@
     }
 
     if (!text) {
-      // 3-أ) البديل: ضغطة ماوس حقيقية (موثوقة) على زرار Buster لو متعلّق — هو اللي يحل بنفسه
+      // 3-أ) البديل: ضغطة ماوس حقيقية (موثوقة) على زرار Buster لو متعلّق — هو اللي يحل بنفسه.
+      // الإحداثيات بتترحّل عبر السلسلة لحد الصفحة العليا والمحرك بينفذها بـ debugger.
       const holder = busterHolder();
       if (holder) {
-        const c = topCoordsOf(holder);
-        D.msg.send(C.MSG.CAPTCHA_COORD_CLICK, { x: c.x, y: c.y, stage: 'audio-no-transcript' });
+        const r = holder.getBoundingClientRect();
+        const off = ownFrameOffset();
+        postUp({ srt: 1, act: 'coord-click', x: Math.round(r.left + r.width / 2) + off.x, y: Math.round(r.top + r.height / 2) + off.y, stage: 'buster-holder' });
         reportAttempt('buster-coords');
         S.verifyTs = Date.now(); // بنعتبرها محاولة كاملة — لو ما حلتش هنتحدى من جديد
         return { ok: true, via: 'buster-coords' };
@@ -436,7 +574,14 @@
     reportAttempt('audio-solve');
     const verify = D.first(C.SEL.recaptcha.verify);
     if (verify) {
+      // ضغطة مزدوجة: DOM مباشرة + ضغطة حقيقية بالإحداثيات عن طريق سلسلة الترحيل
+      // (المحرك بينفذها بـ chrome.debugger — مضمونة حتى لو الـ DOM منعزل).
+      // الإحداثيات: مركز الزرار جوه إطارنا + إزاحة إطارنا — وكل إطار في السلسلة
+      // بيضيف إزاحته لحد ما توصل إحداثيات صفحة /sorry/ الحقيقية.
       D.click(verify, 'recaptcha-verify');
+      const r = verify.getBoundingClientRect();
+      const off = ownFrameOffset();
+      postUp({ srt: 1, act: 'verify-click', x: Math.round(r.left + r.width / 2) + off.x, y: Math.round(r.top + r.height / 2) + off.y });
     } else {
       // من غير زرار تحقق؟ Enter في خانة الإجابة
       const input = D.qs('#audio-response');
@@ -524,6 +669,10 @@
   }
 
   setInterval(() => { step().catch(() => {}); }, 500);
+
+  // بث الحالة لفوق دورياً — الصفحة العليا بتخزّنها وترد بيها على أوامر المحرك فوراً
+  try { pushStateUp(); } catch (_) {}
+  setInterval(() => { try { pushStateUp(); } catch (_) {} }, 1500);
 
   /* أوامر المحرك تبقى كخط احتياطي (engine commands remain as a backup line) */
   D.msg.on(C.MSG.CAPTCHA_CMD_NEXT, async () => {

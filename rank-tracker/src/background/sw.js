@@ -36,10 +36,18 @@ async function boot(reason) {
     } catch (_) {}
   });
 
-  // استئناف بعد استيقاظ Worker أثناء تشغيل سابق
+  // استئناف تلقائي بعد استيقاظ Worker — التشغيل لازم يكمل لوحده دايماً (100% أوتوماتيك)
   const run = await state.getRun();
-  if (run.status === C.STATUS.RUN.RUNNING && !engine.looping) {
+  if ((run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA) && !engine.looping) {
     await logger.warn('sw', `استيقاظ Service Worker أثناء تشغيل نشط (${reason}) — استئناف الحلقة`);
+    await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+    engine.index = run.currentIndex || 0;
+    engine.abortController = new AbortController();
+    engine.loop();
+  } else if (run.status === C.STATUS.RUN.PAUSED && run.pauseReason === 'captcha-failed') {
+    // إيقاف مؤقت بسبب كابتشا: الاستئناف التلقائي بيشغّل الخطة الاحتياطية لوحدها
+    await logger.warn('sw', `استئناف تلقائي بعد إيقاف كابتشا (${reason}) — الخطة الاحتياطية هتتولى`);
+    await state.setRun({ status: C.STATUS.RUN.RUNNING, pauseReason: null, captcha: null });
     engine.index = run.currentIndex || 0;
     engine.abortController = new AbortController();
     engine.loop();

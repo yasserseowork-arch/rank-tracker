@@ -31,7 +31,12 @@ const REQUIRED_FUNCTIONS = [
   'transcribe',
   'fillResponse',
   'newChallenge',
-  'solveAudioOnce'
+  'solveAudioOnce',
+  // v1.17.1 — جسر الترحيل بين الإطارات والصفحة:
+  'ownFrameOffset',
+  'postUp',
+  'postDown',
+  'pushStateUp'
 ];
 
 for (const fn of REQUIRED_FUNCTIONS) {
@@ -72,4 +77,22 @@ test('orchestrator: ما يفشلش بسرعة لو زر Buster مش ظاهر �
 test('orchestrator: مهلة الجولة تستوعب دورة الحل الذاتي كاملة', () => {
   // دورة الحل: صوت (~12ث) + نسخ (~60ث) + حكم (~5ث) — لو الجولة أقصر المنسّق هيقاطع الحل
   assert.ok(/90000/.test(orch), 'لا يوجد حد أدنى 90 ثانية لمهلة الجولة');
+});
+
+test('orchestrator: الأمر محمي بمهلة — مفيش انتظار معلّق للأبد', () => {
+  // tabs.sendMessage من غير رد بيرجّع Promise معلّق للأبد — لازم في سباق مهلة
+  assert.ok(/Promise\.race/.test(orch), 'command() بدون سباق مهلة — ممكن يعلّق المحرك للأبد');
+});
+
+test('captcha.js: سلسلة الترحيل بتوصل ضغطة التحقق للمحرك', () => {
+  // v1.17.1: الصفحة العليا بتبعت CAPTCHA_VERIFY_CLICK للخلفية عشان debugger ينفذها
+  assert.ok(/CAPTCHA_VERIFY_CLICK/.test(src), 'لا يوجد إرسال CAPTCHA_VERIFY_CLICK من الصفحة');
+  assert.ok(/act:\s*'verify-click'/.test(src), 'لا يوجد طلب ضغطة تحقق عبر سلسلة الترحيل');
+  assert.ok(/postMessage/.test(src), 'لا يوجد postMessage للترحيل بين الإطارات');
+});
+
+test('captcha.js: الصفحة العليا بترد على أوامر المحرك فوراً', () => {
+  // الصفحة بتستقبل CAPTCHA_CMD_PROBE وترد من آخر حالة للآلة — المحرك مش بيستنى رد مفيش
+  assert.ok(/CAPTCHA_CMD_PROBE/.test(src), 'الصفحة لا ترد على أوامر الفحص');
+  assert.ok(/stateCache/.test(src), 'لا يوجد تخزين لآخر حالة الآلة في الصفحة');
 });

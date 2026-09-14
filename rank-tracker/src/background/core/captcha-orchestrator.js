@@ -31,10 +31,14 @@ export class CaptchaOrchestrator {
     });
   }
 
-  /** أمر لكل إطارات التبويب — أول رد يصل يكفي (command to all tab frames — first reply suffices) */
+  /** أمر لكل إطارات التبويب — أول رد يصل يكفي، ولو مفيش رد خلال 3 ثوانٍ بنرجع null
+   *  (command to all tab frames — first reply suffices; timeout guard so we never hang) */
   async command(tabId, type, payload) {
     try {
-      return await chrome.tabs.sendMessage(tabId, Object.assign({ type }, payload || {}));
+      return await Promise.race([
+        chrome.tabs.sendMessage(tabId, Object.assign({ type }, payload || {})),
+        new Promise((resolve) => setTimeout(() => resolve(null), 3000))
+      ]);
     } catch (err) {
       await logger.debug('captcha', `تعذر إرسال أمر للتبويب ${tabId}: ${err && err.message}`);
       return null;

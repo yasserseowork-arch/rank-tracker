@@ -43,12 +43,14 @@ export class QueueEngine {
 
   async watchdogTick() {
     const run = await state.getRun();
-    if (run.status === C.STATUS.RUN.RUNNING && !this.looping) {
+    const active = run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA;
+    if (active && !this.looping) {
       await logger.warn('queue', 'watchdog: استئناف الحلقة بعد استيقاظ Worker');
+      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
       this.index = run.currentIndex || 0;
       this.abortController = new AbortController();
       this.loop();
-    } else if (run.status === C.STATUS.RUN.RUNNING) {
+    } else if (active) {
       this.armWatchdog();
     } else {
       this.disarmWatchdog();
@@ -63,8 +65,10 @@ export class QueueEngine {
     };
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!message || typeof message.type !== 'string' || message.type.indexOf('srt/') !== 0) { return; }
-      // ضغطة ماوس حقيقية بالإحداثيات (لشخص Buster المحقون كـ iframe عبر إضافة تانية)
-      if (message.type === C.MSG.CAPTCHA_COORD_CLICK && sender.tab && sender.tab.id) {
+      // ضغطة ماوس حقيقية بالإحداثيات (موثوقة — isTrusted) من داخل تبويب:
+      // بتوصل من إطار التحدي (زرار Buster) أو من الصفحة العليا (زرار التحقق الصوتي)
+      const coordMsg = message.type === C.MSG.CAPTCHA_COORD_CLICK || message.type === C.MSG.CAPTCHA_VERIFY_CLICK;
+      if (coordMsg && sender.tab && sender.tab.id) {
         const tabId = sender.tab.id;
         (async () => {
           try {
@@ -75,7 +79,7 @@ export class QueueEngine {
             await new Promise((r) => setTimeout(r, 60));
             await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', Object.assign({ type: 'mouseReleased' }, evt));
             try { await chrome.debugger.detach(target); } catch (_) {}
-            await logger.info('captcha', `🖱 ضغطة حقيقية بالإحداثيات (${message.x},${message.y}) على الشخص البرتقالي`);
+            await logger.info('captcha', `🖱 ضغطة حقيقية بالإحداثيات (${message.x},${message.y}) — ${message.stage || ''}`);
             sendResponse({ ok: true });
           } catch (err) {
             await logger.warn('captcha', `تعذرت الضغطة بالإحداثيات: ${err && err.message}`);

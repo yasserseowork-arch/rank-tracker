@@ -54,6 +54,7 @@
     CAPTCHA_BUSTER_NOT_FOUND: 'srt/captcha/buster-not-found',
     CAPTCHA_BUSTER_SEEN: 'srt/captcha/buster-seen',
     CAPTCHA_COORD_CLICK: 'srt/captcha/coord-click',
+    CAPTCHA_VERIFY_CLICK: 'srt/captcha/verify-click',
     CAPTCHA_SOLVED: 'srt/captcha/solved',
     CAPTCHA_FAILED: 'srt/captcha/failed',
     CAPTCHA_CMD_NEXT: 'srt/captcha/cmd/next',
@@ -148,7 +149,7 @@
     HEARTBEAT_INTERVAL_MS: 20000
   };
 
-  const VERSION = '1.17.0';
+  const VERSION = '1.17.1';
 
   global.SRT_C = { VERSION, MSG, STATUS, SEL, LIMITS };
 })(globalThis);
