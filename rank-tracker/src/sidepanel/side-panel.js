@@ -299,9 +299,18 @@ async function addFromInput() {
     alert(t('kwAddFail') + ': ' + ((res && (res.error || res.__err)) || '?'));
     return;
   }
-  const n = (res.added || 0) + (res.reset || 0);
+  console.debug('[SRT][panel] KEYWORDS_ADD response:', res);
   $('kwInput').value = '';
   await refresh();
+  // العدد الحقيقي: الكلمات اللي اتبعتت وبقت فعلاً جوه القائمة — مش معتمد على شكل الرد بس
+  const sent = keywords.map((k) => String(k).trim().toLowerCase());
+  const present = (snapshot.keywords || [])
+    .filter((k) => sent.includes(String(k.keyword || '').trim().toLowerCase()))
+    .length;
+  const fromResponse = (typeof res.added === 'number' || typeof res.reset === 'number')
+    ? ((res.added || 0) + (res.reset || 0))
+    : null;
+  const n = (fromResponse != null && fromResponse > 0) ? fromResponse : present;
   alert(t('kwAddedOk').replace('{n}', String(n)));
 }
 
