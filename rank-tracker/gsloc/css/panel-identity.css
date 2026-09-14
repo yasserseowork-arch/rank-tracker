@@ -80,3 +80,16 @@ body.popup-mode .input-group-text {
   padding-top: 4px !important;
   padding-bottom: 4px !important;
 }
+
+/* 6) إصلاح جذري للخروج يمين: إلغاء العرض الثابت 500px اللي كانت القاعدة الأصلية
+   بتفرضه على الجسم — كل حاجة بتاخد عرض اللوحة الحالي بالظبط من غير سحب */
+html {
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+body.popup-mode {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow-x: hidden !important;
+}
