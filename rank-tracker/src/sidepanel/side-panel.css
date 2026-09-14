@@ -60,6 +60,12 @@ body {
 }
 
 /* ------------------------------- التابات ------------------------------- */
+/* الكروت جوه التاب الرئيسي: مسافة بسيطة بين كل كارت والتاني */
+#paneMain {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .tab-bar {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
