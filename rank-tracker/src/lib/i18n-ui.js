@@ -59,7 +59,10 @@
       aboutLi2: 'استهداف أي منطقة أو لغة عبر معاملات جوجل (gl/hl) بدون VPN.',
       aboutLi3: 'حل الكابتشا ذاتياً أو بالتعاون مع Buster المثبتة لديك.',
       importDone: 'تم الاستيراد بنجاح.', importFail: 'فشل الاستيراد', confirmReset: 'تصفير كل البيانات نهائياً؟',
-      langBtn: 'EN'
+      langBtn: 'EN',
+      warnTitle: '⚠️ تحذير مهم',
+      warnText: 'الإضافة دي بتمسح بيانات المتصفح كاملة (كوكيز، تاريخ، وكاش) قبل كل جولة فحص. فرجاء استخدامها في حساب جيست جديد بدون تسجيل الدخول عشان تحمي حساباتك وبياناتك.',
+      btnWarnOk: 'فهمت'
     },
     en: {
       appName: 'SEO Kw Tracker', panelTitle: 'Rank Tracking Panel',
@@ -113,7 +116,10 @@
       aboutLi2: 'Target any region or language via Google parameters (gl/hl), no VPN needed.',
       aboutLi3: 'Captcha solved natively or with your installed Buster.',
       importDone: 'Imported successfully.', importFail: 'Import failed', confirmReset: 'Wipe all data permanently?',
-      langBtn: 'ع'
+      langBtn: 'ع',
+      warnTitle: '⚠️ Important warning',
+      warnText: 'This extension deletes ALL browser data (cookies, history and cache) before every checking run. Please use it in a new Guest account without signing in, to keep your accounts and data safe.',
+      btnWarnOk: 'I understand'
     }
   };
 

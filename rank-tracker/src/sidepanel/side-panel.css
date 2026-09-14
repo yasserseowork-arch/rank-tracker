@@ -309,3 +309,40 @@ textarea { width: 100%; resize: vertical; min-height: 74px; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #2b3b60; border-radius: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ------------------------------- مودال تحذير أول فتح ------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 12, 20, .85);
+  backdrop-filter: blur(3px);
+}
+.modal-card {
+  width: 100%;
+  max-width: 330px;
+  padding: 18px 16px 16px;
+  text-align: center;
+  background: linear-gradient(160deg, #43140a, #2c0d05);
+  border: 1px solid #b91c1c;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.modal-icon { font-size: 2.1rem; line-height: 1; }
+.modal-card h2 {
+  margin: 10px 0 10px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fca5a5;
+}
+.modal-card p {
+  margin: 0 0 16px;
+  font-size: .86rem;
+  line-height: 1.8;
+  color: #fecaca;
+}
+.modal-card .btn { width: 100%; }
