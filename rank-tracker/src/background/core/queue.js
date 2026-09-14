@@ -326,6 +326,9 @@ export class QueueEngine {
     await logger.info('queue', `🔎 فحص الكلمة: "${kw.keyword}"`);
     this.broadcast();
 
+    // مسح دوري ذكي: بعد كل N كلمة مفحوصة (افتراضي 10) — بصمة تصفح أقل وكابتشا أقل
+    await this.maybePeriodicClear(cfg);
+
     // 1) المهلة الإلزامية قبل كل كلمة
     await scheduler.preKeywordDelay(cfg, { index: this.index }, signal);
     if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
@@ -470,6 +473,23 @@ export class QueueEngine {
     return 'paused';
   }
 
+  /** مسح بيانات التصفح تلقائياً كل N كلمة مفحوصة (0 = معطّل) */
+  async maybePeriodicClear(cfg) {
+    const everyN = Math.max(0, parseInt(cfg && cfg.clearEveryN, 10) || 0);
+    if (!everyN) { return; }
+    const keywords = await state.getKeywords();
+    const processed = keywords.filter((k) =>
+      [C.STATUS.KW.DONE, C.STATUS.KW.FAILED, C.STATUS.KW.SKIPPED].includes(k.status)).length;
+    const run = await state.getRun();
+    const marker = run.clearMarker || 0;
+    if (processed - marker >= everyN) {
+      await logger.info('queue', `🧹 مسح دوري (كل ${everyN} كلمة) — بيانات التصفح اتسحت بعد ${processed} كلمة مفحوصة`);
+      try { await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true }); } catch (_) {}
+      await state.setRun({ clearMarker: processed });
+      await this.notify('🧹 مسح دوري', `مسحنا بيانات التصفح تلقائياً بعد ${processed} كلمة — الفحص مكمل لوحده.`);
+    }
+  }
+
   raceSerpOrCaptcha(tabId, cfg, signal) {
     const timeout = (cfg.maxWaitResultsMs || 20000) + 8000;
     return new Promise((resolve) => {
@@ -557,11 +577,28 @@ export class QueueEngine {
   }
 
   async handleCaptcha(tabId, kw, cfg, signal, allowPause = true) {
-    await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since: Date.now() } });
+    const since = Date.now();
+    await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since } });
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
     this.broadcast();
 
-    const result = await this.orchestrator.solve(tabId, cfg, signal);
+    // عدّاد محاولات حي في البانر: نقرأ من المنسّق مباشرة كل 1.2 ثانية
+    let lastAttempts = 0;
+    const attemptsTicker = setInterval(async () => {
+      const a = this.orchestrator.attempts(tabId);
+      if (a !== lastAttempts) {
+        lastAttempts = a;
+        await state.setRun({ captcha: { tabId, attempts: a, since } });
+        this.broadcast();
+      }
+    }, 1200);
+
+    let result;
+    try {
+      result = await this.orchestrator.solve(tabId, cfg, signal);
+    } finally {
+      clearInterval(attemptsTicker);
+    }
     if (signal && signal.aborted) { return 'paused'; }
 
     if (result.outcome === 'solved') {
@@ -571,6 +608,7 @@ export class QueueEngine {
         captcha: null,
         captchaSolves: (run.captchaSolves || 0) + 1
       });
+      this.broadcast();
       return 'solved';
     }
 
@@ -603,7 +641,11 @@ export class QueueEngine {
       return 'paused';
     }
 
-    await logger.warn('queue', `تخطي الكلمة "${kw.keyword}" بسبب فشل الكابتشا (الإعداد: بدون إيقاف مؤقت)`);
+    // وضع تلقائي بالكامل: مفيش إيقاف مؤقت — نرجع الحالة «شغال» فوراً والخطة الاحتياطية
+    // (مسح بيانات + تبويب جديد) بتتولى الكلمة تلقائياً من غير ما البانر يعلق أبداً
+    await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+    this.broadcast();
+    await logger.warn('queue', `الكلمة "${kw.keyword}" فشل حلها التلقائي — الخطة الاحتياطية (مسح بيانات + تبويب جديد) بتتولى تلقائياً`);
     return 'failed';
   }
 
@@ -720,12 +762,15 @@ export class QueueEngine {
     }
     let aiMatch = (serp.aiItems && serp.aiItems.length) ? matchResults(serp.aiItems, cfg) : { found: false, position: null, matched: null };
     if (!aiMatch.found && serp.aiText) {
-      // المتجر مذكور داخل AI Overview باسمه العربي بدون رابط استشهاد
+      // صارم: «AI» يتكتب بس لو المتجر مذكور فعلاً جوه نص الـ AI Overview —
+      // تطابق مباشر للاسم الكامل أو الدومين، بدون المطابقات المرنة اللي كانت بتعطي نتايج كاذبة
       const hay = String(serp.aiText).toLowerCase();
+      const hayN = normalizeArabic(serp.aiText);
       const dom = String(cfg.storeDomain || '').trim().toLowerCase();
       const label = dom ? dom.split('.')[0] : '';
-      const nameHit = !!(cfg.storeName && nameMatches(serp.aiText, cfg.storeName));
       const domHit = !!(dom && hay.includes(dom)) || !!(label && label.length >= 6 && hay.includes(label));
+      const storeNameN = normalizeArabic(cfg.storeName || '');
+      const nameHit = !!(storeNameN.length >= 3 && hayN.includes(storeNameN));
       if (nameHit || domHit) {
         aiMatch = { found: true, position: null, matched: { title: 'AI mention', url: null }, reasons: ['ai-text'] };
       }

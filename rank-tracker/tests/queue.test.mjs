@@ -104,3 +104,43 @@ test('addKeywords: المكرر يرجع للانتظار بدل التجاهل 
   assert.equal(list.length, 1);
   assert.equal(list[0].status, 'pending');
 });
+
+test('handleCaptcha: فشل تلقائي بدون إيقاف مؤقت يرجع الحالة «شغال» فوراً (علة البانر العالق)', async () => {
+  const engine = new QueueEngine();
+  engine.orchestrator.solve = async () => ({ outcome: 'failed', attempts: 1 });
+  await state.setRun({ status: 'captcha', captcha: { tabId: 999, attempts: 0 } });
+  const r = await engine.handleCaptcha(
+    999, { id: 'k1', keyword: 'اختبار' },
+    { pauseOnCaptchaFail: true },
+    new AbortController().signal,
+    false // allowPause = false (الوضع التلقائي)
+  );
+  assert.equal(r, 'failed');
+  const run = await state.getRun();
+  assert.equal(run.status, 'running');
+  assert.equal(run.captcha, null);
+});
+
+test('maybePeriodicClear: بيمسح عند بلوغ كل N كلمة وبيسجل المؤشر عشان ما يكررش', async () => {
+  const engine = new QueueEngine();
+  await state.clearKeywords();
+  await state.setRun({ clearMarker: 0 });
+  const kws = [];
+  for (let i = 0; i < 10; i++) { kws.push({ id: 'k' + i, keyword: 'كلمة ' + i, status: 'done' }); }
+  await state.setKeywords(kws);
+  await engine.maybePeriodicClear({ clearEveryN: 10 });
+  let run = await state.getRun();
+  assert.equal(run.clearMarker, 10);
+  // مفيش كلمات جديدة مفحوصة → مش هيمسح تاني
+  await engine.maybePeriodicClear({ clearEveryN: 10 });
+  run = await state.getRun();
+  assert.equal(run.clearMarker, 10);
+  // كلمتين كمان → تعدي الـ 10 → مسح تاني
+  await state.addKeywords(['كلمة 11', 'كلمة 12']);
+  const more = await state.getKeywords();
+  const upd = more.filter((k) => k.keyword.indexOf('كلمة 1') === 0);
+  for (const k of upd) { await state.updateKeyword(k.id, { status: 'done' }); }
+  await engine.maybePeriodicClear({ clearEveryN: 10 });
+  run = await state.getRun();
+  assert.ok(run.clearMarker >= 10);
+});

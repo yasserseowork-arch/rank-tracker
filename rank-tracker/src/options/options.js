@@ -27,6 +27,7 @@ const FIELDS = [
   ['cfgPauseCap', 'pauseOnCaptchaFail', 'bool'],
   ['cfgAutoResume', 'autoResumeOnManualSolve', 'bool'],
   ['cfgClearRun', 'clearBeforeRun', 'bool'],
+  ['cfgClearEveryN', 'clearEveryN', 'number'],
   ['cfgMaps', 'mapsCheck', 'bool'],
   ['cfgMaxWait', 'maxWaitResultsMs', 'number'],
   ['cfgBatchSettle', 'batchSettleMs', 'number'],

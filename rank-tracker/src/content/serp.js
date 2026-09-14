@@ -258,6 +258,8 @@
   /** جذر بلوك الذكاء الاصطناعي: محددات معروفة أو البحث عن عنوان «نبذة باستخدام الذكاء الاصطناعي» */
   function aiRoot() {
     let root = D.first(C.SEL.serp.ai);
+    // حماية: لو الجذر بيحتوي النتائج العضوية نفسها يبقى مش بلوك AI حقيقي
+    if (root && root.querySelector && root.querySelector('#rso, #res, #center_col')) { root = null; }
     if (root) { return root; }
     const head = D.byText('h1, h2, h3, h4, div, span', 'نبذة باستخدام الذكاء الاصطناعي')
       || D.byText('h1, h2, h3, h4, div, span', 'AI Overview');
@@ -270,6 +272,7 @@
         if (root.querySelectorAll('a[href^="http"]').length >= 1) { break; }
       }
     }
+    if (root && root.querySelector && root.querySelector('#rso, #res, #center_col')) { return null; }
     return root || null;
   }
 

@@ -50,9 +50,10 @@ export const DEFAULT_CONFIG = {
   maxChecksPerDay: 150,         // سقف يومي احتراماً لقواعد جوجل (0 = بدون سقف)
   errorReloadMax: 2,            // ريفرش تلقائي لصفحات الخطأ (عدد المرات)
   keywordRetries: 5,            // أي مشكلة؟ ريفرش + نفس الكلمة — عدد مرات إعادة المحاولة
-  captchaClearRetries: 2,       // كابتشا؟ مسح بيانات المتصفح + تاب جديد — عدد المرات لكل كلمة
+  captchaClearRetries: 3,       // كابتشا؟ مسح بيانات المتصفح + تاب جديد — عدد المرات لكل كلمة
   // دورة العمل الكاملة (مثل السيناريو اليدوي)
   clearBeforeRun: true,         // مسح بيانات التصفح (كل الوقت) قبل بدء الجولة
+  clearEveryN: 10,              // مسح دوري ذكي كل N كلمة مفحوصة (0 = معطّل) — بصمة أقل وكابتشا أقل
   sheetUrl: '',                 // رابط شيت جوجل للمزامنة والكتابة
   sheetWriteBack: false,        // كتابة عمود الترتيب في الشيت عند انتهاء الجولة
   sheetStartCell: 'B1',         // خلية بداية لصق عمود الترتيب
@@ -112,7 +113,7 @@ export async function setConfig(patch) {
   const numeric = ['num', 'delayMs', 'jitterMs', 'cooldownEvery', 'cooldownMs', 'cooldownJitterMs',
     'captchaMaxAttempts', 'captchaAttemptTimeoutMs', 'captchaGapMs', 'captchaRefreshRetries', 'keywordRetries', 'captchaClearRetries', 'settleMs', 'scrollStepMs',
     'maxWaitResultsMs', 'maxHistoryPerKeyword', 'maxChecksPerDay', 'errorReloadMax',
-    'batchSettleMs', 'rescanMs', 'selfFetchMaxBatches'];
+    'batchSettleMs', 'rescanMs', 'selfFetchMaxBatches', 'clearEveryN'];
   for (const key of numeric) {
     const n = parseInt(next[key], 10);
     if (!Number.isNaN(n)) { next[key] = n; }
