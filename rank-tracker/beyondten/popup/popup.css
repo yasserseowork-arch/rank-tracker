@@ -135,3 +135,33 @@
   color: #888;
   font-weight: 600;
 }
+/* ═══ هوية اللوحة الموحدة (كحلي + ذهبي) — تجميل الإضافة المدمجة ═══ */
+html { background: #031c2e; }
+body { background: #031c2e; margin: 0; }
+.serp-popup {
+  background: linear-gradient(160deg, #053960, #06283f 55%, #031c2e);
+  color: #eaf2f8;
+  border: 1px solid #0d4a77;
+  box-shadow: 0 6px 24px rgba(2, 20, 34, .45);
+  font-family: "Cairo", "Segoe UI", Tahoma, sans-serif;
+}
+.serp-popup h1 { color: #e2b67a; }
+.serp-popup .subtitle { color: #9db4c6; }
+.serp-popup label { color: #9db4c6; }
+.serp-popup select {
+  background: #06283f;
+  border: 1px solid #0d4a77;
+  color: #eaf2f8;
+}
+.serp-popup select:focus { border-color: #c2924d; outline: none; }
+.status-line { color: #9db4c6; }
+.serp-popup button {
+  background: linear-gradient(135deg, #e2b67a, #c2924d);
+  color: #06283f;
+  font-weight: 700;
+}
+.serp-popup button:hover { background: linear-gradient(135deg, #f0c88e, #c2924d); }
+.serp-popup footer, .serp-popup footer a { color: #9db4c6; }
+.serp-popup footer a:hover { color: #e2b67a; }
+.top-toggle .slider { background-color: #0d4a77; }
+.top-toggle input:checked + .slider { background-color: #c2924d; }

@@ -1,0 +1,21 @@
+/* panel-identity.css — هوية اللوحة الموحدة (كحلي #053960 + ذهبي #c2924d) فوق الوضع الداكن لأداة الموقع */
+body.dark-mode {
+  --bg-color: #031c2e;
+  --panel-bg: #07304c;
+  --text-main: #eaf2f8;
+  --text-muted: #9db4c6;
+  --border-color: #0d4a77;
+  --accent-color: #c2924d;
+  --accent-glow: rgba(194, 146, 77, .22);
+  --shadow: 0 6px 24px rgba(2, 20, 34, .45);
+}
+body.dark-mode .form-control,
+body.dark-mode .input-group-text,
+body.dark-mode .tt-input {
+  background-color: var(--panel-bg);
+  border-color: var(--border-color);
+  color: var(--text-main);
+}
+body.dark-mode .input-group-text {
+  color: var(--gold-light, #e2b67a);
+}

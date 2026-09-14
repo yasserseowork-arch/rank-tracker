@@ -18,6 +18,11 @@ const TOOLS = [
 ];
 
 try {
+  // gs location changer: فرض الوضع الداكن (بهوية اللوحة) كافتراضي أول تشغيل — والمستخدم يقدر يرجّعه فاتح من زراره
+  chrome.storage.sync.get('theme', (r) => {
+    if (!r || !r.theme) { chrome.storage.sync.set({ theme: 'dark' }); }
+  });
+
   chrome.contextMenus.create({ id: 'srt-tools', title: '🔧 الأدوات المدمجة', contexts: ['action'] },
     () => void chrome.runtime.lastError);
   for (const t of TOOLS) {
