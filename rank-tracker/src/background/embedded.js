@@ -18,9 +18,29 @@ const TOOLS = [
 ];
 
 try {
-  // gs location changer: فرض الوضع الداكن (بهوية اللوحة) كافتراضي أول تشغيل — والمستخدم يقدر يرجّعه فاتح من زراره
+  // gs location changer: الوضع الداكن (بهوية اللوحة) كافتراضي أول تشغيل — والمستخدم يقدر يرجّعه فاتح من زراره
   chrome.storage.sync.get('theme', (r) => {
     if (!r || !r.theme) { chrome.storage.sync.set({ theme: 'dark' }); }
+  });
+
+  // gs location changer: ديفولت الموقع = السعودية (الرياض، gl=SA، hl=ar) —
+  // يُزرع مرة واحدة فقط أول تشغيل، ولو المستخدم غيّر الموقع بعدها لا يُستبدل أبداً
+  chrome.storage.sync.get('settings', (r) => {
+    if (r && r.settings) { return; }
+    chrome.storage.sync.set({
+      settings: {
+        latitude: 24.7136,
+        longitude: 46.6753,
+        location: 'Riyadh, Saudi Arabia',
+        name: 'Riyadh',
+        placeId: 'ChIJmznGcHZKFT4RjR3iW3nYBmU',
+        enabled: false,
+        hl: 'ar',
+        gl: 'SA',
+        regions: 'Saudi Arabia - Arabic',
+        timestamp: 0
+      }
+    });
   });
 
   chrome.contextMenus.create({ id: 'srt-tools', title: '🔧 الأدوات المدمجة', contexts: ['action'] },
