@@ -46,7 +46,7 @@ function genAcceptLanguage() {
 
 function checkEnabled() {
   if (settings.enabled) {
-    chrome.action.setIcon({path:"/gsloc/img/enabled.png"});
+    // الأيقونة ملك الإضافة الموحدة — لا نغيّرها من أدوات مدمجة
     chrome.declarativeNetRequest.updateSessionRules(
       {
         removeRuleIds: [
@@ -89,7 +89,6 @@ function checkEnabled() {
         }
     );
   } else {
-    chrome.action.setIcon({path:"/gsloc/img/disabled.png"});
     chrome.declarativeNetRequest.updateSessionRules(
       {
         removeRuleIds: [1]

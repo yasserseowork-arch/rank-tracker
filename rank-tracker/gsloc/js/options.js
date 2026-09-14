@@ -51,7 +51,6 @@ function getKnownPlaces() {
         var removedPlace = result.knownPlaces.splice(index, 1);
         if (background.settings.placeId == removedPlace[0].placeId) {
           background.settings.enabled = false;
-          chrome.action.setIcon({path:"disabled.png"});
           chrome.storage.sync.set({settings: background.settings});
         }
         background.knownPlaces = result.knownPlaces;
