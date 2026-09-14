@@ -1,4 +1,4 @@
-// Developed by Ayub Ansary - SEO Specialist (https://ayubansary.com)
+// إعدادات عدد نتائج البحث في كل صفحة
 // Helping businesses grow beyond limitations
 
 document.addEventListener('DOMContentLoaded', () => {

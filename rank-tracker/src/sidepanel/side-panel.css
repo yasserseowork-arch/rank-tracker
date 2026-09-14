@@ -39,7 +39,7 @@ body {
   padding: 12px 12px 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .hidden { display: none !important; }
@@ -62,7 +62,7 @@ body {
 /* ------------------------------- التابات ------------------------------- */
 .tab-bar {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 .tab-btn {
@@ -94,6 +94,16 @@ body {
   border-radius: var(--radius);
   background: #fff;
 }
+#frameGsloc { height: 600px; }
+.tool-pane-head {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius);
+}
+.tool-pane-head h2 { margin: 0 0 3px; font-size: .95rem; font-weight: 800; color: var(--gold-light); }
+.tool-pane-head p { margin: 0; font-size: .78rem; color: var(--muted); }
 .open-tool {
   margin: 8px auto 0;
   display: block;
@@ -157,7 +167,7 @@ body {
 }
 
 /* ------------------------------- الأزرار ------------------------------- */
-.controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 2px; }
 
 .btn {
   border: 1px solid transparent;
@@ -200,7 +210,7 @@ body {
 .banner-meta { display: flex; gap: 10px; align-items: center; font-size: .78rem; color: #fde68a; }
 
 /* ------------------------------- الإحصاءات ------------------------------- */
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .stat-card {
   background: var(--card);
   border: 1px solid var(--card-edge);
@@ -218,13 +228,13 @@ body {
   background: var(--card);
   border: 1px solid var(--card-edge);
   border-radius: var(--radius);
-  padding: 10px 12px;
+  padding: 14px;
   box-shadow: var(--shadow);
 }
 .card > summary {
   cursor: pointer;
   font-weight: 800;
-  padding: 2px 0 6px;
+  padding: 2px 0 10px;
   user-select: none;
   color: var(--gold-light);
 }
@@ -233,7 +243,8 @@ body {
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 9px;
+  gap: 12px;
+  margin-top: 4px;
 }
 .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--muted); }
 .form-grid input, .form-grid select, textarea, .sheet-row input {

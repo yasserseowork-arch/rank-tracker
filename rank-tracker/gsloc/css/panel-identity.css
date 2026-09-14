@@ -19,3 +19,23 @@ body.dark-mode .tt-input {
 body.dark-mode .input-group-text {
   color: var(--gold-light, #e2b67a);
 }
+
+/* ═══ عرض صديق للوحة الجانبية: حشو أقل + صفوف كاملة العرض تحت بعض ═══ */
+body.popup-mode {
+  background: transparent !important;
+}
+body.popup-mode .container-fluid {
+  max-width: 100% !important;
+  padding: 10px !important;
+}
+/* كل عمود يشغل السطر كامل — الحقول تحت بعض بدل جنب بعض */
+body.popup-mode .row > .col-6,
+body.popup-mode .row > [class*="col-"] {
+  flex: 0 0 100% !important;
+  max-width: 100% !important;
+  padding: 0 0 6px 0 !important;
+}
+/* زرار الثيم شكلي بحت هنا — الهوية موحدة من اللوحة */
+#theme-toggle-container { display: none !important; }
+/* المفضلة وزرار الحفظ يبانوا كويس */
+#favoritesList { max-height: 180px !important; }

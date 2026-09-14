@@ -165,3 +165,8 @@ body { background: #031c2e; margin: 0; }
 .serp-popup footer a:hover { color: #e2b67a; }
 .top-toggle .slider { background-color: #0d4a77; }
 .top-toggle input:checked + .slider { background-color: #c2924d; }
+.tool-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2b67a;
+}
