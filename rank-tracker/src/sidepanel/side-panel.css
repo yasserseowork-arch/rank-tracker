@@ -36,7 +36,8 @@ html, body {
 
 body {
   min-width: 360px;
-  padding: 12px 12px 24px;
+  min-height: 100vh; /* الفوتر الـsticky بيلزق لآخر الشاشة حتى لو المحتوى قصير */
+  padding: 12px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -340,15 +341,23 @@ textarea { width: 100%; resize: vertical; min-height: 74px; }
 .log-console .debug { color: #93a6c4; }
 
 /* ------------------------------- الفوتر ------------------------------- */
+/* بره الـ panes وsticky لآخر الشاشة — ثابت في التابات الثلاثة مهما كان المحتوى طويلاً */
 .app-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 60;
+  margin: auto -12px -12px;
+  padding: 10px 16px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
   color: var(--muted);
   font-size: .74rem;
-  padding-top: 4px;
   text-align: center;
+  background: linear-gradient(180deg, rgba(3, 28, 46, .78), var(--bg) 45%);
+  backdrop-filter: blur(5px);
+  border-top: 1px solid var(--gold-soft);
 }
 .footer-copy { color: var(--muted); }
 .footer-by {

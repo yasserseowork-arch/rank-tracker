@@ -91,3 +91,18 @@ test('BeyondTen: 429 بيرجع بهدوء من غير console.warn', () => {
   assert.ok(!/throw new Error\("consent_wall"\)/.test(bt.slice(bt.indexOf('async function fetchBatch'))),
     'رمي استثناء جوه forEach من غير try = unhandled rejection');
 });
+
+test('الفوتر: ثابت وظاهر في التابات الثلاثة (بره paneMain)', () => {
+  const html = read('src/sidepanel/side-panel.html');
+  const css = read('src/sidepanel/side-panel.css');
+  const footerAt = html.indexOf('<footer class="app-footer">');
+  const mainClose = html.indexOf('<!-- /paneMain -->');
+  assert.ok(footerAt > -1, 'مفيش فوتر في اللوحة');
+  assert.ok(mainClose > -1 && footerAt > mainClose,
+    'الفوتر جوه paneMain — هيخفى مع تبويبات الموقع/النتائج');
+  assert.equal((html.match(/<footer class="app-footer">/g) || []).length, 1, 'الفوتر مكرر');
+  assert.match(css, /\.app-footer\s*\{[^}]*position:\s*sticky/, 'الفوتر مش مثبّت (sticky)');
+  assert.match(css, /\.app-footer\s*\{[^}]*bottom:\s*0/, 'الفوتر مش لازق في آخر الشاشة');
+  // اللايقونات الخاصة بأصحاب الأدوات المدمجة ماينفعش ترجع — الفوتر بتاع صاحب الإضافة بس
+  assert.ok(!/buster-logo|serp-logo/.test(html), 'ظهر لوجو أداة تانية في اللوحة');
+});
