@@ -399,7 +399,12 @@
    *  كده الاستشهادات المخفية أو اللي لسه مجتش متتفوتش في أي مسار (حتى الخروج المبكر). */
   async function finalizeAi(aiSnap) {
     const root = await waitForAiRoot(5000);
-    if (!root) { return aiSnap; }
+    if (!root) {
+      if (aiHint()) {
+        D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: 'ℹ️ الصفحة فيها بوادر بلوك AI لكنه مترسّمش جوه الـDOM — شكّل السجل ده لو تكرر، معناه جوجل غيّرت الشكل' });
+      }
+      return aiSnap;
+    }
     await expandAi();
     return collectAi();
   }
