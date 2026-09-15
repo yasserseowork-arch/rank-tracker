@@ -123,7 +123,7 @@ export class QueueEngine {
       logger.warn('serp', `الجلب الخلفي للدفعات اصطدم بكابتشا — نكتفي بالنتائج المعروضة بالصفحة (${m.pageUrl || ''})`);
     });
     bus.on(C.MSG.CAPTCHA_FAILED, (m) => {
-      logger.error('captcha', `إطار التحدي أعلن استنفاد المحاولات (tab:${m.tabId})`);
+      logger.warn('captcha', `الكابتشا استهلكت محاولاتها من غير حل (tab:${m.tabId}) — الخطة الاحتياطية اتنفذّت: مسح بيانات + تبويب جديد لنفس الكلمة`);
     });
   }
 
@@ -580,7 +580,7 @@ export class QueueEngine {
     });
   }
 
-  async handleCaptcha(tabId, kw, cfg, signal, allowPause = true) {
+  async handleCaptcha(tabId, kw, cfg, signal, allowPause = false) {
     const since = Date.now();
     await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since } });
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
@@ -627,7 +627,7 @@ export class QueueEngine {
         pauseReason: 'captcha-failed',
         captcha: { tabId, attempts: result.attempts, since: Date.now(), lastError: result.outcome }
       });
-      await logger.error('queue', `❌ فشل حل الكابتشا بعد ${result.attempts} محاولات — إيقاف مؤقت. يمكنك حلها يدوياً وسيستأنف تلقائياً، أو اضغط استئناف للتخطي.`);
+      await logger.warn('queue', `فشل حل الكابتشا بعد ${result.attempts} محاولات — إيقاف مؤقت (اختياري من الإعدادات). الحل اليدوي يستأنف تلقائياً، أو اضغط استئناف للتخطي.`);
       await this.notify('فشل حل الكابتشا', `تعذر حل الكابتشا للكلمة: ${kw.keyword}. حلها يدوياً أو اضغط استئناف/تخطي من اللوحة.`);
       await tabctl.focus(tabId);
 
@@ -695,8 +695,8 @@ export class QueueEngine {
     }
     const posStr = (r) => {
       if (!r) { return ''; }
-      if (r.found) { return r.aiFound ? r.position + ' AI' : String(r.position); }
-      return r.aiFound ? (r.aiPosition != null ? r.aiPosition + ' AI' : 'AI') : '';
+      if (r.found) { return r.aiFound ? r.position + 'ai' : String(r.position); }
+      return r.aiFound ? 'ai' : '';
     };
 
     // 1) اقرأ ترتيب الكلمات في شيتك نفسه (gviz CSV — شيت مشارك برابط)

@@ -93,9 +93,9 @@ function renderStats() {
 }
 
 function displayPos(row) {
-  // ظهر عضوياً وكمان في AI Overview → «4 AI» / ظهر في AI بس → «2 AI» أو «AI»
-  if (row.found) { return row.aiFound ? row.position + ' AI' : '#' + row.position; }
-  if (row.aiFound) { return row.aiPosition != null ? row.aiPosition + ' AI' : 'AI'; }
+  // ظهر عضوياً وكمان في AI Overview → «1ai» / ظهر في الـAI بس → «ai»
+  if (row.found) { return row.aiFound ? row.position + 'ai' : '#' + row.position; }
+  if (row.aiFound) { return 'ai'; }
   return t('notFound');
 }
 
@@ -139,7 +139,7 @@ function renderKeywords() {
     const pos = document.createElement('span');
     const kwAi = kw.lastPosition == null && kw.lastAiPosition != null;
     pos.className = 'pos-badge ' + (kw.lastFound ? 'hit' : (kwAi ? 'ai' : (kw.lastCheckedAt ? 'miss' : '')));
-    pos.textContent = kw.lastPosition != null ? (kw.lastAiPosition != null || kw.lastAiFound ? kw.lastPosition + ' AI' : '#' + kw.lastPosition) : (kwAi ? (kw.lastAiPosition != null ? kw.lastAiPosition + ' AI' : 'AI') : (kw.lastCheckedAt ? '—' : '·'));
+    pos.textContent = kw.lastPosition != null ? (kw.lastAiFound || kw.lastAiPosition != null ? kw.lastPosition + 'ai' : '#' + kw.lastPosition) : (kwAi ? 'ai' : (kw.lastCheckedAt ? '—' : '·'));
     tdPos.appendChild(pos);
 
     const tdDel = document.createElement('td');
@@ -328,7 +328,7 @@ function resultRowsForExport() {
   const header = [t('thKeyword'), t('thPosition'), 'found', 'ai_overview', 'url', 'title', 'total', 'checked_at'];
   const rows = (snapshot.results || []).map((r) => [
     r.keyword,
-    r.found ? (r.aiFound ? r.position + ' AI' : String(r.position)) : (r.aiFound ? (r.aiPosition != null ? r.aiPosition + ' AI' : 'AI') : ''),
+    r.found ? (r.aiFound ? r.position + 'ai' : String(r.position)) : (r.aiFound ? 'ai' : ''),
     r.found ? 'yes' : (r.aiFound ? 'ai' : 'no'),
     r.aiFound ? r.aiPosition : '',
     r.urlDisplay || r.url || '',
@@ -344,7 +344,7 @@ async function makeXlsx(silent) {
   (snapshot.results || []).forEach((r) => {
     rows.push([
       r.keyword,
-      r.found ? (r.aiFound ? r.position + ' AI' : r.position) : (r.aiFound ? (r.aiPosition != null ? r.aiPosition + ' AI' : 'AI') : t('notFound')),
+      r.found ? (r.aiFound ? r.position + 'ai' : r.position) : (r.aiFound ? 'ai' : t('notFound')),
       r.aiFound ? (r.aiPosition != null ? r.aiPosition : 'AI') : '',
       r.localFound ? '#' + r.localPosition : '',
       r.url || '',
@@ -377,7 +377,7 @@ async function exportCsv() {
 }
 
 async function copyTsv() {
-  const rows = (snapshot.results || []).map((r) => [r.keyword, r.found ? (r.aiFound ? r.position + ' AI' : String(r.position)) : (r.aiFound ? (r.aiPosition != null ? r.aiPosition + ' AI' : 'AI') : '')]);
+  const rows = (snapshot.results || []).map((r) => [r.keyword, r.found ? (r.aiFound ? r.position + 'ai' : String(r.position)) : (r.aiFound ? 'ai' : '')]);
   const tsv = SRT.csv.toTsv(rows);
   try {
     await navigator.clipboard.writeText(tsv);

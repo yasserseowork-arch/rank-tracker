@@ -33,7 +33,7 @@ export const DEFAULT_CONFIG = {
   cooldownMs: 45000,
   cooldownJitterMs: 20000,
   // الكابتشا
-  captchaMaxAttempts: 4,
+  captchaMaxAttempts: 2,
   captchaAttemptTimeoutMs: 35000,
   captchaGapMs: 2500,
   captchaRefreshRetries: 2,   // ريفرش صفحة الكابتشا ومحاولات جديدة عند الفشل

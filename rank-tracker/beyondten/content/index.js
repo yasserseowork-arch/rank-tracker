@@ -128,13 +128,33 @@
       const batch = targets.slice(i, i + CONCURRENCY);
       const label = batch.length > 1 ? `${batch[0] + 1}–${batch[batch.length - 1] + 1}` : `${batch[0] + 1}`;
       setStatus(`Loading page ${label}…`);
-      try {
-        const htmls = await Promise.all(batch.map(idx => window.BT.fetcher.fetchSERP(ctx, idx, signal)));
+      const grab = () => Promise.all(batch.map(idx => window.BT.fetcher.fetchSERP(ctx, idx, signal)));
+      let htmls = null;
+      let consentBreak = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try { htmls = await grab(); break; }
+        catch (e) {
+          if (e?.name === "AbortError" || String(e).includes("Aborted")) throw e;
+          if (e && String(e).includes("consent_wall")) { setStatus("Consent needed. Click page."); consentBreak = true; break; }
+          if (/429/.test(String(e)) && attempt === 0) {
+            // Google rate limit — rest a bit and retry quietly once without flooding the console
+            console.info("BeyondTen: rate limited (429) — cooling down, retrying once");
+            setStatus(`Cooling down… (page ${label})`);
+            await new Promise(r => setTimeout(r, 20000 + Math.floor(Math.random() * 25000)));
+            if (signal.aborted) return;
+            continue;
+          }
+          console.info("BeyondTen: batch skipped:", (e && e.message) || e);
+          break;
+        }
+      }
+      if (consentBreak) break;
+      if (htmls) {
         let appended = 0;
         htmls.forEach((html, j) => {
           const idxp = batch[j];
           const doc = new DOMParser().parseFromString(html, "text/html");
-          if (looksLikeConsent(doc)) throw new Error("consent_wall");
+          if (looksLikeConsent(doc)) { consentBreak = true; return; }
           const blocks = window.BT.parser.extractTopLevelItems(doc);
           const unique = [];
           blocks.forEach(b => {
@@ -150,14 +170,10 @@
           window.BT.state.loadedPages.add(idxp);
           appended += unique.length;
         });
+        if (consentBreak) { setStatus("Consent needed. Click page."); break; }
         renumberAll(startOffset());
         // Soft throttle if empty results
         if (appended < 5 && CONCURRENCY > 2) CONCURRENCY = Math.max(2, CONCURRENCY - 1);
-      } catch (e) {
-        if (e?.name === "AbortError" || String(e).includes("Aborted")) throw e;
-        if (e && String(e).includes("consent_wall")) { setStatus("Consent needed. Click page."); break; }
-        console.warn("BeyondTen: Fetch error", e);
-        CONCURRENCY = Math.max(2, CONCURRENCY - 1);
       }
     }
   }

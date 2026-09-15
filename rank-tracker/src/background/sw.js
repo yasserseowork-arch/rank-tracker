@@ -14,10 +14,14 @@ import './embedded.js'; // الأدوات المدمجة: Buster + SERP Counter 
 
 const engine = new QueueEngine();
 
+// الموجّه يتسجل فوراً على مستوى الموديول — اللوحة الجانبية بتفتح keepalive port
+// أول ثانية بتفتح فيها، والتسجيل المتأخر (جوه boot ورا await) كان بيجيب
+// "Could not establish connection. Receiving end does not exist" في الكونسول.
+createRouter(engine);
+
 async function boot(reason) {
   tabctl.installListeners();
   await state.migrate();
-  createRouter(engine);
 
   try {
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });

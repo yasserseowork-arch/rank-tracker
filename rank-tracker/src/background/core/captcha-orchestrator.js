@@ -68,7 +68,7 @@ export class CaptchaOrchestrator {
    * @returns {Promise<{outcome:'solved'|'failed'|'no-buster'|'aborted', attempts:number, detail?:string}>}
    */
   async solve(tabId, cfg, signal) {
-    const max = Math.max(1, cfg.captchaMaxAttempts || 4);
+    const max = Math.max(1, cfg.captchaMaxAttempts || 2);
     // مهلة الجولة لازم تستوعب دورة الآلة الذاتية كاملة:
     // ظهور الصوت (~12ث) + نسخ الصوت (~60ث كحد أقصى أول مرة) + الحكم (~5ث)
     const attemptTimeout = Math.max(cfg.captchaAttemptTimeoutMs || 0, 90000);
@@ -112,7 +112,7 @@ export class CaptchaOrchestrator {
           return { outcome: 'solved', attempts: round };
         }
         if (failedReport) {
-          await logger.error('captcha', `أعلن إطار التحدي الفشل بعد ${failedReport.attempts || round} محاولات`);
+          await logger.warn('captcha', `إطار التحدي خلّص محاولاته (${failedReport.attempts || round}) — بنسلّم للخطة الاحتياطية: مسح بيانات + تبويب جديد لنفس الكلمة`);
           return { outcome: 'failed', attempts: failedReport.attempts || round };
         }
 

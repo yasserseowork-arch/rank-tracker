@@ -293,24 +293,58 @@
     }
   }
 
+  /** فك تحويلات جوجل (google.com/url?q=...) — بنقارن المصدر الحقيقي مش عنوان التحويل */
+  function unwrapRedirect(h) {
+    try {
+      const u = new URL(h);
+      if (/google\./.test(u.hostname || '')) {
+        const q = u.searchParams.get('q') || u.searchParams.get('url');
+        if (q && /^https?:/i.test(q)) { return q; }
+      }
+    } catch (_) {}
+    return h;
+  }
+
+  /** قبل أي حكم: لو فيه بلوك AI وسّعناه قبل الحكم، أعد القراءة — عشان الاستشهادات المخفية
+   *  ورا «عرض المزيد / عرض الكل» متتفوتش في مسار الخروج المبكر */
+  async function finalizeAi(aiSnap) {
+    if (!aiRoot()) { return aiSnap; }
+    await expandAi();
+    return collectAi();
+  }
+
   function collectAi() {
     const root = aiRoot();
     if (!root) { return { items: [], text: '' }; }
-    const links = D.qsa('a[href^="http"]', root);
+    const scopes = [root];
+    // بعد «عرض الكل» قائمة المصادر بتتفتح في dialog خارج البلوك — بنلمّ كمان اللي فيه
+    if (aiExpanded) {
+      for (const dlg of D.qsa('jsdialog, [role="dialog"]')) { scopes.push(dlg); }
+    }
     const seen = new Set();
     const items = [];
-    for (const a of links) {
-      if (!a.href || a.href.indexOf('http') !== 0 || seen.has(a.href)) { continue; }
-      seen.add(a.href);
-      items.push({
-        url: a.href,
-        host: D.url.hostOf(a.href),
-        title: D.textOf(a),
-        snippet: D.textOf(a.parentElement || a)
-      });
+    for (const scope of scopes) {
+      for (const a of D.qsa('a[href^="http"]', scope)) {
+        if (!a.href || a.href.indexOf('http') !== 0) { continue; }
+        const real = unwrapRedirect(a.href);
+        if (seen.has(real)) { continue; }
+        seen.add(real);
+        items.push({
+          url: real,
+          host: D.url.hostOf(real),
+          title: D.textOf(a),
+          snippet: D.textOf(a.parentElement || a)
+        });
+      }
     }
     let text = '';
-    try { text = (root.innerText || '').slice(0, 8000); } catch (_) {}
+    try {
+      text = (root.innerText || '').slice(0, 8000);
+      // وكمان: أسماء المواقع جوه dialog المصادر جزء من الحكم الصارم
+      for (let i = 1; i < scopes.length; i++) {
+        try { const dt = scopes[i].innerText || ''; if (dt) { text += '\n' + dt.slice(0, 4000); } } catch (_) {}
+      }
+    } catch (_) {}
     return { items: items, text: text };
   }
 
@@ -461,7 +495,8 @@
 
     if (early) {
       logEarly(early.hit, early.items);
-      return { items: early.items, aiItems: early.ai.items, aiText: early.ai.text, adsCount: 0, early: true, hit: early.hit };
+      const aiE = await finalizeAi(early.ai);
+      return { items: early.items, aiItems: aiE.items, aiText: aiE.text, adsCount: 0, early: true, hit: early.hit };
     }
     if (firstHit && firstHit !== true && firstHit.nodeType) {
       return { early: false, settled: true, noResults: true, items: [], aiItems: [], aiText: '' };
@@ -490,7 +525,8 @@
       const hit = immediateFind(cfg, snapshot, ai.items);
       if (hit) {
         logEarly(hit, snapshot.items);
-        return { items: snapshot.items, aiItems: ai.items, aiText: aiText, adsCount: snapshot.adsCount, early: true, hit: hit };
+        const aiF = await finalizeAi(ai);
+        return { items: snapshot.items, aiItems: aiF.items, aiText: aiF.text || aiText, adsCount: snapshot.adsCount, early: true, hit: hit };
       }
       // الهدف مش على الشاشة خالص؟ فقط حينها نفك القفل وننزل ندور
       const now = Date.now();

@@ -99,6 +99,7 @@
         S.stopped = false;
         S.solveTried = false;
         S.verifyTs = 0;
+        S.busterTs = 0;
         newChallenge().catch(() => {});
         return;
       }
@@ -137,7 +138,7 @@
   });
 
   /** الإعدادات من المحرك (حد المحاولات والمهلة) */
-  let cfg = { captchaMaxAttempts: 4, captchaAttemptTimeoutMs: 35000 };
+  let cfg = { captchaMaxAttempts: 2, captchaAttemptTimeoutMs: 35000 };
   D.msg.send(C.MSG.GET_CONFIG).then((r) => { if (r && r.config) { cfg = r.config; } });
 
 
@@ -294,6 +295,7 @@
     lastReloadTs: 0,
     solveTried: false,   // هل جرّبنا الحل جوه التحدي الحالي؟
     verifyTs: 0,         // وقت آخر ضغطة تحقق (لحساب مهلة الحكم)
+    busterTs: 0,            // وقت آخر ضغطة على الشخص البرتقالي (نستنى نتيجته قبل أي حاجة)
     reportedClosed: false,
     reportedFailed: false,
     stopped: false,
@@ -609,38 +611,65 @@
         return;
       }
 
-      // (ب) التحدي صوري؟ حوّله لصوتي (زر السماعة) مرة كل 5 ثوانٍ — الصوت هو اللي بنعرف نحله
-      if (imageOpen() && !audioOpen()) {
+      const max = Math.max(1, cfg.captchaMaxAttempts || 2);
+
+      // رصد رسالة فشل الاستماع (لو ظهرت) عشان السجل يبقى واضح
+      const err = D.first(C.SEL.recaptcha.audioError);
+      if (err && err.__srtSeen !== true && D.textOf(err)) {
+        err.__srtSeen = true;
+        S.lastErrorTs = Date.now();
+        D.msg.send(C.MSG.CAPTCHA_ERROR, { text: D.textOf(err), frameUrl: href });
+      }
+
+      // استُنفدت المحاولات → أعلن الفشل مرة واحدة، والمحرك بيكمّل لوحده
+      // بالخطة الاحتياطية (مسح بيانات + تبويب جديد لنفس الكلمة) — بدون أي توقف
+      if (S.attempts >= max) {
+        if (!S.reportedFailed) {
+          S.reportedFailed = true;
+          D.msg.send(C.MSG.CAPTCHA_FAILED, { attempts: S.attempts, frameUrl: href });
+        }
+        return;
+      }
+
+      // (ب) الأولوية المطلقة للشخص البرتقالي: ضغطة حقيقية واحدة عليه وسيبه يحل —
+      // إحنا مش بنلمس «تحقق» من عندنا خالص؛ هو عارف شغله كويس.
+      if (findBusterButton() || busterHolder()) {
         const now = Date.now();
-        if (!S.audioSwitchTs || now - S.audioSwitchTs > 5000) {
-          S.audioSwitchTs = now;
+        if (S.busterTs && now - S.busterTs < 50000) { return; } // لسه بيحل — نستنى
+        if (S.busterTs) {
+          // عدّت 50 ثانية على الضغطة والتحدي لسه مفتوح = المحاولة دي ما حلتش
+          S.busterTs = 0;
+          S.solveTried = false;
+          reportAttempt('orange-man-timeout');
+          await newChallenge();
+          return;
+        }
+        S.busterTs = now;
+        reportAttempt('orange-man');
+        if (!clickBuster('orange-man')) {
+          const holder = busterHolder();
+          if (holder) {
+            const r = holder.getBoundingClientRect();
+            const off = ownFrameOffset();
+            postUp({ srt: 1, act: 'coord-click', x: Math.round(r.left + r.width / 2) + off.x, y: Math.round(r.top + r.height / 2) + off.y, stage: 'orange-man' });
+          }
+        }
+        return;
+      }
+
+      // (ج) مفيش شخص برتقالي في السكة؟ نرجع للحل الذاتي: صوري → صوتي
+      if (imageOpen() && !audioOpen()) {
+        const now2 = Date.now();
+        if (!S.audioSwitchTs || now2 - S.audioSwitchTs > 5000) {
+          S.audioSwitchTs = now2;
           switchToAudio();
           await D.humanSleep(700, 250);
         }
         return; // بنستنى ظهور التحدي الصوتي
       }
 
-      // (ج) التحدي الصوتي مفتوح → الحل الذاتي الحقيقي (نسخ الصوت → كتابة النص → تحقق)
+      // (د) التحدي الصوتي مفتوح → نسخ الصوت → كتابة النص → تحقق
       if (audioOpen()) {
-        const max = Math.max(1, cfg.captchaMaxAttempts || 4);
-
-        // رصد رسالة فشل الاستماع (لو ظهرت) عشان السجل يبقى واضح
-        const err = D.first(C.SEL.recaptcha.audioError);
-        if (err && err.__srtSeen !== true && D.textOf(err)) {
-          err.__srtSeen = true;
-          S.lastErrorTs = Date.now();
-          D.msg.send(C.MSG.CAPTCHA_ERROR, { text: D.textOf(err), frameUrl: href });
-        }
-
-        // استُنفدت المحاولات → أعلن الفشل مرة واحدة (attempts exhausted → announce failure once)
-        if (S.attempts >= max) {
-          if (!S.reportedFailed) {
-            S.reportedFailed = true;
-            D.msg.send(C.MSG.CAPTCHA_FAILED, { attempts: S.attempts, frameUrl: href });
-          }
-          return;
-        }
-
         // محاولة حل واحدة لكل تحدي (نستنى نسخ الصوت والرد)
         if (!S.solveTried) {
           S.solveTried = true;
@@ -654,11 +683,12 @@
         // التحدي لسه مفتوح بعد التحقق = الإجابة غلط → تحدي جديد ⟳ ومحاولة تانية
         S.verifyTs = 0;
         S.solveTried = false;
+        S.busterTs = 0;
         await newChallenge();
         return;
       }
 
-      // (د) تحدي مفتوح بس مش صوتي ولا صوري (حالة انتقالية نادرة) — ريلود كل 15 ثانية
+      // (هـ) تحدي مفتوح بس مش صوتي ولا صوري (حالة انتقالية نادرة) — ريلود كل 15 ثانية
       if (!S.lastReloadTs || Date.now() - S.lastReloadTs > 15000) {
         S.lastReloadTs = Date.now();
         await newChallenge();
@@ -679,6 +709,7 @@
     S.stopped = false;
     S.solveTried = false;
     S.verifyTs = 0;
+    S.busterTs = 0;
     await newChallenge(); // الآلة بتلقط التحدي الجديد وبتكمل الحل لوحدها
     return { ok: true, attempts: S.attempts };
   });
