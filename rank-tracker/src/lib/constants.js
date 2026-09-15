@@ -93,7 +93,7 @@
       snippet: '.VwiC3b, [data-sncf="1"], [data-sncf="2"], .IsZvec, .MUxGbd',
       adsRoot: ['#tads', '#tadsb', '#bads', '.ads-visurl', '[data-text-ad]', '#topads'],
       noResults: ['#search .card-section', '#topstuff .medicv2c2f', 'div[data-async-type="no_results"]'],
-      ai: ['ai-overview', '#aiOverview', '[data-attrid="aiOverview"]', '[data-async-type="aiOverview"]', '.KsK2d'],
+      ai: ['ai-overview', '#aiOverview', '[data-attrid="aiOverview"]', '[data-async-type="aiOverview"]', '.KsK2d', '.w34xwb', '.YhCVmd', 'div[jsname="VZbeH"]'],
       paa: ['.related-question-pair', 'div[jsname="CpkPjb"]', '.g:not([data-hveid]) .related-question-pair']
     },
     recaptcha: {
@@ -149,7 +149,7 @@
     HEARTBEAT_INTERVAL_MS: 20000
   };
 
-  const VERSION = '1.18.1';
+  const VERSION = '1.18.2';
 
   global.SRT_C = { VERSION, MSG, STATUS, SEL, LIMITS };
 })(globalThis);

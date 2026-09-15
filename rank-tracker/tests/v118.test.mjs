@@ -106,3 +106,24 @@ test('الفوتر: ثابت وظاهر في التابات الثلاثة (بر
   // اللايقونات الخاصة بأصحاب الأدوات المدمجة ماينفعش ترجع — الفوتر بتاع صاحب الإضافة بس
   assert.ok(!/buster-logo|serp-logo/.test(html), 'ظهر لوجو أداة تانية في اللوحة');
 });
+
+test('AI v1.18.2: كشف متعدد الطبقات + انتظار الترطيب (async) بدون تعليم الكلمات', () => {
+  const serp = read('src/content/serp.js');
+  const consts = read('src/lib/constants.js');
+  // 1) عناوين عربية/إنجليزية متعددة (مش نص واحد قديم)
+  assert.match(serp, /نبذة الذكاء الاصطناعي/, 'مفيش عنوان «نبذة الذكاء الاصطناعي»');
+  assert.match(serp, /لمحة الذكاء الاصطناعي/, 'مفيش عنوان «لمحة»');
+  assert.match(serp, /AI Overview/, 'مفيش عنوان إنجليزي');
+  // 2) محددات الكلاسات الحديثة
+  assert.match(consts, /\.w34xwb|\.YhCVmd/, 'مفيش محددات بلوكات AI الحديثة في constants');
+  // 3) انتظار ظهور البلوك لو لسه بيترسوم، لكن بشرط بوادر — من غير تأخير على الصفحات اللي مفيهاش AI
+  assert.match(serp, /async function waitForAiRoot/, 'مفيش انتظار للبلوك');
+  assert.match(serp, /function aiHint/, 'مفيش بوابة بوادر (هتعلّش كل كلمة بـ5 ثواني)');
+  assert.match(serp, /if \(!immediate && !aiHint\(\)\) \{ return null; \}/, 'البوابة مش بترجع فورًا لو مفيش بوادر');
+  // 4) الحرس القديم لسه شغال: جذر بيحتوي العضويات مرفوض
+  assert.match(serp, /'#rso, #res, #center_col, #search'/, 'حرس التلوث العضوي اتشال');
+  // 5) كاش سلبي عشان الماسح مايلخبطش الأداء
+  assert.match(serp, /aiMissTs/, 'مفيش كاش سلبي للماسح');
+  // 6) زرار التوسيع بيطابق aria-label وكمان النص
+  assert.match(serp, /aria-label/, 'التوسيع بيقرأ النص بس');
+});

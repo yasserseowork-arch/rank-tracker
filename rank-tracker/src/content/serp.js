@@ -252,28 +252,122 @@
     return { items: items, adsCount: adsCount };
   }
 
-  /* ---------------- AI Overview: توسيع حسب الموجود ثم قراءة ---------------- */
+  /* ---------------- AI Overview: كشف قوي + توسيع ثم قراءة ---------------- */
+  /*
+   * درس الشكاوى المتكررة: بلوك «نبذة الذكاء الاصطناعي» بيتم رسمه بعد أول
+   * نتيجة، والمحددات الثابتة بتاع جوجل بتتبدل كل فترة. الخطة:
+   *  1) محددات معروفة  2) عناوين نصية عربي/إنجليزي (زي ما بتظهر قدام المستخدم)
+   *  3) أصناف معروفة حديثة  4) انتظار قصير للظهور — والطريقة الآمنة دي
+   * بتفضل محمية بنفس الحرس: أي جذر بيحتوي النتائج العضوية نفسها مرفوض.
+   */
+  const AI_HEADS = [
+    'نبذة الذكاء الاصطناعي', 'نبذة باستخدام الذكاء الاصطناعي',
+    'لمحة الذكاء الاصطناعي', 'لمحة عن الذكاء الاصطناعي',
+    'نظرة عامة على الذكاء الاصطناعي', 'وضع الذكاء الاصطناعي',
+    'ملخص الذكاء الاصطناعي', 'AI Overview', 'AI overviews',
+    'AI summary', 'About this result', 'لمحة عن هذه النتيجة'
+  ];
   let aiExpanded = false;
+  let aiRootEl = null;
 
-  /** جذر بلوك الذكاء الاصطناعي: محددات معروفة أو البحث عن عنوان «نبذة باستخدام الذكاء الاصطناعي» */
-  function aiRoot() {
-    let root = D.first(C.SEL.serp.ai);
-    // حماية: لو الجذر بيحتوي النتائج العضوية نفسها يبقى مش بلوك AI حقيقي
-    if (root && root.querySelector && root.querySelector('#rso, #res, #center_col')) { root = null; }
-    if (root) { return root; }
-    const head = D.byText('h1, h2, h3, h4, div, span', 'نبذة باستخدام الذكاء الاصطناعي')
-      || D.byText('h1, h2, h3, h4, div, span', 'AI Overview');
-    if (!head) { return null; }
-    root = head.closest('ai-overview, div[data-hveid], div[jscontroller], section, div.uVnmJb');
-    if (!root) {
-      root = head.parentElement;
-      for (let up = 0; up < 4 && root && root.parentElement; up++) {
-        root = root.parentElement;
-        if (root.querySelectorAll('a[href^="http"]').length >= 1) { break; }
+  function hasOrganicInside(e) {
+    return !!(e && e.querySelector && e.querySelector('#rso, #res, #center_col, #search'));
+  }
+
+  /** حجم البلوك الجاهز: فيه لينكات استشهاد أو نص ملخص حقيقي */
+  function aiBoxReady(e) {
+    if (!e) { return false; }
+    try {
+      if (e.querySelectorAll('a[href^="http"]').length >= 1) { return true; }
+      const t = e.innerText || '';
+      return t.length >= 160;
+    } catch (_) { return false; }
+  }
+
+  /** من أي مرساة (عنوان/لينك) نطلع فوق لأقرب حاوية آمنة فيها محتوى */
+  function safeBoxUp(el, hops) {
+    let cur = el && el.parentElement ? el.parentElement : el;
+    let last = null;
+    for (let i = 0; cur && i < (hops || 12); i++) {
+      if (hasOrganicInside(cur)) { break; }
+      if (aiBoxReady(cur)) { last = cur; }
+      cur = cur.parentElement;
+    }
+    return last;
+  }
+
+  /** البحث عن مرساة نصية: عناصر صغيرة فقط (عشان ما يطابقش الحاويات العملاقة) */
+  function headAnchor() {
+    const nrm = (D.match && D.match.normalizeArabic) ? D.match.normalizeArabic : (s) => String(s || '').toLowerCase();
+    const needles = AI_HEADS.map((h) => nrm(h));
+    const nodes = document.querySelectorAll('h1, h2, h3, h4, span, div, a');
+    for (const node of nodes) {
+      if (node.childElementCount > 2) { continue; }
+      const own = nrm((node.textContent || '').trim());
+      if (!own || own.length > 64) { continue; }
+      for (const nd of needles) {
+        if (nd && own.indexOf(nd) !== -1) { return node; }
       }
     }
-    if (root && root.querySelector && root.querySelector('#rso, #res, #center_col')) { return null; }
-    return root || null;
+    return null;
+  }
+
+  /** جذر بلوك الذكاء الاصطناعي — طبقات كشف متتالية كلها بحرس مضاد للتلوث العضوي */
+  let aiMissTs = 0; // كاش سلبي: الماسح الكامل متيتكررش كل 250ms عبثًا
+  function aiRoot() {
+    if (aiRootEl && document.contains(aiRootEl) && !hasOrganicInside(aiRootEl)) { return aiRootEl; }
+    aiRootEl = null;
+    if (Date.now() - aiMissTs < 1200) { return null; }
+    // 1) المحددات المعروفة
+    aiMissTs = 0;
+    const sels = (C.SEL.serp.ai || []);
+    for (const sel of sels) {
+      let e = null;
+      try { e = document.querySelector(sel); } catch (_) { e = null; }
+      if (e && !hasOrganicInside(e)) { aiRootEl = e; return e; }
+    }
+    // 2) مرساة نصية → صندوق آمن فوقها
+    const head = headAnchor();
+    if (head) {
+      const box = safeBoxUp(head.closest('div, section'), 12) || safeBoxUp(head, 12);
+      if (box) { aiRootEl = box; return box; }
+    }
+    aiMissTs = Date.now();
+    return null;
+  }
+
+  /** بوادر البلوك في الـHTML قبل الترطيب: placeholder الـasync بتاع جوجل للـAI */
+  function aiHint() {
+    try {
+      if (document.querySelector('[id*="ai-overview" i], [id*="aiOverview"]')) { return true; }
+    } catch (_) {}
+    return false;
+  }
+
+  /** استجابة فورية من الكاش/الـDOM، ولو فيه بوادر نفضل مستنيين ظهوره لحد timeoutMs */
+  async function waitForAiRoot(timeoutMs) {
+    const immediate = aiRoot();
+    if (immediate && aiBoxReady(immediate)) { return immediate; }
+    if (!immediate && !aiHint()) { return null; } // مفيش AI خالص — من غير ما نعلّش أي كلمة بثواني
+    try {
+      return await D.waitFor(() => {
+        const r = aiRoot();
+        return (r && aiBoxReady(r)) ? r : null;
+      }, { timeoutMs: timeoutMs || 0, intervalMs: 400, desc: 'ai-block' });
+    } catch (_) { return immediate || null; }
+  }
+
+  /** زرار «عرض المزيد / عرض الكل / View all sources» بأي صيغة كانت */
+  function expandBtn(root) {
+    const re = /عرض\s+المزيد|عرض\s+الكل|عرض\s+كل\s+المصادر|show\s+more|show\s+all|view\s+all\s+sources|view\s+sources|المصادر|sources/i;
+    const cands = D.qsa('button, [role="button"], div[jsaction], a', root);
+    for (const b of cands) {
+      const t = (b.textContent || '').trim();
+      const al = b.getAttribute ? (b.getAttribute('aria-label') || '') : '';
+      if (!t && !al) { continue; }
+      if (re.test(t) || re.test(al)) { return b; }
+    }
+    return null;
   }
 
   async function expandAi() {
@@ -281,15 +375,11 @@
     const root = aiRoot();
     if (!root) { return; }
     aiExpanded = true;
-    // دوس «عرض المزيد / عرض الكل» مرة أو مرتين حسب اللي ظاهر قدامنا
     for (let round = 0; round < 2; round++) {
-      const btn = D.byText('button, [role="button"]', 'عرض المزيد', root)
-        || D.byText('button, [role="button"]', 'عرض الكل', root)
-        || D.byText('button, [role="button"]', 'Show more', root)
-        || D.byText('button, [role="button"]', 'Show all', root);
+      const btn = expandBtn(root);
       if (!btn) { break; }
       D.click(btn, 'ai-expand');
-      await D.humanSleep(900, 300);
+      await D.humanSleep(1100, 400);
     }
   }
 
@@ -305,10 +395,11 @@
     return h;
   }
 
-  /** قبل أي حكم: لو فيه بلوك AI وسّعناه قبل الحكم، أعد القراءة — عشان الاستشهادات المخفية
-   *  ورا «عرض المزيد / عرض الكل» متتفوتش في مسار الخروج المبكر */
+  /** قبل أي حكم: نستنى بلوك AI يترسم (async) → نوسّع «عرض المزيد/الكل» → نعيد القراءة.
+   *  كده الاستشهادات المخفية أو اللي لسه مجتش متتفوتش في أي مسار (حتى الخروج المبكر). */
   async function finalizeAi(aiSnap) {
-    if (!aiRoot()) { return aiSnap; }
+    const root = await waitForAiRoot(5000);
+    if (!root) { return aiSnap; }
     await expandAi();
     return collectAi();
   }
@@ -561,10 +652,9 @@
       await D.sleep(rescan + Math.round(Math.random() * 500));
     }
 
-    // 3) حكم عدم الوجود: دلوقتي بس وسّع AI وافحص مرة أخيرة قبل الحكم
-    await expandAi();
+    // 3) حكم عدم الوجود: دلوقتي بس — نستنى البلوك يترسم لو بطيء، نوسّع، ونفحص آخر مرة
     let items = collect().items;
-    const aiF = collectAi();
+    const aiF = await finalizeAi({ items: [], text: '' });
     let aiItems = aiF.items;
     aiText = aiF.text || aiText;
     const lastHit = quickFind(items, aiItems, cfg);
