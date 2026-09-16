@@ -149,7 +149,7 @@
     HEARTBEAT_INTERVAL_MS: 20000
   };
 
-  const VERSION = '1.18.8';
+  const VERSION = '1.18.9';
 
   global.SRT_C = { VERSION, MSG, STATUS, SEL, LIMITS };
 })(globalThis);

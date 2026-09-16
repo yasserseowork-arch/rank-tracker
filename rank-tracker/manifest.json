@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "short_name": "__MSG_appShortName__",
-  "version": "1.18.8",
+  "version": "1.18.9",
   "default_locale": "ar",
   "description": "__MSG_appDesc__",
   "minimum_chrome_version": "123",
@@ -19,7 +19,6 @@
     "webRequest",
     "declarativeNetRequest",
     "webNavigation",
-    "nativeMessaging",
     "offscreen",
     "cookies",
     "contextMenus"
@@ -381,53 +380,9 @@
         "https://*.google.ch/search*"
       ],
       "run_at": "document_idle"
-    },
-    {
-      "css": [
-        "buster/src/base/style.css"
-      ],
-      "js": [
-        "buster/src/base/script.js"
-      ],
-      "matches": [
-        "https://google.com/recaptcha/api2/bframe*",
-        "https://www.google.com/recaptcha/api2/bframe*",
-        "https://google.com/recaptcha/enterprise/bframe*",
-        "https://www.google.com/recaptcha/enterprise/bframe*",
-        "https://recaptcha.net/recaptcha/api2/bframe*",
-        "https://www.recaptcha.net/recaptcha/api2/bframe*",
-        "https://recaptcha.net/recaptcha/enterprise/bframe*",
-        "https://www.recaptcha.net/recaptcha/enterprise/bframe*"
-      ],
-      "all_frames": true,
-      "run_at": "document_idle"
-    },
-    {
-      "css": [],
-      "js": [
-        "buster/src/scripts/init-setup.js"
-      ],
-      "matches": [
-        "http://127.0.0.1/buster/setup?session=*"
-      ],
-      "all_frames": false,
-      "run_at": "document_idle"
     }
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "buster/src/setup/index.html",
-        "buster/src/scripts/reset.js",
-        "buster/src/base/solver-button.css"
-      ],
-      "matches": [
-        "http://*/*",
-        "https://*/*"
-      ]
-    }
-  ]
+  }
 }

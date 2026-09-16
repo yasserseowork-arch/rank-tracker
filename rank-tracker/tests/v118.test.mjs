@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -292,18 +292,34 @@ test('v1.18.6: التبريداتShort والهدئات اتقلّصت زي ما
   assert.match(html, /<summary data-i18n="resTitle">📊 تصدير النتائج<\/summary>/, 'عنوان HTML في اللوحة لسه قديم');
 });
 
-/* ---------------- v1.18.7 — المحرك الصوتي الحقيقي + النطاق + إشعارات اللوحة ---------------- */
-test('v1.18.7: النطاق — الأداة بتشتغل في تبويب شغلها بس (لا ديباجر ولا ضغطات في حساباتك التانية)', () => {
-  assert.match(queue, /'srt\/scope'/, 'مفيش بوابه فحص النطاق في الخلفية');
-  assert.match(queue, /const inScope = async \(\)/, 'مفيش دالة نطاق في الـwireBus');
+/* ---------------- v1.18.7 — إشعارات اللوحة + المحرك (المسار 1.18.9: باستر مستقلة + آلة 1.18.6) ---------------- */
+test('v1.18.9: باستر المدمجة اتشيلت خالص — manifest وembedded ومفيش أي محتوى باستر في الحزمة', () => {
+  const mf = read('manifest.json');
+  assert.ok(!/buster\//.test(mf), 'لسه فيه ريفرنس لباستر في manifest');
+  assert.ok(!/nativeMessaging/.test(mf), 'إذن nativeMessaging بتاع باستر لسه موجود');
+  const em = read('src/background/embedded.js');
+  assert.ok(!/buster/.test(em), 'embedded.js لسه بوصل خلفية باستر');
+  const files = readdirSync(join(root, 'src'));
+  assert.ok(files.includes('asr'), 'مفيش src/asr (المحرك الصوتي ملكنا بعد الآن)');
+  const asrFiles = readdirSync(join(root, 'src/asr'));
+  assert.ok(asrFiles.includes('index.html') && asrFiles.includes('script.js'), 'وثيقة offscreen ناقصة');
+  assert.ok(asrFiles.includes('wasm'), 'ملفات wasm ناقصة');
+  assert.ok(!existsSync(join(root, 'buster/manifest.json')), 'باستر لسه موصوفة كإضافة كاملة في الحزمة!');
+});
+
+test('v1.18.9: جزء الكابتشا رجع لزي ما كان في 1.18.6 بالظبط — ضغطة الباستا وبس، ومن غير أي بوابة نطاق في التبويب', () => {
+  assert.ok(!/srt\/scope|srt\/transcribe|S\.inScope/.test(cap), 'آلة التبويب لسه فيها حرس 1.18.7 — المفروض نسخة 1.18.6 النقية');
+  assert.match(cap, /now - S\.busterTs < 18000/, 'مهلة الـ18 ثانية اتلغطت');
+  assert.match(cap, /id: 'transcribeAudio'/, 'النسخ مش بيرجع لاسم البروتوكول الأصلي');
+  assert.match(cap, /finish\(null\), timeoutMs \|\| 60000\)/, 'تايم اوت النسخ مش رجع لـ60 ثانية');
+  assert.match(queue, /message\.id === 'transcribeAudio' && message\.audioUrl/, 'الخلفية ما بتردّش على خدمة النسخ باسمها الأصلي');
+  assert.match(queue, /solver\.transcribeAudioUrl/, 'الخلفية ما بتناديش محرك النسخ بتاعنا');
+  // حارس الديبراجر لسه مقيّد بتابات الشغل (طلب Debug banner مش لكل الحسابات)
   const coord = queue.slice(queue.indexOf('if (coordMsg &&'), queue.indexOf('if (coordMsg &&') + 900);
   assert.match(coord, /if \(!\(await inScope\(\)\)\) \{ sendResponse\(\{ ok: false, error: 'out-of-scope' \}\); return; \}/,
     'الضغطة الموثوقة (debugger) لسه بتتبعت لأي تبويب — banner هيظهر في حسابات تانية');
-  const tr = queue.slice(queue.indexOf("message.type === 'srt/transcribe'"), queue.indexOf("message.type === 'srt/transcribe'") + 700);
-  assert.match(tr, /inScope\(\)/, 'النسخ الصوتي مش محروس بالنطاق');
-  assert.match(cap, /S\.inScope = false;/, 'الآلة في التبويب مش بتستنى تأكيد النطاق');
-  assert.match(cap, /if \(S\.inScope\) \{ step\(\)/, 'خطوة الآلة بتشتغل على أي صفحة كابتشا — لازم في تاب الشغل بس');
-  assert.match(cap, /type: 'srt\/scope'/, 'الآلة ما بتسألش الخلفية عن النطاق');
+  // مفيش pollings غريبة في أول الملف زي 1.18.7
+  assert.ok(!/scopePoll/.test(cap), 'لسه في polling النطاق في التبويب');
 });
 
 test('v1.18.7: الإشعارات بقت جوه الأداة (مكان شريط الاستراحة) بدل نوتيفيكيشن الجهاز', () => {

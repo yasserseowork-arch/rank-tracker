@@ -68,30 +68,12 @@ export class QueueEngine {
       bus.emit(type, payload);
     };
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (!message || typeof message.type !== 'string' || message.type.indexOf('srt/') !== 0) { return; }
-
-      /* ---- حارس النطاق: الآلة والديبراجر والنسخ يشتغلوا في تابات الشغل ONLY ----
-         (طلب: «الـdebuging يظهر في الحساب اللي عليه الأداة بس، مش كل حسابات جوجل»)
-         أي تبويب جوجل تاني للمستخدم — حتى لو فيه كابتشا — الأداة بتفضل فيه متفرج. */
-      const tabOf = sender && sender.tab ? sender.tab.id : null;
-      const inScope = async () => {
-        if (!tabOf) { return false; }
-        const run = await state.getRun();
-        if (run.workerTabId === tabOf) { return true; }
-        return Array.isArray(run.ownedTabIds) && run.ownedTabIds.indexOf(tabOf) !== -1;
-      };
-
-      if (message.type === 'srt/scope') {
-        (async () => { sendResponse({ ok: true, mine: await inScope() }); })();
-        return true;
-      }
-
-      /* نسخ صوت التحدي → نص (Whisper محلي) — للآلة الذاتية جوه تاب الشغل بس */
-      if (message.type === 'srt/transcribe') {
+      if (!message) { return; }
+      // خدمة النسخ باسمها الأصلي (بروتوكول 1.18.6) — الآن ترد عليها خلفية أداتنا بمحركها الخاص
+      if (message.id === 'transcribeAudio' && message.audioUrl) {
         (async () => {
-          if (!(await inScope())) { sendResponse({ text: null, reason: 'out-of-scope' }); return; }
           try {
-            const text = await solver.transcribeAudioUrl(String(message.audioUrl || ''));
+            const text = await solver.transcribeAudioUrl(String(message.audioUrl));
             sendResponse({ text: text || null });
           } catch (err) {
             await logger.warn('solver', 'النسخ فشل: ' + (err && err.message));
@@ -100,6 +82,18 @@ export class QueueEngine {
         })();
         return true;
       }
+      if (typeof message.type !== 'string' || message.type.indexOf('srt/') !== 0) { return; }
+
+      /* ---- حارس الديبراجر: بانر «started debugging» يظهر في تابات الشغل بس ----
+         (طلب: «الـdebuging يظهر في الحساب اللي عليه الأداة بس، مش كل حسابات جوجل»).
+         الآلة نفسها حرة زي 1.18.6 — التقييد على الضغطة الموثوقة (debugger) فقط. */
+      const tabOf = sender && sender.tab ? sender.tab.id : null;
+      const inScope = async () => {
+        if (!tabOf) { return false; }
+        const run = await state.getRun();
+        if (run.workerTabId === tabOf) { return true; }
+        return Array.isArray(run.ownedTabIds) && run.ownedTabIds.indexOf(tabOf) !== -1;
+      };
 
       // ضغطة ماوس حقيقية بالإحداثيات (موثوقة — isTrusted) من داخل تبويب:
       // بتوصل من إطار التحدي (زرار Buster) أو من الصفحة العليا (زرار التحقق الصوتي)

@@ -54,10 +54,11 @@ test('captcha.js: عدّاد المحاولات بيتحدث عبر reportAttemp
 test('captcha.js: الحل الذاتي بينسخ الصوت عبر محرك Whisper المحلي في الخلفية', () => {
   // المحرك الحقيقي: solver.js بيفتح وثيقة باستر offscreen ويتكلم مع بورت 'offscreen'
   // بطلب transcribeAudio — بدون النسخ ده الحل الذاتي مستحيل (ده كان الغلط الجوهري).
-  assert.ok(/type:\s*'srt\/transcribe'/.test(src), 'لا يوجد طلب نسخ من الخلفية');
+  assert.ok(/id:\s*'transcribeAudio'/.test(src), 'لا يوجد طلب نسخ من الخلفية بالاسم الأصلي (بروتوكول 1.18.6)');
   assert.ok(/audio#audio-source/.test(src), 'لا يوجد انتظار لمصدر صوت التحدي');
   const solver = fs.readFileSync(path.resolve(process.cwd(), 'src/background/core/solver.js'), 'utf8');
-  assert.match(solver, /buster\/src\/offscreen\/index\.html/, 'المحرك ما بيستخدمش وثيقة باستر offscreen');
+  assert.match(solver, /src\/asr\/index\.html/, 'المحرك مش شايل وثيقة offscreen الخاصة بينا');
+  assert.ok(!/buster\/(src|manifest)/.test(solver), 'المحرك لسه بيشاور على ملفات باستر المدمجة');
   assert.match(solver, /PORT_NAME = 'offscreen'/, 'بورت offscreen مش متعرّف');
   assert.match(solver, /id: 'transcribeAudio'/, 'رسالة النسخ مش بتوصل للمحرك');
   assert.match(solver, /createDocument/, 'الوثيقة ما بتتفتحش');

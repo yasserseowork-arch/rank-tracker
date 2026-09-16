@@ -8,10 +8,8 @@
 import '../../gsloc/js/background.js';
 import '../../beyondten/background.js';
 import '../../serpcounter/background.js';
-import '../../buster/src/background/script.js';
 
 const TOOLS = [
-  { id: 'srt-tool-buster', title: '🧩 Buster — خيارات حل الكابتشا', url: 'buster/src/options/index.html' },
   { id: 'srt-tool-serp', title: '🔢 SERP Counter — الإعدادات', url: 'serpcounter/popup.html' },
   { id: 'srt-tool-bt', title: '💯 Show 100 Results — الإعدادات', url: 'beyondten/popup/popup.html' },
   { id: 'srt-tool-gs', title: '📍 gs Location Changer — تغيير الموقع', url: 'gsloc/popup.html' }
