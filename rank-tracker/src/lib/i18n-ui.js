@@ -40,6 +40,7 @@
       makeXlsxOk: '✔ اتجهز شيت Excel بالترتيب واتحمّل', sheetWriteOk: '✔ اتكتب الترتيب في الشيت',
       sheetWriteFail: 'الكتابة فشلت — استخدم «انسخ للشيت»',
       kwAddedOk: '✔ اتضافت {n} كلمة وجاهزة للفحص', kwAddFail: '✖ الإضافة فشلت', kwNone: 'حط كلمات الأول',
+      restNext: '☕ الاستراحة والمسح الجايين بعد {n} كلمات',
       optionsTitle: 'الإعدادات المتقدمة', optionsSubtitle: 'حاجات زيادة ونسخة احتياطية',
       optReadTitle: 'قراية نتائج جوجل', lblSettle: 'وقت ثبات النتائج (ملي ثانية)', lblScrollStep: 'خطوة النزول (ملي ثانية)',
       lblMaxWait: 'أقصى وقت نستنى فيه الكلمة (ملي ثانية) — بعده بنعتبرها مش موجودة', lblCapGap: 'المهلة بين محاولات الكابتشا (ملي ثانية)',
@@ -64,7 +65,7 @@
       warnTitle: '⚠️ تحذير مهم',
       warnText: 'خد بالك: الإضافة دي بتمسح كل بيانات المتصفح (الكوكيز والتاريخ والكاش) قبل كل جولة فحص. استخدمها في بروفايل جيست جديد من غير تسجيل دخول — عشان حساباتك وبياناتك تفضل آمنة.',
       btnWarnOk: 'تمام، فهمت',
-      tabMain: '🏠 الرئيسية', tabGsloc: '📍 الموقع', tabBeyondten: '💯 النتائج',
+      tabMain: '🏠 الرئيسية', tabGsloc: '📍 الموقع', tabBeyondten: '💯 تصدير النتائج',
       paneGslocDesc: 'اختار المدينة واللغة (gl/hl) — الديفولت: السعودية',
       paneBeyondtenDesc: 'اختار عدد النتائج في الصفحة (10 / 20 / 50 / 100)'
     },
@@ -101,6 +102,7 @@
       makeXlsxOk: '✔ Excel ranks sheet created & downloaded', sheetWriteOk: '✔ Positions written to sheet',
       sheetWriteFail: 'Write failed — use copy-for-sheet',
       kwAddedOk: '✔ {n} keyword(s) added/queued', kwAddFail: '✖ Failed to add keywords', kwNone: 'Paste keywords first',
+      restNext: '☕ Next rest & data-clear in {n} keywords',
       optionsTitle: 'Advanced settings', optionsSubtitle: 'Extra settings & backup',
       optReadTitle: 'SERP reading', lblSettle: 'Results settle time (ms)', lblScrollStep: 'Scroll step (ms)',
       lblMaxWait: 'Max wait per keyword (ms) — then counted as not found', lblCapGap: 'Captcha attempt gap (ms)',
@@ -125,7 +127,7 @@
       warnTitle: '⚠️ Important warning',
       warnText: 'This extension deletes ALL browser data (cookies, history and cache) before every checking run. Please use it in a new Guest account without signing in, to keep your accounts and data safe.',
       btnWarnOk: 'I understand',
-      tabMain: '🏠 Home', tabGsloc: '📍 Location', tabBeyondten: '💯 Results',
+      tabMain: '🏠 Home', tabGsloc: '📍 Location', tabBeyondten: '💯 Export Results',
       paneGslocDesc: 'Pick a city and language (gl/hl) for Google results — default: Saudi Arabia',
       paneBeyondtenDesc: 'Choose results per page (10 / 20 / 50 / 100)'
     }

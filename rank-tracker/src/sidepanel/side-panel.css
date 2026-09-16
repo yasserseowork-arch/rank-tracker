@@ -340,6 +340,46 @@ textarea { width: 100%; resize: vertical; min-height: 74px; }
 .log-console .error { color: #fca5a5; }
 .log-console .debug { color: #93a6c4; }
 
+/* ------------------------------- عدّاد الكلمات + شريط الاستراحة ------------------------------- */
+.kw-count {
+  display: inline-block;
+  margin-inline-start: 6px;
+  background: var(--gold-soft);
+  color: var(--gold-light);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: .74rem;
+  font-weight: 800;
+  direction: ltr;
+  line-height: 1.6;
+}
+.rest-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--card-edge);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: .76rem;
+}
+.rest-bar {
+  flex: 1;
+  height: 6px;
+  background: #0a2a44;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.rest-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  transition: width .35s ease;
+}
+
 /* ------------------------------- الفوتر ------------------------------- */
 /* بره الـ panes وsticky لآخر الشاشة — ثابت في التابات الثلاثة مهما كان المحتوى طويلاً */
 .app-footer {

@@ -5,7 +5,7 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const K = {
   CONFIG: 'srt.config',
@@ -53,7 +53,7 @@ export const DEFAULT_CONFIG = {
   captchaClearRetries: 3,       // كابتشا؟ مسح بيانات المتصفح + تاب جديد — عدد المرات لكل كلمة
   // دورة العمل الكاملة (مثل السيناريو اليدوي)
   clearBeforeRun: true,         // مسح بيانات التصفح (كل الوقت) قبل بدء الجولة
-  clearEveryN: 10,              // مسح دوري ذكي كل N كلمة مفحوصة (0 = معطّل) — بصمة أقل وكابتشا أقل
+  clearEveryN: 8,               // مسح دوري متزامن مع الاستراحة: كل 8 كلمات (0 = معطّل) — بصمة أقل وكابتشا أقل
   sheetUrl: '',                 // رابط شيت جوجل للمزامنة والكتابة
   sheetWriteBack: false,        // كتابة عمود الترتيب في الشيت عند انتهاء الجولة
   sheetStartCell: 'B1',         // خلية بداية لصق عمود الترتيب
@@ -301,6 +301,16 @@ export async function migrate() {
       history: Array.isArray(k.history) ? k.history : []
     }));
     await setKeywords(fixed);
+  }
+  if (version < 4) {
+    // عادات جديدة: الكابتشا محاولتين بس، والمسح الدوري بقى متزامن مع الاستراحة (كل 8)
+    const cfg = await getConfig();
+    const patchCfg = {};
+    const att = parseInt(cfg.captchaMaxAttempts, 10);
+    if (!Number.isFinite(att) || att > 2) { patchCfg.captchaMaxAttempts = 2; }
+    const cn = parseInt(cfg.clearEveryN, 10);
+    if (!Number.isFinite(cn) || cn === 10) { patchCfg.clearEveryN = 8; }
+    if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
   }
   await local.set(K.SCHEMA, SCHEMA_VERSION);
   return SCHEMA_VERSION;

@@ -71,17 +71,19 @@ export class CaptchaOrchestrator {
     const max = Math.max(1, cfg.captchaMaxAttempts || 2);
     // مهلة الجولة لازم تستوعب دورة الآلة الذاتية كاملة:
     // ظهور الصوت (~12ث) + نسخ الصوت (~60ث كحد أقصى أول مرة) + الحكم (~5ث)
-    const attemptTimeout = Math.max(cfg.captchaAttemptTimeoutMs || 0, 90000);
+    const attemptTimeout = Math.max(cfg.captchaAttemptTimeoutMs || 0, 120000);
     this.active = { tabId, attempts: 0, startedAt: Date.now() };
 
-    await logger.warn('captcha', `كابتشا مرصودة (تبويب ${tabId}) — الآلة الذاتية بتنسخ الصوت وتحل، والمنسّق يراقب (حتى ${max} محاولات)`);
+    await logger.warn('captcha', `كابتشا مرصودة (تبويب ${tabId}) — ندي الصفحة نفس أول، وبعدها الآلة تشتغل بهدوء (محاولتين بس)`);
+    // رتم هادي: الصفحة وإطار التحدي لازم يلحقوا يتحملوا قبل أي فحص أو ضغطة
+    await sleep(2500, signal);
 
     // تأكد إن التحدي فاتح أصلاً (الآلة الذاتية هي اللي بتحل — مش لازم زر Buster)
     let probe = await this.probe(tabId);
     const solverActive = (p) => !!(p && (p.busterFound === true || p.challengeOpen === true || p.audioOpen === true || p.imageOpen === true));
     if (!solverActive(probe)) {
       await logger.warn('captcha', 'التحدي لسه مفتحش — انتظار حتى 12 ثانية…');
-      const grace = await this.waitChallenge(tabId, 12000);
+      const grace = await this.waitChallenge(tabId, 20000);
       if (!grace) {
         // لو الصفحة سابت /sorry/ يبقى حُلّت قبل ما التحدي يفتح أصلاً
         const u0 = await tabctl.getUrl(tabId);

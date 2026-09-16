@@ -17,6 +17,7 @@ import { localCheck } from './localcheck.js';
 import { matchResults, nameMatches, normalizeArabic } from './match.js';
 import * as csvkit from './csvkit.js';
 import { CaptchaOrchestrator } from './captcha-orchestrator.js';
+import { sleep } from './rand.js';
 
 export class QueueEngine {
   constructor() {
@@ -75,9 +76,13 @@ export class QueueEngine {
             const target = { tabId: tabId };
             try { await chrome.debugger.attach(target, '1.3'); } catch (_) { /* مثبت بالفعل */ }
             const evt = { x: message.x, y: message.y, button: 'left', clickCount: 1 };
+            // رتم بشري: الماوس يتحرك الأول ويستقر، ضغط، سكتة قصيرة، فك — وراحة قبل الـdetach
+            await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: message.x, y: message.y, button: 'none' });
+            await new Promise((r) => setTimeout(r, 140));
             await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', Object.assign({ type: 'mousePressed' }, evt));
-            await new Promise((r) => setTimeout(r, 60));
+            await new Promise((r) => setTimeout(r, 90));
             await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', Object.assign({ type: 'mouseReleased' }, evt));
+            await new Promise((r) => setTimeout(r, 150));
             try { await chrome.debugger.detach(target); } catch (_) {}
             await logger.info('captcha', `🖱 ضغطة حقيقية بالإحداثيات (${message.x},${message.y}) — ${message.stage || ''}`);
             sendResponse({ ok: true });
@@ -103,6 +108,11 @@ export class QueueEngine {
       }
     });
 
+    // تخزين آخر تحليل لكل تبويب — يعالج سباق «الحل جه والتحليل وصل قبل ما نستمع»
+    this.lastSerp = this.lastSerp || new Map();
+    bus.on(C.MSG.SERP_PARSED, (p) => {
+      if (p && p.tabId) { this.lastSerp.set(p.tabId, { payload: p, ts: Date.now() }); }
+    });
     bus.on(C.MSG.CAPTCHA_ATTEMPT, (m) => {
       logger.info('captcha', `محاولة حل من الآلة الذاتية (${m.stage || '?'}) — tab:${m.tabId}`);
       if (this.currentTabId === m.tabId) {
@@ -402,9 +412,11 @@ export class QueueEngine {
 
       // 4) كابتشا ظهرت؟ أولاً: حل تلقائي بالكامل (Buster مدمجة + إطار التحدي ذاتي القيادة) — بدون أي تدخل منك
       if (first.type === 'captcha') {
+        const solveStartedAt = Date.now();
         const auto = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
         if (auto === 'solved') {
-          const sAfter = await this.waitSerp(tab.id, C.LIMITS.SERP_AFTER_CAPTCHA_MS, signal);
+          // الصفحة بعد الحل محتاجة راحتها: تحميل + تحليل — مفيش استعجال على أي مسح
+          const sAfter = await this.collectAfterSolve(tab.id, solveStartedAt, signal);
           if (sAfter) { return this.recordResult(kw, sAfter, cfg, 'captcha-auto-solved'); }
         }
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
@@ -451,9 +463,10 @@ export class QueueEngine {
             return this.recordResult(kw, lastRace.payload, cfg, 'new-tab');
           }
           if (lastRace.type === 'captcha') {
+            const solveStartedAt2 = Date.now();
             const h2 = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
             if (h2 === 'solved') {
-              const s2 = await this.waitSerp(tab.id, C.LIMITS.SERP_AFTER_CAPTCHA_MS, signal);
+              const s2 = await this.collectAfterSolve(tab.id, solveStartedAt2, signal);
               if (s2) { return this.recordResult(kw, s2, cfg, 'new-tab-captcha'); }
             }
           }
@@ -487,10 +500,10 @@ export class QueueEngine {
     const run = await state.getRun();
     const marker = run.clearMarker || 0;
     if (processed - marker >= everyN) {
-      await logger.info('queue', `🧹 مسح دوري (كل ${everyN} كلمة) — بيانات التصفح اتسحت بعد ${processed} كلمة مفحوصة`);
+      await logger.info('queue', `🧹 مسح دوري مع الاستراحة (كل ${everyN} كلمة) — بيانات التصفح اتسحت بعد ${processed} كلمة مفحوصة`);
       try { await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true }); } catch (_) {}
       await state.setRun({ clearMarker: processed });
-      await this.notify('🧹 مسح دوري', `مسحنا بيانات التصفح تلقائياً بعد ${processed} كلمة — الفحص مكمل لوحده.`);
+      await this.notify('🧹 مسح دوري مع الاستراحة', `مسحنا بيانات التصفح تلقائياً بعد ${processed} كلمة — الفحص مكمل لوحده.`);
     }
   }
 
@@ -651,6 +664,21 @@ export class QueueEngine {
     this.broadcast();
     await logger.warn('queue', `الكلمة "${kw.keyword}" فشل حلها التلقائي — الخطة الاحتياطية (مسح بيانات + تبويب جديد) بتتولى تلقائياً`);
     return 'failed';
+  }
+
+  /** بعد حل الكابتشا: خدي نفس طويل للتبويب — أول حاجة آخر تحليل مخزّن (ممكن
+   *  يكون وصل قبل ما نفتح الاستماع)، وبعدها استرخاء هادي. مفيش مسح بيانات
+   *  قبل ما نتأكد إن مفيش فعلًا نتيجة جاية. */
+  async collectAfterSolve(tabId, sinceTs, signal) {
+    await sleep(6000, signal);
+    const cached = this.lastSerp && this.lastSerp.get(tabId);
+    if (cached && cached.ts >= sinceTs) { return cached.payload; }
+    const fresh = await this.waitSerp(tabId, C.LIMITS.SERP_AFTER_CAPTCHA_MS, signal);
+    if (!fresh) {
+      const late = this.lastSerp && this.lastSerp.get(tabId);
+      if (late && late.ts >= sinceTs) { return late.payload; }
+    }
+    return fresh || null;
   }
 
   waitManualSolve(tabId, cfg, signal) {

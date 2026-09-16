@@ -127,3 +127,42 @@ test('AI v1.18.2: كشف متعدد الطبقات + انتظار الترطيب
   // 6) زرار التوسيع بيطابق aria-label وكمان النص
   assert.match(serp, /aria-label/, 'التوسيع بيقرأ النص بس');
 });
+
+/* ---------------- v1.18.3 ---------------- */
+
+test('كابتشا v1.18.3: رتم صبر حقيقي — رسم قبل فعل، ونافذة Buster الواسعة، والضغطة البشرية', () => {
+  assert.match(cap, /challengeSince/, 'مفيش انتظار رسم لإطار التحدي');
+  assert.match(cap, /Date\.now\(\) - S\.challengeSince < 3500/, 'ما فيش 3.5 ثانية settle قبل أي ضغطة');
+  assert.match(cap, /75000/, 'نافذة صبر Buster لسه 50 ثانية — محتاجة 75 (النافذة الصغيرة بتكبر على مهل)');
+  assert.match(cap, /er\.width < 14 \|\| er\.height < 14/, 'مفيش حرس حجم الزر قبل الضغط');
+  assert.match(queue, /'mouseMoved'/, 'الضغطة الحقيقية بتحصل من غير حركة ماوس أولًا — مش بشرية');
+  assert.match(orch, /await sleep\(2500, signal\)/, 'المنسّق بيغزر على الصفحة — لازم نفس 2.5 ثانية أولًا');
+  assert.match(orch, /waitChallenge\(tabId, 20000\)/, 'بوابة ظهور التحدي لسه 12 ثانية — بطأها');
+});
+
+test('كابتشا v1.18.3: حلّ؟ مفيش مسح مستعجل — نتحرى عن النتائج بهدوء الأول', () => {
+  assert.match(queue, /collectAfterSolve/, 'مفيش مرحلة تهدئة بعد الحل');
+  assert.match(queue, /this\.lastSerp = this\.lastSerp \|\| new Map\(\)/, 'مفيش كاش لآخر تحليل (سباق الفقد)');
+  assert.match(queue, /await sleep\(6000, signal\)/, 'مفيش راحة 6 ثواني قبل قراءة آخر تحليل');
+  assert.match(queue, /collectAfterSolve\(tab\.id, solveStartedAt, signal\)/, 'مسار الحل الأساسي مش بيستخدم التهدئة');
+  assert.match(queue, /collectAfterSolve\(tab\.id, solveStartedAt2, signal\)/, 'مسار التاب الجديد مش بيستخدم التهدئة');
+});
+
+test('الإعدادات v1.18.3: المحاولتين إجباريًا + المسح بقى كل 8 مع الاستراحة', () => {
+  assert.match(st, /clearEveryN:\s*8,/, 'ديفولت المسح لسه 10');
+  assert.match(st, /export const SCHEMA_VERSION = 4;/, 'مفيش نسخة ميجريشن جديدة');
+  assert.match(st, /att > 2\) \{ patchCfg\.captchaMaxAttempts = 2; \}/, 'مفيش إجبار المحاولتين على الإعدادات القديمة');
+  assert.match(st, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'المسح القديم (10) مش بيتحوّل للـ8');
+});
+
+test('اللوحة v1.18.3: عدّاد كلمات حقيقي + اشعار الـ0 اتشال + تبويب تصدير النتائج', () => {
+  const html = read('src/sidepanel/side-panel.html');
+  const i18n = read('src/lib/i18n-ui.js');
+  assert.match(html, /id="kwCount"/, 'مفيش عدّاد فوق جزء الكلمات');
+  assert.match(panel, /cntEl\.textContent = String\(list\.length\)/, 'العدّاد مش بيتحدث من القائمة نفسها');
+  assert.ok(!/alert\(t\('kwAddedOk'\)/.test(panel), 'اشعار الإضافة الغلط لسه راجع');
+  assert.match(html, /id="restStrip"/, 'مفيش شريط الاستراحة فوق المنحنى');
+  assert.match(panel, /renderRestStrip/, 'الشريط مش بيتحدث مع الـsnapshot');
+  assert.match(i18n, /tabBeyondten: '💯 تصدير النتائج'/, 'عنوان التبويب ما اتغيرش');
+  assert.match(html, /💯 تصدير النتائج/, 'الـhtml لسه بالعنوان القديم');
+});

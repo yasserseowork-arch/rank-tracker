@@ -90,7 +90,24 @@ function renderStats() {
   $('statFound').textContent = s.found || 0;
   $('statAvg').textContent = s.avgPosition == null ? '—' : '#' + s.avgPosition;
   $('statCaptcha').textContent = (snapshot.run && snapshot.run.captchaSolves) || 0;
+  renderRestStrip();
 }
+
+/* شريط الاستراحة فوق المنحنى: عداد بسيط للباقي لحد الاستراحة + المسح الدوري معاها */
+function renderRestStrip() {
+  const fill = $('restFill');
+  const txt = $('restText');
+  if (!fill || !txt) { return; }
+  const cfg = snapshot.config || {};
+  const every = Math.max(1, parseInt(cfg.cooldownEvery, 10) || 8);
+  const processed = (snapshot.results || []).length;
+  const inCycle = processed % every;
+  const left = inCycle === 0 ? every : every - inCycle;
+  txt.textContent = t('restNext').replace('{n}', String(left));
+  fill.style.width = Math.round((inCycle / every) * 100) + '%';
+}
+
+function bindRestStrip() { renderRestStrip(); }
 
 function displayPos(row) {
   // ظهر عضوياً وكمان في AI Overview → «1ai» / ظهر في الـAI بس → «ai»
@@ -107,6 +124,9 @@ function renderKeywords() {
   const body = $('kwBody');
   body.textContent = '';
   const list = snapshot.keywords || [];
+  // عدّاد الكلمات الحقيقي فوق الجزء — دايمًا من مصدر الحقيقة (القائمة نفسها)
+  const cntEl = $('kwCount');
+  if (cntEl) { cntEl.textContent = String(list.length); }
   if (!list.length) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
@@ -299,19 +319,9 @@ async function addFromInput() {
     alert(t('kwAddFail') + ': ' + ((res && (res.error || res.__err)) || '?'));
     return;
   }
-  console.debug('[SRT][panel] KEYWORDS_ADD response:', res);
   $('kwInput').value = '';
   await refresh();
-  // العدد الحقيقي: الكلمات اللي اتبعتت وبقت فعلاً جوه القائمة — مش معتمد على شكل الرد بس
-  const sent = keywords.map((k) => String(k).trim().toLowerCase());
-  const present = (snapshot.keywords || [])
-    .filter((k) => sent.includes(String(k.keyword || '').trim().toLowerCase()))
-    .length;
-  const fromResponse = (typeof res.added === 'number' || typeof res.reset === 'number')
-    ? ((res.added || 0) + (res.reset || 0))
-    : null;
-  const n = (fromResponse != null && fromResponse > 0) ? fromResponse : present;
-  alert(t('kwAddedOk').replace('{n}', String(n)));
+  // بدون اشعار: عدّاد الكلمات فوق الجزء نفسه هو الرد — دايما صحيح وحي
 }
 
 async function importCsvFile(file) {
@@ -472,6 +482,7 @@ async function main() {
     if (confirm(t('confirmClearKw'))) { await send(C.MSG.KEYWORDS_CLEAR); await refresh(); }
   });
 
+  bindRestStrip();
   $('btnMakeXlsx').addEventListener('click', makeXlsx);
   $('btnExportCsv').addEventListener('click', exportCsv);
   $('btnCopyTsv').addEventListener('click', copyTsv);

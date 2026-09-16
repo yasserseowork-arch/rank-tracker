@@ -296,6 +296,7 @@
     solveTried: false,   // هل جرّبنا الحل جوه التحدي الحالي؟
     verifyTs: 0,         // وقت آخر ضغطة تحقق (لحساب مهلة الحكم)
     busterTs: 0,            // وقت آخر ضغطة على الشخص البرتقالي (نستنى نتيجته قبل أي حاجة)
+    challengeSince: 0,       // لحظة اللي التحدي فتح فيها — بندي الإطار يلحق يترسم في هدوء
     reportedClosed: false,
     reportedFailed: false,
     stopped: false,
@@ -604,12 +605,18 @@
     try {
       // (أ) التحدي اختفى بعد محاولات = تحقق ناجح على الأغلب (challenge disappeared after attempts = likely successful verification)
       if (!challengeOpen()) {
+        S.challengeSince = 0;
         if (S.attempts > 0 && !S.reportedClosed) {
           S.reportedClosed = true;
           D.msg.send(C.MSG.CAPTCHA_CHALLENGE_CLOSED, { frameUrl: href });
         }
         return;
       }
+
+      // رتم هادي: أول ما التحدي يفتح ندي الإطار 3.5 ثانية يلحق يترسم — قبل كده
+      // الضغطات بتروح في الفراغ (الـdebugging بيلحقش العناصر وهي بتتبنّى)
+      if (!S.challengeSince) { S.challengeSince = Date.now(); return; }
+      if (Date.now() - S.challengeSince < 3500) { return; }
 
       const max = Math.max(1, cfg.captchaMaxAttempts || 2);
 
@@ -635,15 +642,21 @@
       // إحنا مش بنلمس «تحقق» من عندنا خالص؛ هو عارف شغله كويس.
       if (findBusterButton() || busterHolder()) {
         const now = Date.now();
-        if (S.busterTs && now - S.busterTs < 50000) { return; } // لسه بيحل — نستنى
+        // Buster بياخد وقته الكافي: نافذة الصوت بتفتح أصغر وبتتوسّع — 75 ثانية صبر
+        if (S.busterTs && now - S.busterTs < 75000) { return; } // لسه بيحل — نستنى على مهله
         if (S.busterTs) {
-          // عدّت 50 ثانية على الضغطة والتحدي لسه مفتوح = المحاولة دي ما حلتش
+          // 75 ثانية عدّت والتحدي لسه مفتوح = المحاولة دي ما حلتش
           S.busterTs = 0;
           S.solveTried = false;
           reportAttempt('orange-man-timeout');
           await newChallenge();
           return;
         }
+        // حرس الحجم: الزر/النافذة لسه بيكبر؟ متدوشس — استنى التكة الجاية (مفيش محاولة مهدرة)
+        const found = findBusterButton();
+        const anchorEl = (found && found.marker) || busterHolder();
+        const er = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
+        if (!er || er.width < 14 || er.height < 14) { return; }
         S.busterTs = now;
         reportAttempt('orange-man');
         if (!clickBuster('orange-man')) {
