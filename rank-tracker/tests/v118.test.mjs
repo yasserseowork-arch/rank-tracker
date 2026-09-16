@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 /**
  * v1.18.0 — انحدارات: دقة AI (توسيع + فك تحويلات + صيغة 1ai/ai)،
  * كابتشا الأولوية للشخص البرتقالي بمحاولتين، وسكون الكونسول.
@@ -327,4 +330,38 @@ test('v1.18.7: تاب واحد حتى بعد ما الشغل يخلص — الأ
   const finish = queue.slice(queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'"), queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'") + 420);
   assert.match(finish, /sweepExtraTabs\(null\)/, 'تاب الشغل لسه قايم بعد الانتهاء');
   assert.match(finish, /workerTabId: null, ownedTabIds: \[\]/, 'حالة التاب مش بتنضف');
+});
+
+/* ---------------- v1.18.8 — حارس الصيغة الشامل (علة الفاصلة القاتلة) ---------------- */
+test('v1.18.8: أي ملف JS في src/ لازم يعدي node --check — الفاصلة القاتلة متتكررش', () => {
+  let failed = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(full); }
+      else if (e.name.endsWith('.js')) {
+        try { execFileSync(process.execPath, ['--check', full], { stdio: 'pipe' }); }
+        catch (_) { failed.push(path.relative(process.cwd(), full)); }
+      }
+    }
+  };
+  walk('src');
+  assert.deepEqual(failed, [], 'ملفات فيها SyntaxError: ' + failed.join(', '));
+});
+
+test('v1.18.8: القاموس نفسه سليم — لا فواصل مفقودة ولا مزدوجة عند مفاتيح الاستراحة/العدّاد', () => {
+  for (const key of ['restNext', 'restNow', 'restNowClear', 'kwCountTip', 'copyEmpty', 'copyFail']) {
+    const hits = [...i18nUi.matchAll(new RegExp(key + ':', 'g'))];
+    assert.equal(hits.length, 2, key + ' مفروض موجود في ar وen بالظبط');
+  }
+  assert.ok(!/,\s*,/.test(i18nUi), 'في فاصلة مزدوجة ,, في القاموس');
+  // كل سطر قيمة نصية لازم ينتهي بفاصلة (جوه بلوك STR) — استثناء آخر مفتاح قبل }
+  assert.ok(!/'\s*\n\s*[A-Za-z]+:/.test(i18nUi), 'في سطر قيمة من غير فاصلة قبل المفتاح الجاي — قاتل الـparse');
+});
+
+test('v1.18.8: syntax-check آلي شامل — مفيش قوائم يدوية بتفلت ملفات', () => {
+  const sc = read('tools/syntax-check.mjs');
+  assert.ok(!/CLASSIC_FILES\s*=\s*\[\s*'src\/lib\/constants/.test(sc), 'لسه قائمة يدوية جزئية');
+  assert.match(sc, /ROOT_WALKS/, 'مفيش مسح آلي على src/ كاملة');
+  assert.match(sc, /MODULE_PREFIXES/, 'مفيش تصنيف modules تلقائي');
 });

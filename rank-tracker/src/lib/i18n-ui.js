@@ -109,10 +109,10 @@
       makeXlsxOk: '✔ Excel ranks sheet created & downloaded', sheetWriteOk: '✔ Positions written to sheet',
       sheetWriteFail: 'Write failed — use copy-for-sheet',
       kwAddedOk: '✔ {n} keyword(s) added/queued', kwAddFail: '✖ Failed to add keywords', kwNone: 'Paste keywords first',
-      restNext: '☕ Next rest & data-clear in {n} keywords'
+      restNext: '☕ Next rest & data-clear in {n} keywords',
       restNow: '☕ Break in progress — {s}s left',
       restNowClear: ' · 🧹 then data clear',
-      kwCountTip: 'Checked {d} of {t} keywords',,
+      kwCountTip: 'Checked {d} of {t} keywords',
       optionsTitle: 'Advanced settings', optionsSubtitle: 'Extra settings & backup',
       optReadTitle: 'SERP reading', lblSettle: 'Results settle time (ms)', lblScrollStep: 'Scroll step (ms)',
       lblMaxWait: 'Max wait per keyword (ms) — then counted as not found', lblCapGap: 'Captcha attempt gap (ms)',
