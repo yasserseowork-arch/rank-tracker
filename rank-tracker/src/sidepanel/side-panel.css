@@ -354,6 +354,28 @@ textarea { width: 100%; resize: vertical; min-height: 74px; }
   direction: ltr;
   line-height: 1.6;
 }
+.srt-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: linear-gradient(135deg, rgba(201,162,39,.14), rgba(201,162,39,.05));
+  border: 1px solid rgba(201,162,39,.45);
+  border-radius: 12px;
+  color: var(--fg, #e8eefc);
+  font-size: .76rem;
+  animation: notice-in .25s ease;
+}
+.srt-notice.hidden { display: none; }
+.srt-notice-dot { flex: 0 0 auto; }
+.srt-notice-body { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.srt-notice-body b { color: #c9a227; }
+.srt-notice-x { flex: 0 0 auto; padding: 2px 7px; }
+@keyframes notice-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.rest-bar-fill.live { transition: width .45s linear; }
 .rest-strip {
   display: flex;
   align-items: center;

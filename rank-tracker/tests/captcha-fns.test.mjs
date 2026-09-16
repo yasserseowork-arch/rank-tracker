@@ -51,10 +51,20 @@ test('captcha.js: عدّاد المحاولات بيتحدث عبر reportAttemp
   assert.ok(/S\.lastClickTs\s*=/.test(src), 'S.lastClickTs لا يُسجَّل');
 });
 
-test('captcha.js: الحل الذاتي بينسخ الصوت عبر خدمة transcribeAudio المدمجة', () => {
-  // دي الخدمة الحقيقية بتاعة Buster المدمجة في خلفية الإضافة — بدونها الحل مستحيل
-  assert.ok(/id:\s*'transcribeAudio'/.test(src), 'لا يوجد استدعاء لخدمة transcribeAudio المدمجة');
+test('captcha.js: الحل الذاتي بينسخ الصوت عبر محرك Whisper المحلي في الخلفية', () => {
+  // المحرك الحقيقي: solver.js بيفتح وثيقة باستر offscreen ويتكلم مع بورت 'offscreen'
+  // بطلب transcribeAudio — بدون النسخ ده الحل الذاتي مستحيل (ده كان الغلط الجوهري).
+  assert.ok(/type:\s*'srt\/transcribe'/.test(src), 'لا يوجد طلب نسخ من الخلفية');
   assert.ok(/audio#audio-source/.test(src), 'لا يوجد انتظار لمصدر صوت التحدي');
+  const solver = fs.readFileSync(path.resolve(process.cwd(), 'src/background/core/solver.js'), 'utf8');
+  assert.match(solver, /buster\/src\/offscreen\/index\.html/, 'المحرك ما بيستخدمش وثيقة باستر offscreen');
+  assert.match(solver, /PORT_NAME = 'offscreen'/, 'بورت offscreen مش متعرّف');
+  assert.match(solver, /id: 'transcribeAudio'/, 'رسالة النسخ مش بتوصل للمحرك');
+  assert.match(solver, /createDocument/, 'الوثيقة ما بتتفتحش');
+  assert.match(solver, /closeDoc\(\)/, 'الوثيقة ما بتتقفلش بعد الطلب (ذاكرة)');
+  assert.match(solver, /prewarm/, 'مفيش تسخين للنموذج عند التشغيل');
+  const q = fs.readFileSync(path.resolve(process.cwd(), 'src/background/core/queue.js'), 'utf8');
+  assert.match(q, /solver\.transcribeAudioUrl/, 'الراوتر ما بيوصلش الطلب بالمحرك');
 });
 
 test('captcha.js: الحل الذاتي بيملأ الإجابة ويضغط تحقق', () => {

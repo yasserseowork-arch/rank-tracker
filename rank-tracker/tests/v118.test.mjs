@@ -159,7 +159,7 @@ test('اللوحة v1.18.3: عدّاد كلمات حقيقي + اشعار الـ
   const html = read('src/sidepanel/side-panel.html');
   const i18n = read('src/lib/i18n-ui.js');
   assert.match(html, /id="kwCount"/, 'مفيش عدّاد فوق جزء الكلمات');
-  assert.match(panel, /cntEl\.textContent = String\(list\.length\)/, 'العدّاد مش بيتحدث من القائمة نفسها');
+  assert.match(panel, /cntEl\.textContent = String\(done\) \+ '\/' \+ String\(list\.length\)/, 'العدّاد مش دقيق: مفروض متفحص/إجمالي من القائمة نفسها');
   assert.ok(!/alert\(t\('kwAddedOk'\)/.test(panel), 'اشعار الإضافة الغلط لسه راجع');
   assert.match(html, /id="restStrip"/, 'مفيش شريط الاستراحة فوق المنحنى');
   assert.match(panel, /renderRestStrip/, 'الشريط مش بيتحدث مع الـsnapshot');
@@ -218,6 +218,8 @@ test('الوقفة الأخيرة v1.18.4: خطأ الحلقة = اشعار + ت
 /* ---------------- v1.18.5 — النسخ للشيت: ترتيب المستخدم + الشرطة ---------------- */
 const i18nUi = read('src/lib/i18n-ui.js');
 const io_read = read;
+const io_read2 = read;
+const html2 = read('src/sidepanel/side-panel.html');
 
 test('v1.18.5: النسخ/التصدير بيترتب زي قائمة الكلمات نفسها (مش العكس) وبشرطة للفلويد', () => {
   assert.match(panel, /function exportEntriesInUserOrder/, 'مفيش مصدر ترتيب موحد للتصدير');
@@ -285,4 +287,44 @@ test('v1.18.6: التبريداتShort والهدئات اتقلّصت زي ما
   assert.match(i18nUi, /resTitle: '📊 تصدير النتائج',/, 'عنوان الجزء لسه «النتائج» في القاموس العربي');
   const html = io_read('src/sidepanel/side-panel.html');
   assert.match(html, /<summary data-i18n="resTitle">📊 تصدير النتائج<\/summary>/, 'عنوان HTML في اللوحة لسه قديم');
+});
+
+/* ---------------- v1.18.7 — المحرك الصوتي الحقيقي + النطاق + إشعارات اللوحة ---------------- */
+test('v1.18.7: النطاق — الأداة بتشتغل في تبويب شغلها بس (لا ديباجر ولا ضغطات في حساباتك التانية)', () => {
+  assert.match(queue, /'srt\/scope'/, 'مفيش بوابه فحص النطاق في الخلفية');
+  assert.match(queue, /const inScope = async \(\)/, 'مفيش دالة نطاق في الـwireBus');
+  const coord = queue.slice(queue.indexOf('if (coordMsg &&'), queue.indexOf('if (coordMsg &&') + 900);
+  assert.match(coord, /if \(!\(await inScope\(\)\)\) \{ sendResponse\(\{ ok: false, error: 'out-of-scope' \}\); return; \}/,
+    'الضغطة الموثوقة (debugger) لسه بتتبعت لأي تبويب — banner هيظهر في حسابات تانية');
+  const tr = queue.slice(queue.indexOf("message.type === 'srt/transcribe'"), queue.indexOf("message.type === 'srt/transcribe'") + 700);
+  assert.match(tr, /inScope\(\)/, 'النسخ الصوتي مش محروس بالنطاق');
+  assert.match(cap, /S\.inScope = false;/, 'الآلة في التبويب مش بتستنى تأكيد النطاق');
+  assert.match(cap, /if \(S\.inScope\) \{ step\(\)/, 'خطوة الآلة بتشتغل على أي صفحة كابتشا — لازم في تاب الشغل بس');
+  assert.match(cap, /type: 'srt\/scope'/, 'الآلة ما بتسألش الخلفية عن النطاق');
+});
+
+test('v1.18.7: الإشعارات بقت جوه الأداة (مكان شريط الاستراحة) بدل نوتيفيكيشن الجهاز', () => {
+  assert.match(queue, /notice: \{ title: title, text: message, ts: Date.now\(\) \}/, 'الإشعار مش بيتخزن في الـrun للوحة');
+  assert.ok(!/notifications\.create\('srt-'/.test(queue), 'لسه نوتيفيكيشن نظامي في الـqueue');
+  assert.match(panel, /function renderNotice/, 'اللوحة ما بتعرضش الإشعار');
+  assert.match(panel, /45000/, 'الإشعار ما بيختفيش لوحده');
+  assert.match(panel, /srt\/notice-clear/, 'زرار الإخفاء مش بوصل الخلفية');
+  assert.match(io_read2('src/background/core/router.js'), /'srt\/notice-clear'/, 'الراوتر ما بيسمعش مسح الإشعار');
+  assert.match(html2, /id="srtNotice"/, 'مفيش بوكس إشعار في الـHTML');
+});
+
+test('v1.18.7: شريط الاستراحة التفاعلي — بيظهر بس وقت الاستراحة الفعلية بعدّاد حي', () => {
+  assert.match(panel, /run\.breakUntil/, 'الشريط ما بيقراش موعد الاستراحة');
+    assert.match(panel, /until - Date\.now\(\)\) : 0;[\s\S]{0,200}strip\.classList\.add\('hidden'\)/, 'الشريط مش بيتخفي لسه مفيش استراحة');
+  assert.match(panel, /setInterval\(tick, 500\)/, 'مفيش تحديث حي للعدّاد');
+  assert.match(queue, /breakUntil: Date\.now\(\) \+ ms, breakTotalMs: ms/, 'الخلفية ما بتبعتش موعد الاستراحة');
+  assert.match(queue, /breakUntil: null, breakTotalMs: null/, 'الاستراحة ما بتتلمّش بعد ما تخلص');
+  assert.match(i18nUi, /restNow: '☕ الاستراحة جارية — \{s\} ثانية فاضلة'/, 'رسالة العدّاد الحي ناقصة');
+  assert.match(i18nUi, /kwCountTip: 'اتفحص \{d\} من \{t\} كلمات'/, 'تلميح العدّاد الدقيق ناقص');
+});
+
+test('v1.18.7: تاب واحد حتى بعد ما الشغل يخلص — الأداة بتقفل تابها وهي الواصل', () => {
+  const finish = queue.slice(queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'"), queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'") + 420);
+  assert.match(finish, /sweepExtraTabs\(null\)/, 'تاب الشغل لسه قايم بعد الانتهاء');
+  assert.match(finish, /workerTabId: null, ownedTabIds: \[\]/, 'حالة التاب مش بتنضف');
 });

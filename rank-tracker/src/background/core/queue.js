@@ -18,6 +18,7 @@ import { matchResults, nameMatches, normalizeArabic } from './match.js';
 import * as csvkit from './csvkit.js';
 import { CaptchaOrchestrator } from './captcha-orchestrator.js';
 import { sleep } from './rand.js';
+import * as solver from './solver.js';
 
 export class QueueEngine {
   constructor() {
@@ -68,12 +69,46 @@ export class QueueEngine {
     };
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!message || typeof message.type !== 'string' || message.type.indexOf('srt/') !== 0) { return; }
+
+      /* ---- حارس النطاق: الآلة والديبراجر والنسخ يشتغلوا في تابات الشغل ONLY ----
+         (طلب: «الـdebuging يظهر في الحساب اللي عليه الأداة بس، مش كل حسابات جوجل»)
+         أي تبويب جوجل تاني للمستخدم — حتى لو فيه كابتشا — الأداة بتفضل فيه متفرج. */
+      const tabOf = sender && sender.tab ? sender.tab.id : null;
+      const inScope = async () => {
+        if (!tabOf) { return false; }
+        const run = await state.getRun();
+        if (run.workerTabId === tabOf) { return true; }
+        return Array.isArray(run.ownedTabIds) && run.ownedTabIds.indexOf(tabOf) !== -1;
+      };
+
+      if (message.type === 'srt/scope') {
+        (async () => { sendResponse({ ok: true, mine: await inScope() }); })();
+        return true;
+      }
+
+      /* نسخ صوت التحدي → نص (Whisper محلي) — للآلة الذاتية جوه تاب الشغل بس */
+      if (message.type === 'srt/transcribe') {
+        (async () => {
+          if (!(await inScope())) { sendResponse({ text: null, reason: 'out-of-scope' }); return; }
+          try {
+            const text = await solver.transcribeAudioUrl(String(message.audioUrl || ''));
+            sendResponse({ text: text || null });
+          } catch (err) {
+            await logger.warn('solver', 'النسخ فشل: ' + (err && err.message));
+            sendResponse({ text: null, reason: 'error' });
+          }
+        })();
+        return true;
+      }
+
       // ضغطة ماوس حقيقية بالإحداثيات (موثوقة — isTrusted) من داخل تبويب:
       // بتوصل من إطار التحدي (زرار Buster) أو من الصفحة العليا (زرار التحقق الصوتي)
       const coordMsg = message.type === C.MSG.CAPTCHA_COORD_CLICK || message.type === C.MSG.CAPTCHA_VERIFY_CLICK;
       if (coordMsg && sender.tab && sender.tab.id) {
         const tabId = sender.tab.id;
         (async () => {
+          // تبويب شخصي للمستخدم؟ مفيش debugger ولا ضغطات — خالص (الحارس الأول)
+          if (!(await inScope())) { sendResponse({ ok: false, error: 'out-of-scope' }); return; }
           try {
             const target = { tabId: tabId };
             try { await chrome.debugger.attach(target, '1.3'); } catch (_) { /* مثبت بالفعل */ }
@@ -147,16 +182,17 @@ export class QueueEngine {
     });
   }
 
+  /* الإشعارات جوه اللوحة نفسها (مكان شريط الاستراحة) — مش نوتيفيكيشن عام في الجهاز.
+   *  أي شاشة/أي حساب — الرسالة تبقى في الأداة، بسيطة وواضحة، واللوحة بتختفي لوحدها. */
   async notify(title, message) {
     try {
-      await chrome.notifications.create('srt-' + Date.now(), {
-        type: 'basic',
-        iconUrl: chrome.runtime.getURL('icons/icon128.png'),
-        title: title,
-        message: message,
-        priority: 2
-      });
+      await state.setRun({ notice: { title: title, text: message, ts: Date.now() } });
+      this.broadcast();
     } catch (_) {}
+  }
+
+  clearNotice() {
+    state.setRun({ notice: null }).then(() => this.broadcast()).catch(() => {});
   }
 
   /* ------------------------------ أوامر التحكم ------------------------------ */
@@ -299,13 +335,25 @@ export class QueueEngine {
         this.index += 1;
         const processed = this.index;
         const cfg = await state.getConfig();
-        await scheduler.cooldownIfNeeded(cfg, processed, this.signal());
+        await scheduler.cooldownIfNeeded(cfg, processed, this.signal(), async (ms) => {
+          // عدّاد حي في اللوحة: وقت بداية الاستراحة ومداها — الشريط يظهر بس وإنت في واحدة بجد
+          await state.setRun({ breakUntil: Date.now() + ms, breakTotalMs: ms });
+          this.broadcast();
+        });
+        await state.setRun({ breakUntil: null, breakTotalMs: null });
+        this.broadcast();
       }
       const run = await state.getRun();
       const exhausted = this.index >= (await state.getKeywords()).length;
       if (run.status === C.STATUS.RUN.RUNNING && exhausted && !brokeForPause) {
         await state.setRun({ status: C.STATUS.RUN.IDLE, finishedAt: Date.now(), captcha: null });
         await logger.info('queue', '✅ انتهى فحص كل الكلمات المفتاحية');
+        // «تاب واحد بس»: خلص الشغل → مفيش سبب يفضل أي تاب مفتوح للأداة
+        try {
+          await this.sweepExtraTabs(null);
+          await state.setRun({ workerTabId: null, ownedTabIds: [] });
+          this.currentTabId = null;
+        } catch (_) {}
         // كتابة النتائج في الشيت إن فُعّلت (مثل السيناريو اليدوي)
         const cfg = await state.getConfig();
         if (cfg.sheetUrl && String(cfg.sheetUrl).trim()) {

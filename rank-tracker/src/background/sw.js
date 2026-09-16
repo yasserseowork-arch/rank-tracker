@@ -69,5 +69,9 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 chrome.runtime.onStartup.addListener(() => boot('onStartup'));
 
+// 🔥 سخّن محرك النسخ الصوتي (Whisper) في الخلفية أول تشغيل — التنزيل مرة واحدة وبس،
+// وبعدها أي كابتشا بتتحل فورًا من غير ما المستخدم يستنى موديل 40 ميجا نص فحص.
+import('./core/solver.js').then((m) => { try { m.prewarm(); } catch (_) {} }).catch(() => {});
+
 // تشغيل فوري عند تحميل الـ Worker لأول مرة
 boot('cold-start');

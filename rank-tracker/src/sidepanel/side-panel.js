@@ -93,21 +93,56 @@ function renderStats() {
   renderRestStrip();
 }
 
-/* شريط الاستراحة فوق المنحنى: عداد بسيط للباقي لحد الاستراحة + المسح الدوري معاها */
+/* شريط الاستراحة التفاعلي: بيظهر بس لما استراحة فعلًا جارية دلوقتي، وعدّاد حي
+   بينزل بالثواني زي شريط التحميل — مفيش «تيزر» دائم وملل. */
 function renderRestStrip() {
+  const strip = $('restStrip');
   const fill = $('restFill');
   const txt = $('restText');
-  if (!fill || !txt) { return; }
+  if (!fill || !txt || !strip) { return; }
+  const run = snapshot.run || {};
+  const until = run.breakUntil || 0;
+  const total = Math.max(1, run.breakTotalMs || 1);
+  const left = until ? Math.max(0, until - Date.now()) : 0;
+  if (!until || left <= 0) {
+    strip.classList.add('hidden');
+    return;
+  }
+  strip.classList.remove('hidden');
   const cfg = snapshot.config || {};
-  const every = Math.max(1, parseInt(cfg.cooldownEvery, 10) || 8);
-  const processed = (snapshot.results || []).length;
-  const inCycle = processed % every;
-  const left = inCycle === 0 ? every : every - inCycle;
-  txt.textContent = t('restNext').replace('{n}', String(left));
-  fill.style.width = Math.round((inCycle / every) * 100) + '%';
+  const withClear = Number(cfg.clearEveryN || 0) > 0;
+  txt.textContent = t('restNow').replace('{s}', String(Math.ceil(left / 1000))) + (withClear ? t('restNowClear') : '');
+  fill.style.width = Math.max(2, Math.round((left / total) * 100)) + '%';
 }
 
-function bindRestStrip() { renderRestStrip(); }
+/* إشعارات الأداة — جوه اللوحة مكان الشريط، بتختفي لوحدها بعد 45 ثانية أو بالخ ✓ */
+function renderNotice() {
+  const box = $('srtNotice');
+  if (!box) { return; }
+  const n = (snapshot.run || {}).notice;
+  const fresh = n && (Date.now() - (n.ts || 0) < 45000);
+  if (!fresh) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  const titleEl = $('noticeTitle');
+  const textEl = $('noticeText');
+  if (titleEl) { titleEl.textContent = n.title || '🔔'; }
+  if (textEl) { textEl.textContent = n.text || ''; }
+}
+
+function bindRestStrip() {
+  renderRestStrip();
+  renderNotice();
+  const tick = () => { renderRestStrip(); renderNotice(); };
+  setInterval(tick, 500);
+  const btn = $('noticeClose');
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      await send('srt/notice-clear', {});
+      const box = $('srtNotice');
+      if (box) { box.classList.add('hidden'); }
+    });
+  }
+}
 
 function displayPos(row) {
   // ظهر عضوياً وكمان في AI Overview → «1ai» / ظهر في الـAI بس → «ai»
@@ -124,9 +159,14 @@ function renderKeywords() {
   const body = $('kwBody');
   body.textContent = '';
   const list = snapshot.keywords || [];
-  // عدّاد الكلمات الحقيقي فوق الجزء — دايمًا من مصدر الحقيقة (القائمة نفسها)
+  // عدّاد دقيق: «المتفحص/الإجمالي» من مصدر الحقيقة نفسه — مش رقم إجمالي مبهم
   const cntEl = $('kwCount');
-  if (cntEl) { cntEl.textContent = String(list.length); }
+  if (cntEl) {
+    const KW = C.STATUS.KW;
+    const done = list.filter((k) => k.status === KW.DONE || k.status === KW.FAILED || k.status === KW.SKIPPED).length;
+    cntEl.textContent = String(done) + '/' + String(list.length);
+    cntEl.title = t('kwCountTip').replace('{d}', String(done)).replace('{t}', String(list.length));
+  }
   if (!list.length) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');

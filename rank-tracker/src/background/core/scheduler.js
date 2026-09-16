@@ -73,10 +73,11 @@ export async function preKeywordDelay(cfg, context, signal) {
 }
 
 /** استراحة طويلة كل N كلمات لمحاكاة جلسة بشرية حقيقية */
-export async function cooldownIfNeeded(cfg, processedCount, signal) {
+export async function cooldownIfNeeded(cfg, processedCount, signal, onBreakStart) {
   const every = cfg.cooldownEvery || 0;
   if (!every || processedCount <= 0 || processedCount % every !== 0) { return null; }
   const ms = humanDelay(cfg.cooldownMs || 45000, cfg.cooldownJitterMs || 0);
   await logger.info('scheduler', `استراحة دورية بعد ${processedCount} كلمة: ${(ms / 1000).toFixed(0)}ث`);
+  if (onBreakStart) { try { await onBreakStart(ms); } catch (_) {} }
   return wait(ms, 'cooldown', signal);
 }

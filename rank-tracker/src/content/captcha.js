@@ -500,9 +500,10 @@
         clearTimeout(timer);
         resolve(v);
       };
-      const timer = setTimeout(() => finish(null), timeoutMs || 60000);
+      const timer = setTimeout(() => finish(null), timeoutMs || 240000);
       try {
-        chrome.runtime.sendMessage({ id: 'transcribeAudio', audioUrl: audioUrl, lang: lang || 'en' }, (resp) => {
+        // بنطلب من خلفيتنا هي (موثوق وخصوصي لتابات الشغل) — مش بروتوكول باستر اللي بيصادم id تاني
+        chrome.runtime.sendMessage({ type: 'srt/transcribe', audioUrl: audioUrl, lang: lang || 'en' }, (resp) => {
           if (chrome.runtime.lastError) { finish(null); return; }
           if (typeof resp === 'string') { finish(resp.trim() || null); return; }
           if (resp && (resp.text || resp.result)) { finish(String(resp.text || resp.result).trim() || null); return; }
@@ -735,7 +736,21 @@
     }
   }
 
-  setInterval(() => { step().catch(() => {}); }, 500);
+  // حارس النطاق: الآلة تشتغل بس في تاب الشغل اللي فتحته الأداة — مش في كل تاب جوجل
+  // فيه كابتشا بحساباتك الشخصية (طلب المستخدم الصريح). أول ما نتأكد، الكانوس يمشي.
+  S.inScope = false;
+  let scopeTries = 0;
+  const scopePoll = setInterval(() => {
+    scopeTries += 1;
+    if (scopeTries > 40) { clearInterval(scopePoll); } // ~دقيقتين — وبعدها افرض مش شغلنا
+    try {
+      chrome.runtime.sendMessage({ type: 'srt/scope' }, (r) => {
+        if (chrome.runtime.lastError) { return; }
+        if (r && r.mine) { S.inScope = true; clearInterval(scopePoll); }
+      });
+    } catch (_) {}
+  }, 3000);
+  setInterval(() => { if (S.inScope) { step().catch(() => {}); } }, 500);
 
   // بث الحالة لفوق دورياً — الصفحة العليا بتخزّنها وترد بيها على أوامر المحرك فوراً
   try { pushStateUp(); } catch (_) {}

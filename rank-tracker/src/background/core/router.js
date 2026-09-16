@@ -9,6 +9,12 @@ import * as scheduler from './scheduler.js';
 export function createRouter(engine) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || typeof message.type !== 'string') { return; }
+    // اللوحة بتلمّس إشعارها — من غير ما نلمس بقية جدول الأنواع
+    if (message.type === 'srt/notice-clear') {
+      engine.clearNotice();
+      sendResponse({ ok: true });
+      return;
+    }
     const isExtensionPage = !sender.tab; // رسائل اللوحة/الخيارات بلا تبويب
     if (!isExtensionPage) { return; }    // رسائل التبويبات يعالجها ناقل الطابور
 

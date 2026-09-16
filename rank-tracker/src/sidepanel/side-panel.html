@@ -66,10 +66,17 @@
     <div class="stat-card"><span class="stat-value warn" id="statCaptcha">0</span><span class="stat-label" data-i18n="statCaptcha">كابتشا محلولة</span></div>
   </section>
 
-  <!-- عدّاد الاستراحة البسيط: لسه كام كلمة والاستراحة بتاعتنا (ومسح البيانات معاها) -->
-  <section class="rest-strip" id="restStrip">
+  <!-- إشعارات الأداة جوه اللوحة نفسها (مش نوتيفيكيشن في الجهاز) — مكان شريط الاستراحة -->
+  <section class="srt-notice hidden" id="srtNotice">
+    <span class="srt-notice-dot" id="noticeDot">🔔</span>
+    <span class="srt-notice-body"><b id="noticeTitle"></b><span id="noticeText"></span></span>
+    <button class="icon-btn srt-notice-x" id="noticeClose" title="إخفاء">✕</button>
+  </section>
+
+  <!-- شريط الاستراحة التفاعلي: بيظهر بس لما استراحة بجد جارية، وعدّاد حي زي شريط التحميل -->
+  <section class="rest-strip hidden" id="restStrip">
     <span id="restText">☕ —</span>
-    <div class="rest-bar"><div class="rest-bar-fill" id="restFill"></div></div>
+    <div class="rest-bar"><div class="rest-bar-fill live" id="restFill"></div></div>
   </section>
 
   <section class="card chart-card">
