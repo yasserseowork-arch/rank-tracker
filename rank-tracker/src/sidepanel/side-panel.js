@@ -334,31 +334,70 @@ async function importCsvFile(file) {
 }
 
 /* --------------------------------- النتائج --------------------------------- */
+
+/* ترتيب التصدير دايماً = ترتيب الكلمات اللي المستخدم حاطها في القائمة (مش العكس).
+   كل كلمة مرة واحدة بآخر نتيجة ليها، واللي ملهاش بوزيشن (أو لسه متفحصتش) بتاخد
+   «—» الشرطة نفسها اللي باينة في الجدول — عشان الشيت يبقى صورة طبق الأصل من اللوحة. */
+function exportEntriesInUserOrder() {
+  const byKw = new Map();
+  for (const r of (snapshot.results || [])) { // المخزّن: الأحدث الأول — أول ظهور للواحد = الأحدث
+    const key = String((r && r.keyword) || '').trim().toLowerCase();
+    if (key && !byKw.has(key)) { byKw.set(key, r); }
+  }
+  const list = (snapshot.keywords || []).filter((k) => k && String(k.keyword || '').trim());
+  if (list.length) {
+    return list.map((k) => {
+      const key = String(k.keyword).trim().toLowerCase();
+      return { keyword: String(k.keyword).trim(), result: byKw.get(key) || null };
+    });
+  }
+  // القائمة اتلمست؟ نرجع لآخر نتيجة لكل كلمة بترتيب الفحص الأصلي (الأقدم الأول)
+  return Array.from(byKw.entries()).map((e) => ({ keyword: e[1].keyword, result: e[1] })).reverse();
+}
+
+/* خانة الترتيب الموحدة: «1ai» / «4» / «ai» / «—» — نفس شكل اللوحة بالظبط */
+function posCellForExport(r) {
+  if (!r) { return '—'; }
+  const pos = Number(r.position);
+  const okPos = r.position != null && Number.isFinite(pos);
+  if (r.found) { return okPos ? (r.aiFound ? pos + 'ai' : String(pos)) : (r.aiFound ? 'ai' : '—'); }
+  return r.aiFound ? 'ai' : '—';
+}
+
 function resultRowsForExport() {
   const header = [t('thKeyword'), t('thPosition'), 'found', 'ai_overview', 'url', 'title', 'total', 'checked_at'];
-  const rows = (snapshot.results || []).map((r) => [
-    r.keyword,
-    r.found ? (r.aiFound ? r.position + 'ai' : String(r.position)) : (r.aiFound ? 'ai' : ''),
-    r.found ? 'yes' : (r.aiFound ? 'ai' : 'no'),
-    r.aiFound ? r.aiPosition : '',
-    r.urlDisplay || r.url || '',
-    r.title || '',
-    r.total || 0,
-    new Date(r.checkedAt || Date.now()).toISOString()
-  ]);
+  const rows = exportEntriesInUserOrder().map((e) => {
+    const r = e.result || {};
+    return [
+      e.keyword,
+      posCellForExport(e.result),
+      r.found ? 'yes' : (r.aiFound ? 'ai' : 'no'),
+      r.aiFound ? (r.aiPosition != null ? r.aiPosition : '') : '',
+      r.urlDisplay || r.url || '',
+      r.title || '',
+      r.total || 0,
+      r.checkedAt ? new Date(r.checkedAt).toISOString() : ''
+    ];
+  });
   return [header].concat(rows);
 }
 
 async function makeXlsx(silent) {
+  const entries = exportEntriesInUserOrder();
+  if (!entries.some((e) => e.result)) {
+    if (!silent) { alert(t('copyEmpty')); }
+    return;
+  }
   const rows = [[t('thKeyword'), t('thPosition'), 'AI', 'محلي', 'URL', t('thTime')]];
-  (snapshot.results || []).forEach((r) => {
+  entries.forEach((e) => {
+    const r = e.result || {};
     rows.push([
-      r.keyword,
-      r.found ? (r.aiFound ? r.position + 'ai' : r.position) : (r.aiFound ? 'ai' : t('notFound')),
+      e.keyword,
+      posCellForExport(e.result),
       r.aiFound ? (r.aiPosition != null ? r.aiPosition : 'AI') : '',
       r.localFound ? '#' + r.localPosition : '',
       r.url || '',
-      new Date(r.checkedAt || Date.now()).toLocaleString('ar-SA')
+      r.checkedAt ? new Date(r.checkedAt).toLocaleString('ar-SA') : ''
     ]);
   });
   const bytes = SRT.xlsx.buildXlsx(rows, 'الترتيب');
@@ -374,6 +413,7 @@ async function makeXlsx(silent) {
 }
 
 async function exportCsv() {
+  if (!(snapshot.results || []).length) { alert(t('copyEmpty')); return; }
   const rows = resultRowsForExport();
   const csv = SRT.csv.withBom(SRT.csv.build(rows, ','));
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -387,20 +427,26 @@ async function exportCsv() {
 }
 
 async function copyTsv() {
-  const rows = (snapshot.results || []).map((r) => [r.keyword, r.found ? (r.aiFound ? r.position + 'ai' : String(r.position)) : (r.aiFound ? 'ai' : '')]);
+  const entries = exportEntriesInUserOrder();
+  const hasData = entries.some((e) => e.result);
+  if (!entries.length || !hasData) { alert(t('copyEmpty')); return; }
+  const rows = entries.map((e) => [e.keyword, posCellForExport(e.result)]);
   const tsv = SRT.csv.toTsv(rows);
   try {
     await navigator.clipboard.writeText(tsv);
     alert(t('copyDone'));
   } catch (_) {
-    // fallback: textarea مؤقت
-    const ta = document.createElement('textarea');
-    ta.value = tsv;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-    alert(t('copyDone'));
+    // fallback: textarea مؤقت — ولو هو كمان فشل نقول بوضوح بدل ما نكذب «اتنسخ»
+    let ok = false;
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = tsv;
+      document.body.appendChild(ta);
+      ta.select();
+      ok = document.execCommand('copy');
+      ta.remove();
+    } catch (__) { ok = false; }
+    alert(ok ? t('copyDone') : t('copyFail'));
   }
 }
 

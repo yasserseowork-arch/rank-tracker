@@ -164,7 +164,7 @@ export async function addKeywords(keywords, note) {
   const added = [];
   let reset = 0;
   for (const raw of keywords || []) {
-    const kw = String(raw || '').trim();
+    const kw = String(raw || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
     if (!kw) { continue; }
     const key = kw.toLowerCase();
     const idx = list.findIndex((k) => String(k.keyword || '').trim().toLowerCase() === key);

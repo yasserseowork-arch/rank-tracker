@@ -765,9 +765,15 @@ export class QueueEngine {
       if (!latest.has(nk)) { latest.set(nk, r); }
     }
     const posStr = (r) => {
-      if (!r) { return ''; }
-      if (r.found) { return r.aiFound ? r.position + 'ai' : String(r.position); }
-      return r.aiFound ? 'ai' : '';
+      // نفس قواعد النسخ بالظبط: «1ai»/«4»/«ai»، والكلمة اللي ملهاش بوزيشن
+      // (أو لسه متفحصتش) بتاخد شرطة «—» — عشان الشيت ما يبينش فراغات ملغزة
+      if (!r) { return '—'; }
+      if (r.found) {
+        const pos = Number(r.position);
+        const okPos = r.position != null && Number.isFinite(pos);
+        return okPos ? (r.aiFound ? pos + 'ai' : String(pos)) : (r.aiFound ? 'ai' : '—');
+      }
+      return r.aiFound ? 'ai' : '—';
     };
 
     // 1) اقرأ ترتيب الكلمات في شيتك نفسه (gviz CSV — شيت مشارك برابط)
@@ -796,7 +802,8 @@ export class QueueEngine {
       lines = keywords.map((k) => posStr(latest.get(normKey(k.keyword))));
     }
     const tsv = lines.join('\n');
-    if (!tsv.trim()) { return { ok: false, reason: 'nothing-to-write' }; }
+    // لو مفيش ولا نتيجة لسه (كل الصفوف شرطات بس) — ما نملّش الشيت فراغات
+    if (!tsv.trim() || !lines.some((l) => l !== '—')) { return { ok: false, reason: 'nothing-to-write' }; }
 
     let tab = null;
     try {

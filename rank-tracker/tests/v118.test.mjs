@@ -23,7 +23,7 @@ const bt = read('beyondten/content/index.js');
 /* ---------------- AI ---------------- */
 
 test('AI: عمود الترتيب بيتكتب 1ai وai بس (من غير مسافة)', () => {
-  assert.match(queue, /r\.position \+ 'ai'/, 'queue.js مفيش فيه صيغة 1ai');
+  assert.match(queue, /(?:r\.position|pos) \+ 'ai'/, 'queue.js مفيش فيه صيغة 1ai');
   assert.ok(!/position \+ ' AI'/.test(queue), 'queue.js لسه بيكتب « AI» القديمة');
   assert.match(panel, /row\.position \+ 'ai'/, 'اللوحة مفيهاش صيغة 1ai');
   assert.ok(!/\+ ' AI'/.test(panel), 'اللوحة لسه بتكتب « AI» القديمة');
@@ -213,4 +213,59 @@ test('الوقفة الأخيرة v1.18.4: خطأ الحلقة = اشعار + ت
   assert.match(queue, /الأداة وقفت/, 'مفيش اشعار وقفة');
   assert.match(queue, /indexOf\('error:'\) === 0/, 'الواتش دوج مش بيلتقط حالات الخطأ');
   assert.match(queue, /pauseReason: null\s*\}/, 'الاستئناف بعد الخطأ ما بيمسحش سبب الإيقاف');
+});
+
+/* ---------------- v1.18.5 — النسخ للشيت: ترتيب المستخدم + الشرطة ---------------- */
+const i18nUi = read('src/lib/i18n-ui.js');
+
+test('v1.18.5: النسخ/التصدير بيترتب زي قائمة الكلمات نفسها (مش العكس) وبشرطة للفلويد', () => {
+  assert.match(panel, /function exportEntriesInUserOrder/, 'مفيش مصدر ترتيب موحد للتصدير');
+  const ordFn = panel.slice(panel.indexOf('function exportEntriesInUserOrder'), panel.indexOf('function posCellForExport'));
+  assert.match(ordFn, /snapshot\.keywords/, 'الترتيب مش بيتبنى على قائمة الكلمات نفسها');
+  assert.match(ordFn, /!byKw\.has\(key\)/, 'مفيش dedup لآخر نتيجة لكل كلمة — المكرر هينسخ مرتين');
+  assert.match(ordFn, /\.reverse\(\)/, 'لو القائمة اتلمست لازم ترتيب الفحص الأصلي (الأقدم الأول) مش الأحدث الأول');
+
+  const copyStart = panel.indexOf('async function copyTsv');
+  const copyFn = panel.slice(copyStart, panel.indexOf('/* ----', copyStart + 10));
+  assert.ok(copyFn.length > 100, 'مفيش دالة copyTsv زي ما بنعرفها');
+  assert.match(copyFn, /exportEntriesInUserOrder\(\)/, 'النسخ لسه بيطلع بترتيب المخزن المقلوب');
+  assert.match(copyFn, /posCellForExport\(e\.result\)/, 'النسخ مش بيستخدم خانات الشرطه الموحده');
+  assert.match(copyFn, /t\('copyEmpty'\)/, 'مفيش تنبيه لما ينسخ من غير أي نتيجة');
+  assert.match(copyFn, /t\('copyFail'\)/, 'لو النسخ فشل بيقول «اتنسخ» على الفاضي');
+
+  const posFn = panel.slice(panel.indexOf('function posCellForExport'), panel.indexOf('function resultRowsForExport'));
+  assert.match(posFn, /if \(!r\) \{ return '—'; \}/, 'كلمة متفحصتش = فراغ بدل الشرطة «—»');
+  assert.match(posFn, /Number\.isFinite\(pos\)/, 'بوزيشن متلغبط ممكن ينسخ NaNai بدل الشرطه');
+  assert.match(posFn, /return r\.aiFound \? 'ai' : '—';/, 'ملهاش بوزيشن ولقيناها في الـAI — المفروض «ai»');
+
+  const xlsx = panel.slice(panel.indexOf('async function makeXlsx'), panel.indexOf('async function exportCsv'));
+  assert.match(xlsx, /const entries = exportEntriesInUserOrder\(\)/, 'شيت XLSX مش بترتيب المستخدم');
+  assert.match(xlsx, /entries\.forEach\(\(e\) => \{/, 'XLSX بيفتّ الصفوف من مصدر تاني');
+  assert.match(xlsx, /posCellForExport\(e\.result\)/, 'XLSX مش بنفس خانة الشرطه');
+  assert.ok(!/t\('notFound'\)/.test(xlsx), 'XLSX لسه بيكتب «مش موجود» بدل «—»');
+  const csvFn = panel.slice(panel.indexOf('function resultRowsForExport'), panel.indexOf('async function makeXlsx'));
+  assert.match(csvFn, /exportEntriesInUserOrder\(\)/, 'CSV مش بترتيب المستخدم');
+  assert.match(csvFn, /r\.checkedAt \? new Date\(r\.checkedAt\)\.toISOString\(\) : ''/, 'تاريخ فارغ اتلغبط بتاريخ دلوقتي');
+
+  // كاتب الشيت في الخلفية — نفس القواعد بالظبط
+  assert.match(queue, /if \(!r\) \{ return '—'; \}/, 'كتابة الشيت الخلفية ما بتعكسش الشرطه');
+  assert.match(queue, /lines\.some\(\(l\) => l !== '—'\)/, 'مفيش حارس ضد ملء الشيت شرطات من غير أي فحص');
+  assert.match(queue, /Number\.isFinite\(pos\)/, 'كتابة الشيت الخلفية ممكن تكتب NaNai');
+
+  // مفاتيح الرسائل الجديدة في اللغتين
+  assert.match(i18nUi, /copyEmpty: 'لسه مفيش نتائج — شغّل الفحص الأول\.'/, 'رسالة العربية للنسخ الفاضي ناقصة');
+  assert.match(i18nUi, /copyFail: 'النسخ فشل — استخدم زر «شيت بالترتيب» بدل منه\.'/, 'رسالة فشل النسخ ناقصة');
+  const enIdx = i18nUi.indexOf('en: {');
+  assert.ok(enIdx > 0, 'قاموس English اتلغبط');
+  const enBlock = i18nUi.slice(enIdx, enIdx + 4200);
+  assert.match(enBlock, /copyEmpty:/, 'copyEmpty ناقص في English');
+  assert.match(enBlock, /copyFail:/, 'copyFail ناقص في English');
+});
+
+test('v1.18.5 حراسات إضافية: فاضي قبل النسخ + تطبيع الكلمات', () => {
+  const xlsx = panel.slice(panel.indexOf('async function makeXlsx'), panel.indexOf('async function exportCsv'));
+  assert.match(xlsx, /entries\.some\(\(e\) => e\.result\)[\s\S]{0,80}copyEmpty/, 'شيت XLSX من غير نتائج بينزل فاضي');
+  assert.match(panel.slice(panel.indexOf('async function exportCsv'), panel.indexOf('async function copyTsv')), /copyEmpty/, 'CSV فاضي بيتنزّل بصمت');
+  assert.match(st, /replace\(\/\\s\+\/g, ' '\)\.trim\(\)\.slice\(0, 180\)/, 'الكلمات ما بتتطبّعش — تبابة/نيولاين/طول زائد بيقعّدوا التاب');
+  assert.match(st, /\.replace\(\/\[\\r\\n\\t\]\+\/g, ' '\)/, 'فصل الأسطر الجوا الكلمة نفسها ما بيتلمّش');
 });
