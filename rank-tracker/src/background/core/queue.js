@@ -431,10 +431,10 @@ export class QueueEngine {
           return this.recordExhausted(kw, cfg);
         }
         captchaClears += 1;
-        // 😴 تبريد إجباري قبل أي إعادة: صفحة /sorry/ ما بتهداش بمسح البيانات، بتهدى بالوقت —
-        // الرجوع الفوري ليها = دوامة المسح والعودة اللي حصلت معاك.
-        const restSec = 45 + captchaClears * 45; // 90 ثانية ثم 135 — كل مرة أطول
-        await this.notify('🧩 كابتشا', `الكابتشا مستعجلة — تبريد ${restSec} ثانية، وبعدها مسح بيانات وإعادة "${kw.keyword}" في تاب واحد نظيف (${captchaClears}/${maxClears})`);
+        // 😴 تبريد قصير قبل أي إعادة: صفحة /sorry/ بتحتاج وقت بسيط يهدى فيه العدّاد،
+        // بس من غير ما نطوّلك الاستنى — 12 ثانية ثم 16 ثم 20 (كل دورة أطول شوية بس).
+        const restSec = 8 + captchaClears * 4; // 12 / 16 / 20 ثانية
+        await this.notify('🧩 كابتشا', `تبريد ${restSec} ثانية، وبعدها مسح بيانات وإعادة "${kw.keyword}" في تاب واحد نظيف (${captchaClears}/${maxClears})`);
         await logger.warn('queue', `🧩 كابتشا — فشل الحل التلقائي: تبريد ${restSec}ث ثم مسح بيانات + تاب جديد (${captchaClears}/${maxClears})`);
         await sleep(restSec * 1000, signal);
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
@@ -648,8 +648,8 @@ export class QueueEngine {
       });
       this.broadcast();
       // 😴 تهدئة قصيرة بعد الحل قبل ما نكمل: الرجوع الفوري لجوجل بعد كابتشا
-      // بيجيب صفعة كابتشا جديدة — التبريد ده بيطمن الجلسة إنها هدت
-      const cool = 35000 + Math.floor(Math.random() * 25000);
+      // بيجيب صفعة جديدة — بس من غير استنا طويلة زي الأول (8–14 ثانية كفاية)
+      const cool = 8000 + Math.floor(Math.random() * 6000);
       await logger.info('captcha', `كابتشا اتحلت — تهدئة ${Math.round(cool / 1000)} ثانية قبل متابعة الفحص`);
       await sleep(cool, signal);
       if (signal && signal.aborted) { return 'paused'; }

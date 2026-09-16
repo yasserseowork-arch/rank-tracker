@@ -172,7 +172,7 @@ test('اللوحة v1.18.3: عدّاد كلمات حقيقي + اشعار الـ
 const urlkit = read('src/background/core/urlkit.js');
 
 test('ضد الدوامة v1.18.4: تبريد إلزامي قبل إعادة الكابتشا — ومفيش لمس لبيانات غير بعد راحة', () => {
-  assert.match(queue, /const restSec = 45 \+ captchaClears \* 45;/, 'مفيش تبريد متصاعد قبل الإعادة');
+  assert.match(queue, /const restSec = 8 \+ captchaClears \* 4;/, 'مفيش تبريد قصير متصاعد قبل الإعادة');
   assert.match(queue, /await sleep\(restSec \* 1000, signal\)/, 'التبريد مش بيتنفذ بsleep قابل للإلغاء');
   // الترتيب الجديد: فتح الجديد ← قفل القديم ← sweep ← المسح
   const fb = queue.slice(queue.indexOf('const restSec'), queue.indexOf('navigatedViaBox = false;\n        continue;'));
@@ -217,6 +217,7 @@ test('الوقفة الأخيرة v1.18.4: خطأ الحلقة = اشعار + ت
 
 /* ---------------- v1.18.5 — النسخ للشيت: ترتيب المستخدم + الشرطة ---------------- */
 const i18nUi = read('src/lib/i18n-ui.js');
+const io_read = read;
 
 test('v1.18.5: النسخ/التصدير بيترتب زي قائمة الكلمات نفسها (مش العكس) وبشرطة للفلويد', () => {
   assert.match(panel, /function exportEntriesInUserOrder/, 'مفيش مصدر ترتيب موحد للتصدير');
@@ -268,4 +269,20 @@ test('v1.18.5 حراسات إضافية: فاضي قبل النسخ + تطبيع
   assert.match(panel.slice(panel.indexOf('async function exportCsv'), panel.indexOf('async function copyTsv')), /copyEmpty/, 'CSV فاضي بيتنزّل بصمت');
   assert.match(st, /replace\(\/\\s\+\/g, ' '\)\.trim\(\)\.slice\(0, 180\)/, 'الكلمات ما بتتطبّعش — تبابة/نيولاين/طول زائد بيقعّدوا التاب');
   assert.match(st, /\.replace\(\/\[\\r\\n\\t\]\+\/g, ' '\)/, 'فصل الأسطر الجوا الكلمة نفسها ما بيتلمّش');
+});
+
+test('v1.18.6: الباستر مابقاش انتظار أصم — 18 ثانية ثم تسليم الحل الذاتي في نفس التحدي', () => {
+  assert.match(cap, /now - S\.busterTs < 18000/, 'مفيش مهلة نفاذة قصيرة للباستر');
+  assert.match(cap, /if \(!audioOpen\(\) && !imageOpen\(\)\) \{ return; \}/, 'مفيش قرار مبني على حالة نافذة التحدي');
+  const grace = cap.slice(cap.indexOf('now - S.busterTs < 18000'), cap.indexOf('now - S.busterTs < 18000') + 400);
+  assert.match(grace, /S\.busterFailed = true;/, 'التسليم بعد المهلة مش بيتعمل');
+  assert.ok(!/return; \}\n        if \(S\.busterTs\) \{\n         \/\/ وقتنا عدّى/.test(cap), 'لسه في انتظار 75 ثانية أصم؟');
+});
+
+test('v1.18.6: التبريداتShort والهدئات اتقلّصت زي ما طلبت + عنوان «تصدير النتائج»', () => {
+  assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'التهدئة بعد الحل لسه طويلة');
+  assert.match(queue, /const restSec = 8 \+ captchaClears \* 4;/, 'التبريد قبل الإعادة لسه 90 ثانية');
+  assert.match(i18nUi, /resTitle: '📊 تصدير النتائج',/, 'عنوان الجزء لسه «النتائج» في القاموس العربي');
+  const html = io_read('src/sidepanel/side-panel.html');
+  assert.match(html, /<summary data-i18n="resTitle">📊 تصدير النتائج<\/summary>/, 'عنوان HTML في اللوحة لسه قديم');
 });

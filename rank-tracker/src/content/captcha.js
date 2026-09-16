@@ -648,11 +648,16 @@
       // إحنا مش بنلمس «تحقق» من عندنا خالص؛ هو عارف شغله كويس.
       if (!S.busterFailed && (findBusterButton() || busterHolder())) {
         const now = Date.now();
-        // Buster بياخد وقته الكافي: نافذة الصوت بتفتح أصغر وبتتوسّع — 75 ثانية صبر
-        if (S.busterTs && now - S.busterTs < 75000) { return; } // لسه بيحل — نستنى على مهله
-        if (S.busterTs) {
-          // وقتنا عدّى وهو ماحلش → تسليم الحل الذاتي في نفس التحدي (المحاولة التانية)،
-          // من غير ما نهدر التحدي ولا نضغط فيه تاني
+        // Buster ياخد فرصته، بس مش بالانتظار الأصم: 18 ثانية صبر — لو نافذة التحدي
+        // لسه مفتوحة بعدها، الحل الذاتي بيسلم عليها فورًا في نفس التحدي (مفيش وقت مهدر،
+        // ومفيش «دوس وخلاص» — ده كان سبب إنك تشوف الضغطة من غير حل).
+        if (S.busterTs && now - S.busterTs < 75000) {
+          if (now - S.busterTs < 18000) { return; }
+          if (!audioOpen() && !imageOpen()) { return; } // النافذة مقفلتش أصلًا — لسه بنستناه
+          S.busterFailed = true;
+          S.solveTried = false;
+        } else if (S.busterTs) {
+          // 75 ثانية عدّت على نافذة مقفولة/مفتوحة من غير نتيجة → نفس التسليم للحل الذاتي
           S.busterTs = 0;
           S.busterFailed = true;
           S.solveTried = false;
