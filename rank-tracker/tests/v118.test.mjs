@@ -166,3 +166,51 @@ test('اللوحة v1.18.3: عدّاد كلمات حقيقي + اشعار الـ
   assert.match(i18n, /tabBeyondten: '💯 تصدير النتائج'/, 'عنوان التبويب ما اتغيرش');
   assert.match(html, /💯 تصدير النتائج/, 'الـhtml لسه بالعنوان القديم');
 });
+
+/* ---------------- v1.18.4 ---------------- */
+
+const urlkit = read('src/background/core/urlkit.js');
+
+test('ضد الدوامة v1.18.4: تبريد إلزامي قبل إعادة الكابتشا — ومفيش لمس لبيانات غير بعد راحة', () => {
+  assert.match(queue, /const restSec = 45 \+ captchaClears \* 45;/, 'مفيش تبريد متصاعد قبل الإعادة');
+  assert.match(queue, /await sleep\(restSec \* 1000, signal\)/, 'التبريد مش بيتنفذ بsleep قابل للإلغاء');
+  // الترتيب الجديد: فتح الجديد ← قفل القديم ← sweep ← المسح
+  const fb = queue.slice(queue.indexOf('const restSec'), queue.indexOf('navigatedViaBox = false;\n        continue;'));
+  assert.ok(fb.indexOf('nextTab = await tabctl.open') < fb.indexOf('tabctl.close(tab.id)'), 'لازم الجديد يفتح قبل ما القديم يتقفل');
+  assert.ok(fb.indexOf('sweepExtraTabs') < fb.indexOf('browsingData.remove'), 'المسح لازم يحصل والتبانين الفائضة اتقفلت قبله');
+});
+
+test('تاب واحد مضمون v1.18.4: الأداة بتتبع تبانبها وتكنس الفائض (حتى بعد إعادة التشغيل)', () => {
+  assert.match(queue, /this\.ownedTabs = new Set\(\)/, 'مفيش تتبع لتبانين الأداة');
+  assert.match(queue, /ownedTabIds/, 'القائمة مش محفوظة في الـrun للنجاة من إعادة تشغيل الـWorker');
+  assert.match(queue, /await this\.sweepExtraTabs\(tab\.id\)/, 'مفيش كنس عند الفتح الأول');
+  assert.match(queue, /const lastTab = await tabctl.open/, 'مسار التاب الأخير مش بيستخدم ترتيب الجديد←القديم');
+  // التاب الجديد بعد كابتشا بيتفتح foreground مرة واحدة (الباقي في الخلفية زي ما طلب)
+  assert.equal((queue.match(/Object\.assign\(\{\}, cfg, \{ foregroundTab: true \}\)/g) || []).length, 2, 'الفوكس مرة واحدة مطلوب في fallback + المحاولة الأخيرة بس');
+});
+
+test('ضد الكابتشا من المنبع v1.18.4: مفيش num=100 ولا pws=0 في رابط البحث', () => {
+  const fn = urlkit.slice(urlkit.indexOf('buildSearchUrl'), urlkit.indexOf('queryOf'));
+  assert.ok(!/searchParams\.set\('num'/.test(fn), 'num=100 لسه في الرابط — بصمة بوت');
+  assert.ok(!/searchParams\.set\('pws'/.test(fn), 'pws=0 لسه بيتحط في الرابط — بصمة بوت');
+  assert.match(fn, /'gl'/, 'gl اتلغط بالغلط');
+  assert.match(fn, /'hl'/, 'hl اتلغط بالغلط');
+  // serp.js لازم يفضل يتوقع 100 بدون البارامتر (degradation check)
+  assert.match(serp, /parseInt\(D\.url\.query\('num'\), 10\) \|\| 100/, 'expectedNum وقع لو البارامتر اتشال');
+});
+
+test('تسليم الباستر→الحل الذاتي v1.18.4: المحاولة التانية مش مهدرة، ولا دوامة صامتة', () => {
+  assert.match(cap, /S\.busterFailed = true;/, 'مفيش تسليم للحل الذاتي بعد فشل الباستر');
+  assert.match(cap, /if \(!S\.busterFailed && \(findBusterButton/, 'الآلة هتفضل تدوس على اللي فشل');
+  const timeoutBranch = cap.slice(cap.indexOf('if (S.busterTs) {'), cap.indexOf('if (S.busterTs) {') + 700);
+  assert.ok(!/newChallenge\(\)/.test(timeoutBranch.slice(0, timeoutBranch.indexOf('}'))), 'التسليم للذاتي بيهدر التحدي القديم بريلود — المفروض يكمل فيه');
+  assert.match(cap, /reportAttempt\('no-audio'\)/, 'مفيش تصعيد لو نافذة الصوت فتحتش خالص');
+  assert.match(cap, /reportAttempt\('transition'\)/, 'الدوامة الصامتة في الحالات الانتقالية ماشية من غير عد محاولات');
+  assert.match(orch, /Math\.max\(cfg\.captchaGapMs \|\| 0, 8000\)/, 'الفصل بين الجولات لسه سريع');
+});
+
+test('الوقفة الأخيرة v1.18.4: خطأ الحلقة = اشعار + تعافي تلقائي من الواتش دوج', () => {
+  assert.match(queue, /الأداة وقفت/, 'مفيش اشعار وقفة');
+  assert.match(queue, /indexOf\('error:'\) === 0/, 'الواتش دوج مش بيلتقط حالات الخطأ');
+  assert.match(queue, /pauseReason: null\s*\}/, 'الاستئناف بعد الخطأ ما بيمسحش سبب الإيقاف');
+});

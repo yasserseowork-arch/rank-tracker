@@ -100,6 +100,8 @@
         S.solveTried = false;
         S.verifyTs = 0;
         S.busterTs = 0;
+        S.busterFailed = false;
+        S.audioSeenTs = 0;
         newChallenge().catch(() => {});
         return;
       }
@@ -296,6 +298,8 @@
     solveTried: false,   // هل جرّبنا الحل جوه التحدي الحالي؟
     verifyTs: 0,         // وقت آخر ضغطة تحقق (لحساب مهلة الحكم)
     busterTs: 0,            // وقت آخر ضغطة على الشخص البرتقالي (نستنى نتيجته قبل أي حاجة)
+    busterFailed: false,     // جربناه وماحلش؟ التسليم للحل الذاتي في نفس المحاولة
+    audioSeenTs: 0,          // أول مرة شفنا التحدي الصوتي مفتوح (لحرس نافذة الصوت الكسولة)
     challengeSince: 0,       // لحظة اللي التحدي فتح فيها — بندي الإطار يلحق يترسم في هدوء
     reportedClosed: false,
     reportedFailed: false,
@@ -606,6 +610,8 @@
       // (أ) التحدي اختفى بعد محاولات = تحقق ناجح على الأغلب (challenge disappeared after attempts = likely successful verification)
       if (!challengeOpen()) {
         S.challengeSince = 0;
+        S.audioSeenTs = 0;
+        S.busterFailed = false;
         if (S.attempts > 0 && !S.reportedClosed) {
           S.reportedClosed = true;
           D.msg.send(C.MSG.CAPTCHA_CHALLENGE_CLOSED, { frameUrl: href });
@@ -640,39 +646,47 @@
 
       // (ب) الأولوية المطلقة للشخص البرتقالي: ضغطة حقيقية واحدة عليه وسيبه يحل —
       // إحنا مش بنلمس «تحقق» من عندنا خالص؛ هو عارف شغله كويس.
-      if (findBusterButton() || busterHolder()) {
+      if (!S.busterFailed && (findBusterButton() || busterHolder())) {
         const now = Date.now();
         // Buster بياخد وقته الكافي: نافذة الصوت بتفتح أصغر وبتتوسّع — 75 ثانية صبر
         if (S.busterTs && now - S.busterTs < 75000) { return; } // لسه بيحل — نستنى على مهله
         if (S.busterTs) {
-          // 75 ثانية عدّت والتحدي لسه مفتوح = المحاولة دي ما حلتش
+          // وقتنا عدّى وهو ماحلش → تسليم الحل الذاتي في نفس التحدي (المحاولة التانية)،
+          // من غير ما نهدر التحدي ولا نضغط فيه تاني
           S.busterTs = 0;
+          S.busterFailed = true;
           S.solveTried = false;
-          reportAttempt('orange-man-timeout');
+        } else {
+          // حرس الحجم: الزر/النافذة لسه بيكبر؟ متدوشس — استنى التكة الجاية (مفيش محاولة مهدرة)
+          const found = findBusterButton();
+          const anchorEl = (found && found.marker) || busterHolder();
+          const er = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
+          if (!er || er.width < 14 || er.height < 14) { return; }
+          S.busterTs = now;
+          reportAttempt('orange-man');
+          if (!clickBuster('orange-man')) {
+            const holder = busterHolder();
+            if (holder) {
+              const r = holder.getBoundingClientRect();
+              const off = ownFrameOffset();
+              postUp({ srt: 1, act: 'coord-click', x: Math.round(r.left + r.width / 2) + off.x, y: Math.round(r.top + r.height / 2) + off.y, stage: 'orange-man' });
+            }
+          }
+          return;
+        }
+      }
+
+      // (ج) مفيش شخص برتقالي (أو هو ما حلش)؟ نرجع للحل الذاتي: صوري → صوتي
+      if (imageOpen() && !audioOpen()) {
+        const now2 = Date.now();
+        // 25 ثانية عدّت والصوتي لسه مفتحش؟ التحدي ده كسلان — نعدّي_attempt_ ونجرب تحدي جديد
+        if (S.challengeSince && !S.audioSeenTs && now2 - S.challengeSince > 25000) {
+          reportAttempt('no-audio');
+          S.busterFailed = false;
+          S.challengeSince = now2;
           await newChallenge();
           return;
         }
-        // حرس الحجم: الزر/النافذة لسه بيكبر؟ متدوشس — استنى التكة الجاية (مفيش محاولة مهدرة)
-        const found = findBusterButton();
-        const anchorEl = (found && found.marker) || busterHolder();
-        const er = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
-        if (!er || er.width < 14 || er.height < 14) { return; }
-        S.busterTs = now;
-        reportAttempt('orange-man');
-        if (!clickBuster('orange-man')) {
-          const holder = busterHolder();
-          if (holder) {
-            const r = holder.getBoundingClientRect();
-            const off = ownFrameOffset();
-            postUp({ srt: 1, act: 'coord-click', x: Math.round(r.left + r.width / 2) + off.x, y: Math.round(r.top + r.height / 2) + off.y, stage: 'orange-man' });
-          }
-        }
-        return;
-      }
-
-      // (ج) مفيش شخص برتقالي في السكة؟ نرجع للحل الذاتي: صوري → صوتي
-      if (imageOpen() && !audioOpen()) {
-        const now2 = Date.now();
         if (!S.audioSwitchTs || now2 - S.audioSwitchTs > 5000) {
           S.audioSwitchTs = now2;
           switchToAudio();
@@ -683,6 +697,7 @@
 
       // (د) التحدي الصوتي مفتوح → نسخ الصوت → كتابة النص → تحقق
       if (audioOpen()) {
+        S.audioSeenTs = S.audioSeenTs || Date.now();
         // محاولة حل واحدة لكل تحدي (نستنى نسخ الصوت والرد)
         if (!S.solveTried) {
           S.solveTried = true;
@@ -702,8 +717,12 @@
       }
 
       // (هـ) تحدي مفتوح بس مش صوتي ولا صوري (حالة انتقالية نادرة) — ريلود كل 15 ثانية
+      //     وكل ريلود بيحسب محاولة عشان مانعملش دوامة صامتة للما لا نهاية
       if (!S.lastReloadTs || Date.now() - S.lastReloadTs > 15000) {
         S.lastReloadTs = Date.now();
+        reportAttempt('transition');
+        S.busterFailed = false;
+        S.challengeSince = Date.now();
         await newChallenge();
       }
     } finally {
@@ -723,6 +742,8 @@
     S.solveTried = false;
     S.verifyTs = 0;
     S.busterTs = 0;
+    S.busterFailed = false;
+    S.audioSeenTs = 0;
     await newChallenge(); // الآلة بتلقط التحدي الجديد وبتكمل الحل لوحدها
     return { ok: true, attempts: S.attempts };
   });

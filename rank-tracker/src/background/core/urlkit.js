@@ -22,8 +22,8 @@ export function buildSearchUrl(keyword, cfg) {
   u.searchParams.set('q', String(keyword || '').trim());
   u.searchParams.set('gl', config.gl || 'sa');
   u.searchParams.set('hl', config.hl || 'ar');
-  u.searchParams.set('num', String(config.num || 100));
-  u.searchParams.set('pws', '0');
+  // مفيش num=100 ولا pws=0 في الرابط: دول بصمة بوت بتستدعي الكابتشا عند جوجل.
+  // التوسيع لـ100 بياوله «Show 100 Results» المدمج + الجلب الخلفي — كل ده بحركة طبيعية.
   u.searchParams.set('ie', 'utf-8');
   return u.toString();
 }

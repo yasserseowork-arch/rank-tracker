@@ -128,7 +128,8 @@ export class CaptchaOrchestrator {
         // مفيش أي نشاط (تحمّل ناقص أو تحدّي مات) — استحثاث تحدٍّ جديد والآلة هتكمّل
         await logger.warn('captcha', 'لا استجابة من إطار التحدي — استحثاث تحدي جديد');
         await this.command(tabId, C.MSG.CAPTCHA_CMD_NEXT);
-        await sleep(cfg.captchaGapMs || 2500, signal);
+        // رتم هادي بين الجولات: التحدي الجديد ياوقته يترسم — والدوسات تلاجيه جاهز
+        await sleep(Math.max(cfg.captchaGapMs || 0, 8000), signal);
       }
       // فحص أخير: ربما اكتمل الحل لحظة انتهاء آخر جولة انتظار
       const finalUrl = await tabctl.getUrl(tabId);

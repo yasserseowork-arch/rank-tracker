@@ -23,6 +23,7 @@ export class QueueEngine {
   constructor() {
     this.orchestrator = new CaptchaOrchestrator();
     this.looping = false;
+    this.ownedTabs = new Set(); // تبانين فتحتهم الأداة — بنخليها واحدة واحدة بس
     this.pendingRestart = false;
     this.index = 0;
     this.abortController = null;
@@ -44,10 +45,11 @@ export class QueueEngine {
 
   async watchdogTick() {
     const run = await state.getRun();
-    const active = run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA;
+    const errored = run.status === C.STATUS.RUN.PAUSED && String(run.pauseReason || '').indexOf('error:') === 0;
+    const active = run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA || errored;
     if (active && !this.looping) {
-      await logger.warn('queue', 'watchdog: استئناف الحلقة بعد استيقاظ Worker');
-      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+      await logger.warn('queue', 'watchdog: استئناف الحلقة بعد استيقاظ Worker' + (errored ? ' — تعافي تلقائي بعد خطأ' : ''));
+      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null, pauseReason: null });
       this.index = run.currentIndex || 0;
       this.abortController = new AbortController();
       this.loop();
@@ -313,6 +315,7 @@ export class QueueEngine {
     } catch (err) {
       await logger.error('queue', 'خطأ غير متوقع في الحلقة: ' + (err && err.stack ? err.stack : err));
       await state.setRun({ status: C.STATUS.RUN.PAUSED, pauseReason: 'error:' + (err && err.message) });
+      await this.notify('⚠️ الأداة وقفت', 'حصل خطأ غير متوقع — الواتش دوج هيحاول استئنافها لوحده خلال دقيقتين. لو مكملتش، دوس استئناف من اللوحة.');
     } finally {
       this.looping = false;
       if (this.pendingRestart) {
@@ -340,7 +343,7 @@ export class QueueEngine {
     await logger.info('queue', `🔎 فحص الكلمة: "${kw.keyword}"`);
     this.broadcast();
 
-    // مسح دوري ذكي: بعد كل N كلمة مفحوصة (افتراضي 10) — بصمة تصفح أقل وكابتشا أقل
+    // مسح دوري ذكي: بعد كل N كلمة مفحوصة (افتراضي 8 — متزامن مع الاستراحة) — بصمة أقل وكابتشا أقل
     await this.maybePeriodicClear(cfg);
 
     // 1) المهلة الإلزامية قبل كل كلمة
@@ -362,6 +365,8 @@ export class QueueEngine {
       try {
         tab = await tabctl.open(url, cfg);
         await state.setRun({ workerTabId: tab.id });
+        this.ownedTabs.add(tab.id);
+        await this.sweepExtraTabs(tab.id);
       } catch (_) {
         await state.updateKeyword(kw.id, { status: C.STATUS.KW.FAILED });
         await this.notify('❌ فشل', `تعذر فتح تبويب للكلمة: ${kw.keyword}`);
@@ -426,20 +431,33 @@ export class QueueEngine {
           return this.recordExhausted(kw, cfg);
         }
         captchaClears += 1;
-        await this.notify('🧩 كابتشا', `فشل الحل التلقائي — مسح بيانات المتصفح وبدء "${kw.keyword}" في تاب جديد (${captchaClears}/${maxClears})`);
-        await logger.warn('queue', `🧩 كابتشا — فشل الحل التلقائي: مسح بيانات المتصفح (${captchaClears}/${maxClears}) وفتح تاب جديد لنفس الكلمة`);
+        // 😴 تبريد إجباري قبل أي إعادة: صفحة /sorry/ ما بتهداش بمسح البيانات، بتهدى بالوقت —
+        // الرجوع الفوري ليها = دوامة المسح والعودة اللي حصلت معاك.
+        const restSec = 45 + captchaClears * 45; // 90 ثانية ثم 135 — كل مرة أطول
+        await this.notify('🧩 كابتشا', `الكابتشا مستعجلة — تبريد ${restSec} ثانية، وبعدها مسح بيانات وإعادة "${kw.keyword}" في تاب واحد نظيف (${captchaClears}/${maxClears})`);
+        await logger.warn('queue', `🧩 كابتشا — فشل الحل التلقائي: تبريد ${restSec}ث ثم مسح بيانات + تاب جديد (${captchaClears}/${maxClears})`);
+        await sleep(restSec * 1000, signal);
+        if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        let nextTab = null;
         try {
-          await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
+          nextTab = await tabctl.open(url, Object.assign({}, cfg, { foregroundTab: true }));
         } catch (_) {}
-        await tabctl.close(tab.id);
-        try {
-          tab = await tabctl.open(url, cfg);
-          await state.setRun({ workerTabId: tab.id });
-          this.currentTabId = tab.id;
-        } catch (_) {
+        if (!nextTab) {
           await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تعذر فتح تاب جديد بعد الكابتشا`);
           return this.recordExhausted(kw, cfg);
         }
+        // تاب واحد مضمون: الجديد يفتح، القديم وكل فائض يتقفل، وبعدين المسح —
+        // ما يبقاش في شبح تاب كابتشا قديم يربك الجلسة وقت ما البيانات بتمسح
+        this.ownedTabs.add(nextTab.id);
+        await tabctl.close(tab.id);
+        this.ownedTabs.delete(tab.id);
+        tab = nextTab;
+        await state.setRun({ workerTabId: tab.id });
+        this.currentTabId = tab.id;
+        await this.sweepExtraTabs(tab.id);
+        try {
+          await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
+        } catch (_) {}
         navigatedViaBox = false;
         continue; // نفس الكلمة من الأول في التبويب الجديد
       } else if (first.type === 'serp' && first.payload.total > 0) {
@@ -454,10 +472,13 @@ export class QueueEngine {
         await logger.warn('queue', `🆕 مشكلة مستمرة — تاب جديد لنفس الكلمة "${kw.keyword}" كمحاولة أخيرة`);
         await this.notify('🆕 محاولة أخيرة', `مشكلة مستمرة على "${kw.keyword}" — تاب جديد`);
         try {
+          const lastTab = await tabctl.open(url, Object.assign({}, cfg, { foregroundTab: true }));
           await tabctl.close(tab.id);
-          tab = await tabctl.open(url, cfg);
+          tab = lastTab || tab;
+          this.ownedTabs.add(tab.id);
           await state.setRun({ workerTabId: tab.id });
           this.currentTabId = tab.id;
+          await this.sweepExtraTabs(tab.id);
           const lastRace = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
           if (lastRace.type === 'serp' && (lastRace.payload.total > 0 || lastRace.payload.noResults)) {
             return this.recordResult(kw, lastRace.payload, cfg, 'new-tab');
@@ -626,6 +647,12 @@ export class QueueEngine {
         captchaSolves: (run.captchaSolves || 0) + 1
       });
       this.broadcast();
+      // 😴 تهدئة قصيرة بعد الحل قبل ما نكمل: الرجوع الفوري لجوجل بعد كابتشا
+      // بيجيب صفعة كابتشا جديدة — التبريد ده بيطمن الجلسة إنها هدت
+      const cool = 35000 + Math.floor(Math.random() * 25000);
+      await logger.info('captcha', `كابتشا اتحلت — تهدئة ${Math.round(cool / 1000)} ثانية قبل متابعة الفحص`);
+      await sleep(cool, signal);
+      if (signal && signal.aborted) { return 'paused'; }
       return 'solved';
     }
 
@@ -679,6 +706,22 @@ export class QueueEngine {
       if (late && late.ts >= sinceTs) { return late.payload; }
     }
     return fresh || null;
+  }
+
+  /** ضمان تاب واحد: نقفل كل تابانين فتحتهم الأداة (حتى من جلسات قبل إعادة تشغيل
+   *  الـWorker) ونسيب النشط بس — بنمسحهم من القائمة المحفوظة ومن الذاكرة */
+  async sweepExtraTabs(keepTabId) {
+    const ids = new Set(this.ownedTabs || []);
+    try {
+      const run = await state.getRun();
+      for (const id of (run.ownedTabIds || [])) { ids.add(id); }
+    } catch (_) {}
+    for (const stale of ids) {
+      if (stale === keepTabId || !stale) { continue; }
+      try { await chrome.tabs.remove(stale); } catch (_) {}
+      if (this.ownedTabs) { this.ownedTabs.delete(stale); }
+    }
+    try { await state.setRun({ ownedTabIds: [keepTabId] }); } catch (_) {}
   }
 
   waitManualSolve(tabId, cfg, signal) {
