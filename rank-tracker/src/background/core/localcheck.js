@@ -1,6 +1,6 @@
 /**
  * localcheck.js — فحص النتائج المحلية (Google Maps / Local pack)
- * يجلب صفحة tbm=lcl بنفس الجلسة ويبحث عن المتجر داخل بطاقات الأماكن.
+ * يجلب صفحة tbm=lcl بنفس الجلسة ويبحث عن الموقع داخل بطاقات الأماكن.
  */
 import { nameMatches } from './match.js';
 
@@ -22,7 +22,9 @@ export async function localCheck(keyword, cfg) {
     const label = domain ? domain.split('.')[0] : '';
     for (let i = 0; i < cards.length; i++) {
       const text = cards[i].textContent || '';
-      if (cfg.storeName && nameMatches(text, cfg.storeName)) { return { found: true, position: i + 1 }; }
+      for (const nm of [cfg.storeName, cfg.storeNameEn].filter((x) => x && String(x).trim())) {
+        if (nameMatches(text, nm)) { return { found: true, position: i + 1 }; }
+      }
       if (label && label.length >= 5 && text.toLowerCase().includes(label)) { return { found: true, position: i + 1 }; }
     }
     return { found: false, position: null };

@@ -1,7 +1,7 @@
 /**
  * matchlib.js — نسخة Classic من منطق المطابقة (تُحقن في صفحة SERP)
  * تسمح لـ serp.js بعمل "بحث Ctrl+F" ذكي داخل الصفحة والخروج المبكر
- * أول ما يظهر المتجر، بدون انتظار تحميل كل الدفعات.
+ * أول ما يظهر الموقع، بدون انتظار تحميل كل الدفعات.
  * (المنطق نفسه موجود كـ module في background/core/match.js ومُختبر هناك)
  */
 (function (global) {
@@ -98,26 +98,36 @@
   }
 
   /** مطابقة سريعة تستخدمها صفحة SERP للخروج المبكر ورصد AI Overview */
+  function storeNames(cfg) {
+    const c = cfg || {};
+    return [c.storeName, c.storeNameEn]
+      .map((s) => String(s == null ? '' : s).trim())
+      .filter(Boolean)
+      .filter((s, i, arr) => arr.indexOf(s) === i);
+  }
+
   function matchItems(items, cfg) {
     const config = cfg || {};
     const mode = config.matchMode || 'both';
     const hasDomain = !!String(config.storeDomain || '').trim();
-    const hasName = !!String(config.storeName || '').trim();
+    const names = storeNames(config);
     const list = Array.isArray(items) ? items : [];
     for (let i = 0; i < list.length; i++) {
       const item = list[i];
       if (hasDomain && (mode === 'domain' || mode === 'both')) {
         if (hostMatches(item.host || '', config.storeDomain)) { return { found: true, position: i + 1, matched: item }; }
       }
-      if (hasName && (mode === 'name' || mode === 'both')) {
+      if (names.length && (mode === 'name' || mode === 'both')) {
         const text = (item.title || '') + ' ' + (item.snippet || '') + ' ' + (item.url || '') + ' ' + (item.text || '');
-        if (nameMatches(text, config.storeName)) { return { found: true, position: i + 1, matched: item }; }
+        for (const nm of names) {
+          if (nameMatches(text, nm)) { return { found: true, position: i + 1, matched: item }; }
+        }
       }
     }
     return { found: false, position: null, matched: null };
   }
 
   global.SRT = Object.assign(global.SRT || {}, {
-    match: { normalizeArabic, normalizeHost, hostMatches, nameMatches, matchItems }
+    match: { normalizeArabic, normalizeHost, hostMatches, nameMatches, matchItems, storeNames }
   });
 })(globalThis);

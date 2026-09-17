@@ -3,7 +3,7 @@
  *
  * الإصدار 1.9 — الاستيل القديم الموثوق + قاعدة الـ20 ثانية:
  *  ─ نزول تدريجي بشري + مسح حي بعد كل دفعة نتائج.
- *  ─ أول ما المتجر يظهر بين النتائج → ترتيب فوري وانتقال فوري للكلمة التالية.
+ *  ─ أول ما الموقع يظهر بين النتائج → ترتيب فوري وانتقال فوري للكلمة التالية.
  *  ─ 20 ثانية بدون ترتيب = الكلمة تُسجل غير موجود (-) وننتقل.
  *  ─ AI Overview: توسيع بالنقر المزدوج + مطابقة بالاسم العربي.
  *  ─ صفحات الخطأ → ريفرش تلقائي، و403/404 → تاب جديد. نص كابتشا → إعلان دوري.
@@ -445,7 +445,7 @@
   }
 
   function hasTarget(cfg) {
-    return !!(cfg && ((cfg.storeDomain || '').trim() || (cfg.storeName || '').trim()));
+    return !!(cfg && ((cfg.storeDomain || '').trim() || (cfg.storeName || '').trim() || (cfg.storeNameEn || '').trim()));
   }
 
   function quickFind(items, aiItems, cfg) {
@@ -506,11 +506,13 @@
     if (!txt) { return false; }
     const d = String(cfg.storeDomain || '').trim().toLowerCase();
     if (d && txt.includes(d)) { return true; }
-    const n = String(cfg.storeName || '').trim();
-    if (n && D.match && D.match.normalizeArabic) {
+    const names = (D.match && D.match.storeNames) ? D.match.storeNames(cfg) : [String(cfg.storeName || '').trim()].filter(Boolean);
+    if (names.length && D.match && D.match.normalizeArabic) {
       const hay = D.match.normalizeArabic(txt);
-      const needle = D.match.normalizeArabic(n);
-      if (needle && needle.length >= 3 && hay.includes(needle)) { return true; }
+      for (const n of names) {
+        const needle = D.match.normalizeArabic(n);
+        if (needle && needle.length >= 3 && hay.includes(needle)) { return true; }
+      }
     }
     return false;
   }
@@ -519,12 +521,13 @@
   function positionByText(cfg, items) {
     const blocks = D.qsa('#search .yuRUbf');
     const d = String(cfg.storeDomain || '').trim().toLowerCase();
-    const nNorm = (D.match && D.match.normalizeArabic) ? D.match.normalizeArabic(String(cfg.storeName || '')) : '';
+    const namesList = (D.match && D.match.storeNames) ? D.match.storeNames(cfg) : [String(cfg.storeName || '')].filter(Boolean);
+    const nNorms = (D.match && D.match.normalizeArabic) ? namesList.map((x) => D.match.normalizeArabic(x)).filter((x) => x.length >= 3) : [];
     for (let i = 0; i < blocks.length; i++) {
       let t = '';
       try { t = (blocks[i].innerText || '').toLowerCase(); } catch (_) { t = ''; }
       const hitD = d && t.includes(d);
-      const hitN = nNorm && nNorm.length >= 3 && D.match.normalizeArabic(t).includes(nNorm);
+      const hitN = !!nNorms.length && nNorms.some((nn) => D.match.normalizeArabic(t).includes(nn));
       if (hitD || hitN) {
         const cPos = readCounterPos(blocks[i]);
         const matched = (items || []).find((it) => it.counterPos === (cPos || i + 1)) || (items || [])[i] || null;
@@ -551,7 +554,7 @@
 
   /* -------- قفل السكرول: الصفحة تفضل فوق من لحظة فتحها لحد ما نقرأ ونكتب --------
      ممنوع أي غوص (منّا أو من أداة تحميل الـ100 نتيجة) إلا لو قررنا نحن النزول
-     لأن المتجر مش على الشاشة. بعد القراءة: قفل تاني نهائي. */
+     لأن الموقع مش على الشاشة. بعد القراءة: قفل تاني نهائي. */
   let scrollLocked = true;
   function lockScroll() { try { window.scrollTo({ top: 0, behavior: 'auto' }); } catch (_) {} }
   try {
@@ -566,7 +569,7 @@
     const pos = hit && hit.match && hit.match.position ? hit.match.position : (hit && hit.match ? 'AI' : '?');
     D.msg.send(C.MSG.LOG, {
       level: 'info', scope: 'serp',
-      text: `⛏ المتجر اتلقى عند #${pos} — وقفنا المسح فوراً (${items.length} نتيجة مقروءة) وانتقلنا للكلمة التالية`
+      text: `⛏ الموقع اتلقى عند #${pos} — وقفنا المسح فوراً (${items.length} نتيجة مقروءة) وانتقلنا للكلمة التالية`
     });
   }
 
@@ -578,7 +581,7 @@
 
     let early = null;
 
-    // 1) من أول نتيجة بتظهر: فحص مطابقة كل 250ms — المتجر فوق؟ خروج فوري
+    // 1) من أول نتيجة بتظهر: فحص مطابقة كل 250ms — الموقع فوق؟ خروج فوري
     //    بدون أي توسيع AI أو تمرير قبل كده (التوسيع بيتأجل لوقت الحكم بعدم وجوده)
     const firstHit = await D.waitFor(() => {
       const snap = collect();

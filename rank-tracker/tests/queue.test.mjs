@@ -144,3 +144,18 @@ test('maybePeriodicClear: بيمسح عند بلوغ كل N كلمة وبيسج�
   run = await state.getRun();
   assert.ok(run.clearMarker >= 10);
 });
+
+test('v119 setConfig: تطبيع الاسم العربي والإنجليزي — trim وسقف 80 حرف، والدومين زي ما هو', async () => {
+  const cfg = await state.setConfig({
+    storeDomain: 'HTTPS://WWW.MySite.COM/offer?x=1',
+    storeName: '  موقعي  ',
+    storeNameEn: '  My Site ' + 'X'.repeat(120) + '  ',
+  });
+  assert.equal(cfg.storeDomain, 'mysite.com');
+  assert.equal(cfg.storeName, 'موقعي');
+  assert.equal(cfg.storeNameEn.length, 80);
+  assert.ok(cfg.storeNameEn.startsWith('My Site '));
+  // مسحه بالكامل مقبول — الحقل اختياري «إن وُجد»
+  const cleared = await state.setConfig({ storeNameEn: '' });
+  assert.equal(cleared.storeNameEn, '');
+});

@@ -21,6 +21,7 @@ export const DEFAULT_CONFIG = {
   // الهوية المستهدفة
   storeDomain: '',
   storeName: '',
+  storeNameEn: '',
   matchMode: 'both',            // domain | name | both
   // استهداف جغرافي ولغة SERP
   gl: '',   // المنطقة اختيارية تماماً — سيبتها فاضية = إعداد جوجل الافتراضي
@@ -128,6 +129,10 @@ export async function setConfig(patch) {
       .replace(/[\/?#].*$/, '')
       .replace(/^www\./i, '')
       .toLowerCase();
+  }
+  // الاسمان (عربي/إنجليزي): trim وخفة، والسقف 80 حرف — من غير تغيير في المحتوى
+  for (const nameKey of ['storeName', 'storeNameEn']) {
+    if (typeof next[nameKey] === 'string') { next[nameKey] = next[nameKey].trim().slice(0, 80); }
   }
   next.delayMs = Math.max(1000, next.delayMs);
   next.num = Math.min(100, Math.max(10, next.num));

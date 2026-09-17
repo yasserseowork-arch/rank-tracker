@@ -199,7 +199,7 @@ export class QueueEngine {
     const keywords = await state.getKeywords();
     if (!keywords.length) { return { ok: false, reason: 'no-keywords' }; }
     const cfg = await state.getConfig();
-    if (!cfg.storeDomain && !cfg.storeName) { return { ok: false, reason: 'no-target' }; }
+    if (!cfg.storeDomain && !cfg.storeName && !cfg.storeNameEn) { return { ok: false, reason: 'no-target' }; }
     const daily = await state.getDailyCount();
     if (cfg.maxChecksPerDay > 0 && daily.count >= cfg.maxChecksPerDay) {
       await logger.warn('queue', `تم بلوغ السقف اليومي (${cfg.maxChecksPerDay} فحصاً) — ارفعه من الإعدادات المتقدمة أو انتظر الغد`);
@@ -886,15 +886,16 @@ export class QueueEngine {
     }
     let aiMatch = (serp.aiItems && serp.aiItems.length) ? matchResults(serp.aiItems, cfg) : { found: false, position: null, matched: null };
     if (!aiMatch.found && serp.aiText) {
-      // صارم: «AI» يتكتب بس لو المتجر مذكور فعلاً جوه نص الـ AI Overview —
+      // صارم: «AI» يتكتب بس لو الموقع مذكور فعلاً جوه نص الـ AI Overview —
       // تطابق مباشر للاسم الكامل أو الدومين، بدون المطابقات المرنة اللي كانت بتعطي نتايج كاذبة
       const hay = String(serp.aiText).toLowerCase();
       const hayN = normalizeArabic(serp.aiText);
       const dom = String(cfg.storeDomain || '').trim().toLowerCase();
       const label = dom ? dom.split('.')[0] : '';
       const domHit = !!(dom && hay.includes(dom)) || !!(label && label.length >= 6 && hay.includes(label));
-      const storeNameN = normalizeArabic(cfg.storeName || '');
-      const nameHit = !!(storeNameN.length >= 3 && hayN.includes(storeNameN));
+      const nameHit = [cfg.storeName, cfg.storeNameEn]
+        .map((x) => normalizeArabic(x || ''))
+        .some((n) => n.length >= 3 && hayN.includes(n));
       if (nameHit || domHit) {
         aiMatch = { found: true, position: null, matched: { title: 'AI mention', url: null }, reasons: ['ai-text'] };
       }
@@ -967,10 +968,10 @@ export class QueueEngine {
     if (match.found) {
       await logger.info('queue', `✅ "${kw.keyword}" → الترتيب #${match.position} من ${match.scanned} نتيجة (${match.reasons.join('+')})${match.viaCounter ? ' — وفق رقم Serp Counter ✔' : ''}${serp.early ? ' — خروج مبكر ✔' : ''}`);
     } else if (aiMatch.found) {
-      await logger.info('queue', `🤖 "${kw.keyword}" → ظهر في AI Overview ${aiMatch.position ? 'باستشهاد #' + aiMatch.position : 'باسم المتجر نصياً'} (غير موجود عضوياً ضمن ${match.scanned})`);
+      await logger.info('queue', `🤖 "${kw.keyword}" → ظهر في AI Overview ${aiMatch.position ? 'باستشهاد #' + aiMatch.position : 'باسم الموقع نصياً'} (غير موجود عضوياً ضمن ${match.scanned})`);
     } else {
       await logger.warn('queue', `⚠️ "${kw.keyword}" → غير موجود ضمن ${match.scanned} نتيجة ولا في AI Overview`);
-      await logger.info('queue', `🔎 تشخيص — أول النطاقات المقروءة: ${row.topHosts.join(' | ') || '(لا شيء)'} | إعدادك: ${cfg.storeDomain || '-'} / ${cfg.storeName || '-'}`);
+      await logger.info('queue', `🔎 تشخيص — أول النطاقات المقروءة: ${row.topHosts.join(' | ') || '(لا شيء)'} | إعدادك: ${cfg.storeDomain || '-'} / ${cfg.storeName || '-'} / ${cfg.storeNameEn || '-'}`);
     }
     this.broadcast();
     void updated;

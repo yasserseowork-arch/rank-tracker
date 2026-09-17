@@ -294,6 +294,7 @@ function renderAll() {
 const CONFIG_FIELDS = [
   ['cfgDomain', 'storeDomain', 'string'],
   ['cfgName', 'storeName', 'string'],
+  ['cfgNameEn', 'storeNameEn', 'string'],
   ['cfgMatch', 'matchMode', 'string'],
 ];
 

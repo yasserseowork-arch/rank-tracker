@@ -1,9 +1,9 @@
 /**
- * match.js — منطق مطابقة المتجر داخل نتائج SERP (دوال نقية)
+ * match.js — منطق مطابقة الموقع (دومين/اسم عربي/اسم إنجليزي) داخل نتائج SERP (دوال نقية)
  *
  * أنماط المطابقة:
  *  - domain: مطابقة المضيف (مع تجاهل www واشتقاق النطاق الأصلي)
- *  - name:   مطابقة اسم المتجر داخل العنوان/الوصف بعد تطبيع عربي
+ *  - name:   مطابقة اسم الموقع (عربي أو إنجليزي) داخل العنوان/الوصف بعد التطبيع
  *  - both:   أيٌّ منهما
  */
 
@@ -117,16 +117,24 @@ export function nameMatches(haystack, storeName) {
 }
 
 /**
- * مطابقة قائمة نتائج SERP ضد إعدادات المتجر.
+ * مطابقة قائمة نتائج SERP ضد إعدادات الموقع.
  * @param {Array<{url:string,host:string,title:string,snippet:string}>} items
  * @param {object} cfg {storeDomain, storeName, matchMode}
  * @returns {{found:boolean, position:number|null, matched:object|null, scanned:number, reasons:Array}}
  */
+export function storeNames(cfg) {
+  const c = cfg || {};
+  return [c.storeName, c.storeNameEn]
+    .map((s) => String(s == null ? '' : s).trim())
+    .filter(Boolean)
+    .filter((s, i, arr) => arr.indexOf(s) === i);
+}
+
 export function matchResults(items, cfg) {
   const config = cfg || {};
   const mode = config.matchMode || 'both';
   const hasDomain = !!String(config.storeDomain || '').trim();
-  const hasName = !!String(config.storeName || '').trim();
+  const names = storeNames(config);
   const list = Array.isArray(items) ? items : [];
 
   for (let i = 0; i < list.length; i++) {
@@ -136,9 +144,11 @@ export function matchResults(items, cfg) {
     if (hasDomain && (mode === 'domain' || mode === 'both')) {
       if (hostMatches(item.host || '', config.storeDomain)) { hit = true; reasons.push('domain'); }
     }
-    if (!hit && hasName && (mode === 'name' || mode === 'both')) {
+    if (!hit && names.length && (mode === 'name' || mode === 'both')) {
       const text = (item.title || '') + ' ' + (item.snippet || '') + ' ' + (item.url || '') + ' ' + (item.text || '');
-      if (nameMatches(text, config.storeName)) { hit = true; reasons.push('name'); }
+      for (const nm of names) {
+        if (nameMatches(text, nm)) { hit = true; reasons.push('name'); break; }
+      }
     }
     if (hit) {
       return { found: true, position: i + 1, matched: item, scanned: list.length, reasons };

@@ -23,6 +23,13 @@ const sw = read('src/background/sw.js');
 const st = read('src/background/core/state.js');
 const bt = read('beyondten/content/index.js');
 
+/* أوزان v1.19 — استدعاء حي للمطابقين (كلاسيك + موديول) */
+import { loadClassic as v119loadClassic } from './helpers/load-classic.mjs';
+import { matchResults as v119matchResults, storeNames as v119storeNames } from '../src/background/core/match.js';
+const v119classic = v119loadClassic('src/lib/matchlib.js').SRT.match;
+void v119loadClassic;
+
+
 /* ---------------- AI ---------------- */
 
 test('AI: عمود الترتيب بيتكتب 1ai وai بس (من غير مسافة)', () => {
@@ -380,4 +387,89 @@ test('v1.18.8: syntax-check آلي شامل — مفيش قوائم يدوية �
   assert.ok(!/CLASSIC_FILES\s*=\s*\[\s*'src\/lib\/constants/.test(sc), 'لسه قائمة يدوية جزئية');
   assert.match(sc, /ROOT_WALKS/, 'مفيش مسح آلي على src/ كاملة');
   assert.match(sc, /MODULE_PREFIXES/, 'مفيش تصنيف modules تلقائي');
+});
+
+/* ---------------- v1.19.0 — الاسم العربي + الإنجليزي، وتسمية «الموقع» ---------------- */
+
+const v119Items = [
+  { title: 'Best coffee beans in Riyadh', snippet: 'Order online', url: 'https://mysite.com/x', host: 'mysite.com' },
+  { title: 'نتائج تانية مالهاش علاقة', snippet: 'حاجة تانية', url: 'https://other.com', host: 'other.com' },
+];
+
+test('v119: الاسم الإنجليزي لوحده بيجيب ظهور في العضوي (كلاسيك = موديول)', () => {
+  const cfg = { matchMode: 'name', storeNameEn: 'Best Coffee' };
+  const r = v119matchResults(v119Items, cfg);
+  assert.equal(r.found, true);
+  assert.equal(r.position, 1);
+  assert.ok(r.reasons.includes('name'));
+  assert.equal(v119matchResults([v119Items[1]], cfg).found, false);
+});
+
+test('v119: أي اسم من الاتنين كفاية — والاسم الفاضي/المسافات ما تخليش طابور يلف', () => {
+  const both = v119matchResults(v119Items, { matchMode: 'name', storeName: 'قهوة الرياض', storeNameEn: 'Best Coffee' });
+  assert.equal(both.found, true); assert.equal(both.position, 1);
+  const byAr = v119matchResults(v119Items, { matchMode: 'name', storeName: 'نتائج تانية', storeNameEn: 'مفيش' });
+  assert.equal(byAr.found, true); assert.equal(byAr.position, 2);
+  const none = v119matchResults(v119Items, { matchMode: 'name', storeName: '   ', storeNameEn: '' });
+  assert.equal(none.found, false);
+  assert.deepEqual(none.reasons, []);
+});
+
+test('v119: الكلاسيك (المحقون في SERP) ماشي مع الموديول حذاء-بحذاء بأي اسم', () => {
+  const cfgs = [
+    { matchMode: 'name', storeNameEn: 'Best Coffee' },
+    { matchMode: 'both', storeName: 'قهوة الرياض', storeNameEn: 'best coffee', storeDomain: 'nope.io' },
+    { matchMode: 'name', storeName: 'نتائج تانية' },
+    { matchMode: 'domain', storeNameEn: 'Best Coffee' },
+  ];
+  for (const cfg of cfgs) {
+    const a = v119classic.matchItems(v119Items, cfg);
+    const b = v119matchResults(v119Items, cfg);
+    assert.equal(a.found, b.found, JSON.stringify(cfg));
+    assert.equal(a.position, b.position, JSON.stringify(cfg));
+  }
+});
+
+test('v119: dedupe — الاسم المكرر بالعربي/الإنجليزي بيترشّح مرة واحدة، و storeNames exports', () => {
+  const names = v119storeNames({ storeName: 'لمسة', storeNameEn: ' لمسة ' });
+  assert.deepEqual(names, ['لمسة']);
+  assert.deepEqual(v119storeNames({ storeName: '', storeNameEn: 'X' }), ['X']);
+});
+
+test('v119: الحقل مربوط — cfgNameEn ↔ storeNameEn في اللوحة والـ DEFAULTS والـ sanitize', () => {
+  const js = read('src/sidepanel/side-panel.js');
+  assert.match(js, /\['cfgNameEn',\s*'storeNameEn',\s*'string'\]/);
+  const html = read('src/sidepanel/side-panel.html');
+  assert.match(html, /id="cfgNameEn"/);
+  assert.match(html, /data-i18n="lblNameEn"/);
+  const st = read('src/background/core/state.js');
+  assert.match(st, /storeNameEn:\s*''/);
+  assert.match(st, /\['storeName',\s*'storeNameEn'\]/, 'sanitize بيمشي على الاسميين');
+});
+
+test('v119: نصوص «متجر/متجرك» اختفت من الواجهة — ظلت بس في منطق الشريط (regex) والتعليقات', () => {
+  const i18n = read('src/lib/i18n-ui.js');
+  for (const line of i18n.split('\n')) {
+    if (!/متجر/.test(line)) continue;
+    assert.ok(/replace\(|\/\(?:/.test(line), 'سطر نَصي لسه فيه متجر: ' + line.trim());
+  }
+  const html = read('src/sidepanel/side-panel.html');
+  assert.ok(!/>[^<>]*متجر[^<>]*</.test(html), 'لسه في متجر جوه نص HTML ظاهر');
+  assert.match(i18n, /اسم الموقع بالعربي \(إن وُجد\)/);
+  assert.match(i18n, /اسم الموقع بالإنجليزي \(إن وُجد\)/);
+  assert.match(i18n, /Site name \(English, if any\)/);
+});
+
+test('v119: السيرة الطويلة — حارس no-target وبلاغ الحكم بيشملوا storeNameEn', () => {
+  assert.match(queue, /cfg\.storeNameEn/, 'queue.js مش واخد الاسم الإنجليزي في الحسبان');
+  assert.match(serp, /D\.match\.storeNames|cfg\.storeNameEn/, 'serp.js لازم يفحص الاتنين');
+  assert.match(serp, /storeNameEn/, 'hasTarget في serp لازم يشمل الإنجليزي');
+});
+
+test('v119: النسخة 1.19.0 في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
+  const man = JSON.parse(read('manifest.json'));
+  assert.equal(man.version, '1.19.0');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.0'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.0'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.0\]/m);
 });

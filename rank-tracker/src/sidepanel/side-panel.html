@@ -61,7 +61,7 @@
 
   <section class="stats-grid">
     <div class="stat-card"><span class="stat-value" id="statChecked">0</span><span class="stat-label" data-i18n="statChecked">كلمات فُحصت</span></div>
-    <div class="stat-card"><span class="stat-value ok" id="statFound">0</span><span class="stat-label" data-i18n="statFound">ظهور المتجر</span></div>
+    <div class="stat-card"><span class="stat-value ok" id="statFound">0</span><span class="stat-label" data-i18n="statFound">ظهور الموقع</span></div>
     <div class="stat-card"><span class="stat-value" id="statAvg">—</span><span class="stat-label" data-i18n="statAvg">متوسط الترتيب</span></div>
     <div class="stat-card"><span class="stat-value warn" id="statCaptcha">0</span><span class="stat-label" data-i18n="statCaptcha">كابتشا محلولة</span></div>
   </section>
@@ -89,12 +89,16 @@
     <summary data-i18n="targetTitle">🎯 الهدف والاستهداف الجغرافي</summary>
     <div class="form-grid">
       <label>
-        <span data-i18n="lblDomain">دومين المتجر</span>
+        <span data-i18n="lblDomain">دومين الموقع</span>
         <input type="text" id="cfgDomain" dir="ltr" placeholder="example.com.sa" />
       </label>
       <label>
-        <span data-i18n="lblName">اسم المتجر</span>
-        <input type="text" id="cfgName" placeholder="متجر مثال" />
+        <span data-i18n="lblName">اسم الموقع بالعربي (إن وُجد)</span>
+        <input type="text" id="cfgName" placeholder="موقع مثال" />
+      </label>
+      <label>
+        <span data-i18n="lblNameEn">اسم الموقع بالإنجليزي (إن وُجد)</span>
+        <input type="text" id="cfgNameEn" dir="ltr" placeholder="Example Store" />
       </label>
       <label style="grid-column: 1 / -1;">
         <span data-i18n="lblMatch">نمط المطابقة</span>
