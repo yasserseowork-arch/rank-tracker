@@ -468,10 +468,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.1');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.1'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.1'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.1\]/m);
+  assert.equal(man.version, '1.19.6');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.6'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.6'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.6\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -505,4 +505,29 @@ test('v1191: ميجريشن v5 — اللي قاعد على القيم القد�
   assert.match(st2, /cfg\.batchSettleMs, 10\) === 5000/, 'ما بنقلش ثبات العدّاد القديم (5000→6500)');
   assert.match(st2, /cfg\.selfFetchMaxBatches, 10\) === 6/, 'ما بنقلش الدفعات القديمة (6→9)');
   assert.match(st2, /cfg\.selfFetchMore === false/, 'selfFetchMore القديم مقفول للأبد — لازم يتفعّل');
+});
+
+/* ---------------- v1.19.6 — طبقة نص البلوك + شبكة الإنقاذ الأخيرة (من 1.19.2، معزولتين) ---------------- */
+
+test('v1196: نص البلوك كامل بيوصل للمحرك — والاسم اللي «باين قدامك» يتسجل', () => {
+  assert.match(serp, /text: blockText\(block \|\| a\)/, 'extractFrom مش بيحمّل item.text');
+  // سلوكي: اسم الموقع موجود بس في سطر الاسم المعروض (مش العنوان/الوصف)
+  const items = [{ url: 'https://x.com/p', host: 'x.com', title: 'عباية كاشمير سوداء', snippet: 'خامة فاخرة', text: 'لمسة · الرياض · توصيل مجاني' }];
+  const cfg = { matchMode: 'name', storeName: 'لمسة' };
+  assert.equal(v119classic.matchItems(items, cfg).found, true, 'الكلاسيك مبيفتحش النص المحمّل');
+  assert.equal(v119matchResults(items, cfg).found, true, 'الموديول مش بيفتح النص المحمّل');
+  // ومن غير الطبقة دي كان هيفشل — التثبيت إن السلوك ده مقصود مش صدفة
+  const bare = [{ url: items[0].url, host: 'x.com', title: items[0].title, snippet: items[0].snippet }];
+  assert.equal(v119classic.matchItems(bare, cfg).found, false);
+});
+
+test('v1196: شبكة الإنقاذ الأخيرة — فحص الشاشة قبل حكم «غير موجود» وبعد الجلب الخلفي كمان', () => {
+  assert.match(serp, /const lastHit = immediateFind\(cfg, \{ items: items \}, aiItems\);/, 'حكم النهاية لسه quickFind حصري');
+  assert.match(serp, /const lateHit = immediateFind\(cfg, \{ items: items \}, aiItems\);/, 'مفيش إعادة فحص بعد الجلب الخلفي');
+  assert.match(serp, /rescued: true/, 'الإنقاذ مش متعلّم في الـ payload');
+  // الإنقاذ لازم يجي بعد الـ selfFetch وقبل الـ return النهائي مباشرة
+  const lateAt = serp.indexOf('const lateHit');
+  const finalReturn = serp.indexOf('early: false, settled: settled');
+  const fetchAt = serp.indexOf('selfFetchMore(cfg, items, aiItems)');
+  assert.ok(fetchAt < lateAt && lateAt < finalReturn, 'ترتيب الإنقاذ غلط');
 });
