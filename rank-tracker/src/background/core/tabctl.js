@@ -41,7 +41,67 @@ export function onRemoved(tabId, fn) {
   return () => removeWatchers.get(tabId)?.delete(fn);
 }
 
+/* ---------- نافذة الأداة الخاصة ----------
+   كل تبويبات الفحص بتتفتح في نافذة واحدة تابعة لبروفايل الإضافة (خلفية، من غير
+   سرقة فوكس)، فالـ debug banner وأيّ وميض بيفضلوا معزولين عن نوافذ البروفايلات
+   التانية. useToolWindow:false بترجع السلوك القديم (نافذة المستخدم الحالية). */
+const TOOLWIN_KEY = 'srt/toolWindow';
+let toolWindowId = 0;
+
+async function readPersistedWin() {
+  try { const s = await chrome.storage.session.get(TOOLWIN_KEY); return (s && s[TOOLWIN_KEY]) || 0; } catch (_) { return 0; }
+}
+async function writePersistedWin(id) {
+  try {
+    if (id) { const o = {}; o[TOOLWIN_KEY] = id; await chrome.storage.session.set(o); }
+    else { await chrome.storage.session.remove(TOOLWIN_KEY); }
+  } catch (_) {}
+}
+
+export async function getToolWindow() {
+  if (!toolWindowId) { toolWindowId = await readPersistedWin(); }
+  if (toolWindowId) {
+    try { await chrome.windows.get(toolWindowId); return toolWindowId; }
+    catch (_) { toolWindowId = 0; }
+  }
+  let w = null;
+  try { w = await chrome.windows.create({ url: 'about:blank', focused: false, type: 'normal' }); } catch (_) { w = null; }
+  if (!w) { return 0; }
+  toolWindowId = w.id;
+  await writePersistedWin(toolWindowId);
+  return toolWindowId;
+}
+
+function isToolTabUrl(u) {
+  if (!u || /^about:/i.test(u)) { return true; }
+  return /(^|\.)google\.[a-z.]+/i.test(u);
+}
+
+/** في آخر الجولة: لو النافذة مضايفة بس على تبويبات الأداة → تقفل؛ لو المستخدم حاطط فيها حاجة تخصه → نقفل الفراغات وخلاص */
+export async function closeToolWindowIfEmpty() {
+  if (!toolWindowId) { return false; }
+  const id = toolWindowId;
+  let tabs = [];
+  try { tabs = await chrome.tabs.query({ windowId: id }); } catch (_) { return false; }
+  const closable = tabs.filter((t) => isToolTabUrl(t.url));
+  if (tabs.length && closable.length === tabs.length) {
+    try { await chrome.windows.remove(id); toolWindowId = 0; await writePersistedWin(0); return true; } catch (_) {}
+  }
+  for (const t of closable) {
+    if (!t.url || /^about:/i.test(t.url)) { try { await chrome.tabs.remove(t.id); } catch (_) {} }
+  }
+  return false;
+}
+
 export async function open(url, cfg) {
+  if (!(cfg && cfg.useToolWindow === false)) {
+    const wid = await getToolWindow();
+    if (wid) {
+      const t = await chrome.tabs.create({ url, windowId: wid, active: !!(cfg && cfg.foregroundTab) });
+      await logger.debug('tabs', `فتح تبويب #${t.id} (نافذة الأداة ${wid}): ${url}`);
+      return t;
+    }
+  }
   const tab = await chrome.tabs.create({ url, active: !!(cfg && cfg.foregroundTab) });
   await logger.debug('tabs', `فتح تبويب #${tab.id}: ${url}`);
   return tab;

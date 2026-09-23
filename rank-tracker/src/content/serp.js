@@ -152,7 +152,10 @@
         url: url,
         host: D.url.hostOf(url),
         title: D.textOf(h3),
-        snippet: sn ? D.textOf(sn) : ''
+        snippet: sn ? D.textOf(sn) : '',
+        // نص البلوك كامل (اسم الموقع المعروض/سطر cite/البراند جوه الكرت) —
+        // محرك المطابقة بيركّب item.text أصلاً؛ كده «الاسم باين قدامك» = لقاوة
+        text: blockText(block || a)
       });
     }
     return items;
@@ -669,7 +672,8 @@
     const aiF = await finalizeAi({ items: [], text: '' });
     let aiItems = aiF.items;
     aiText = aiF.text || aiText;
-    const lastHit = quickFind(items, aiItems, cfg);
+    // آخر فرصة: طبقتين — بلوكات محللة + مطابقة نصية مباشرة من الشاشة
+    const lastHit = immediateFind(cfg, { items: items }, aiItems);
     if (lastHit) {
       logEarly(lastHit, items);
       return { items: items, aiItems: aiItems, aiText: aiText, adsCount: 0, early: true, hit: lastHit };
@@ -684,6 +688,12 @@
       if (sf.early) {
         return { items: items, aiItems: aiItems, aiText: aiText, adsCount: 0, early: true, hit: sf.hit, selfFetched: true };
       }
+    }
+    // شبكة الأمان الأخيرة: الجلب الخلفي خلّص والاسم/الدومين باين على الشاشة بس البلوك ما اتحللش؟
+    const lateHit = immediateFind(cfg, { items: items }, aiItems);
+    if (lateHit) {
+      logEarly(lateHit, items);
+      return { items: items, aiItems: aiItems, aiText: aiText, adsCount: 0, early: true, hit: lateHit, rescued: true };
     }
 
     return { items: items, aiItems: aiItems, aiText: aiText, adsCount: 0, early: false, settled: settled };

@@ -468,10 +468,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.1');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.1'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.1'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.1\]/m);
+  assert.equal(man.version, '1.19.2');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.2'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.2'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.2\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -505,4 +505,42 @@ test('v1191: ميجريشن v5 — اللي قاعد على القيم القد�
   assert.match(st2, /cfg\.batchSettleMs, 10\) === 5000/, 'ما بنقلش ثبات العدّاد القديم (5000→6500)');
   assert.match(st2, /cfg\.selfFetchMaxBatches, 10\) === 6/, 'ما بنقلش الدفعات القديمة (6→9)');
   assert.match(st2, /cfg\.selfFetchMore === false/, 'selfFetchMore القديم مقفول للأبد — لازم يتفعّل');
+});
+
+/* ---------------- v1.19.2 — عزلة النافذة + إنقاذ المراكز ---------------- */
+
+test('v1192: تبويبات الأداة في نافذة خاصة خلفية — ولا شد فوكس ولا بوابيص في بروفايلات تانية', () => {
+  const tc = read('src/background/core/tabctl.js');
+  assert.match(tc, /focused: false, type: 'normal'/, 'نافذة الأداة بتتفتح وهي بايظة الفوكس');
+  assert.match(tc, /windowId: wid, active:/, 'open() مش بيربط التبويب بنافذة الأداة');
+  assert.match(tc, /srt\/toolWindow/, 'مفيش بقاء لمعرف النافذة عبر إعادة تشغيل الـ SW');
+  assert.match(tc, /export async function closeToolWindowIfEmpty/, 'مفيش تقفيل تلقائي لنافذة الأداة');
+  const q = read('src/background/core/queue.js');
+  assert.ok(!q.includes('tabctl.focus(tabId)'), 'لسه في شد فوكس وقت فشل الكابتشا');
+  assert.match(q, /useToolWindow: false/, 'الشيت لازم يفتح في نافذة المستخدم');
+  assert.match(q, /closeToolWindowIfEmpty/, 'آخر الجولة مفيش تنظيف للنافذة');
+});
+
+test('v1192: النافذة تتقفل في آخر الجولة بعد الشيت — وقبله لا', () => {
+  const q = read('src/background/core/queue.js');
+  const sweepAt = q.indexOf('await this.sweepExtraTabs(null);');
+  const closeAt = q.indexOf('closeToolWindowIfEmpty');
+  const sheetAt = q.indexOf('writeResultsToSheet();');
+  assert.ok(sweepAt > -1 && closeAt > -1 && sheetAt > -1);
+  assert.ok(closeAt > sheetAt, 'النافذة هتتقفل قبل ما الشيت يتكتب — الشيت هيتمسح');
+});
+
+test('v1192: نص البلوك كامل بيوصل للمحرك — والاسم اللي «باين قدامك» يتسجل', () => {
+  assert.match(serp, /text: blockText\(block \|\| a\)/, 'extractFrom مش بيحمّل item.text');
+  // سلوكي: اسم الموقع موجود بس في سطر الاسم المعروض (مش العنوان/الوصف)
+  const items = [{ url: 'https://x.com/p', host: 'x.com', title: 'عباية كاشمير سوداء', snippet: 'خامة فاخرة', text: 'لمسة · الرياض · توصيل مجاني' }];
+  const cfg = { matchMode: 'name', storeName: 'لمسة' };
+  assert.equal(v119classic.matchItems(items, cfg).found, true, 'الكلاسيك ميفتحش النص المحمّل');
+  assert.equal(v119matchResults(items, cfg).found, true, 'الموديول مش بيفتح النص المحمّل');
+});
+
+test('v1192: شبكة الإنقاذ الأخيرة — مطابقة الشاشة قبل حكم «غير موجود» وبعدين الجلب', () => {
+  assert.match(serp, /const lastHit = immediateFind\(cfg, \{ items: items \}, aiItems\);/, 'حكم النهاية لسه quickFind حصري');
+  assert.match(serp, /const lateHit = immediateFind/, 'مفيش إعادة فحص بعد الجلب الخلفي');
+  assert.match(serp, /rescued: true/, 'الإنقاذ مش متعلّم في الـ payload');
 });

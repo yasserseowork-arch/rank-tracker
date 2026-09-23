@@ -353,6 +353,8 @@ export class QueueEngine {
         if (cfg.sheetUrl && String(cfg.sheetUrl).trim()) {
           await this.writeResultsToSheet();
         }
+        // النافذة الخاصة بالأداة تتقفل أول ما الشغل يخلص (لو مضايفة على تبويباتنا بس)
+        try { await tabctl.closeToolWindowIfEmpty(); } catch (_) {}
       }
     } catch (err) {
       await logger.error('queue', 'خطأ غير متوقع في الحلقة: ' + (err && err.stack ? err.stack : err));
@@ -712,7 +714,7 @@ export class QueueEngine {
       });
       await logger.warn('queue', `فشل حل الكابتشا بعد ${result.attempts} محاولات — إيقاف مؤقت (اختياري من الإعدادات). الحل اليدوي يستأنف تلقائياً، أو اضغط استئناف للتخطي.`);
       await this.notify('فشل حل الكابتشا', `تعذر حل الكابتشا للكلمة: ${kw.keyword}. حلها يدوياً أو اضغط استئناف/تخطي من اللوحة.`);
-      await tabctl.focus(tabId);
+      // مفيش شد فوكس للنافذة — الإشعار جوه اللوحة وزر «روحت للتبويب» اختياريين
 
       if (cfg.autoResumeOnManualSolve) {
         // راقب الحل اليدوي: تغيّر الرابط بعيداً عن /sorry/
@@ -852,7 +854,8 @@ export class QueueEngine {
     try {
       const all = await chrome.tabs.query({});
       tab = all.find((t) => (t.url || '').indexOf('docs.google.com/spreadsheets') !== -1);
-      if (!tab) { tab = await tabctl.open(cfg.sheetUrl, { foregroundTab: true }); }
+      // الشيت بتاعك يتفتح في نافذتك الحالية — مش في نافذة الأداة الخلفية
+      if (!tab) { tab = await tabctl.open(cfg.sheetUrl, { foregroundTab: true, useToolWindow: false }); }
     } catch (_) { return { ok: false, reason: 'tab-error' }; }
     await tabctl.waitForComplete(tab.id, C.LIMITS.TAB_LOAD_TIMEOUT_MS);
     await scheduler.wait(4000, 'sheet-settle');

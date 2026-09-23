@@ -45,6 +45,17 @@ By: Muhammed Yasser المستهدف — Saudi Rank Tracker (Chrome MV3)
 4. (من 1.18.9) ثبّت إضافة [Buster](https://chromewebstore.google.com/detail/buster-captcha-solver-for/hddnkoimebgkeflboejfjmnkbohjgkhh) كإضافة مستقلة — لم تعد مدمجة داخل هذه الأداة؛ الأداة تكتفي بالضغط على زرارها البرتقالي وتكمل بحلها الصوتي المحلي لو لزم.
 5. اضغط أيقونة الإضافة → تفتح **اللوحة الجانبية**.
 
+### 2.1) عزل تام عن بروفايلاتك التانية (اختياري لكن أنصح بيه)
+من 1.19.2 كل تبويبات الفحص بتفتح لوحدها في **نافذة الأداة الخلفية** (مفيش شد فوكس،
+والـ debug banner بيرقص جوه النافذة دي بس). لو فتحِت البروفايل التاني من نفس instance
+كروم («New window with different profile») فالبانر ممكن يلمع ثانية فوق أي نافذة لأن
+العملية مشتركة — للعزل الحقيقي شغّل بروفيل التراكينج بإنستانس منفصل:
+
+```
+chrome.exe --user-data-dir="%LOCALAPPDATA%\ChromeTracking" --no-first-run     (Windows)
+google-chrome --user-data-dir=$HOME/.chrome-tracking                           (Linux)
+```
+
 ## 3) الإعداد الأول (دقيقتان)
 
 | الحقل | القيمة المقترحة |
