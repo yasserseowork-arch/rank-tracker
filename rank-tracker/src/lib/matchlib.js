@@ -111,13 +111,15 @@
     const mode = config.matchMode || 'both';
     const hasDomain = !!String(config.storeDomain || '').trim();
     const names = storeNames(config);
+    // سياسة 1.19.7 — نفس قواعد موديول الخلفية حرفيًا (الدومين أولاً)
+    const nameAllowed = mode === 'name' || (mode === 'both' && !hasDomain);
     const list = Array.isArray(items) ? items : [];
     for (let i = 0; i < list.length; i++) {
       const item = list[i];
       if (hasDomain && (mode === 'domain' || mode === 'both')) {
         if (hostMatches(item.host || '', config.storeDomain)) { return { found: true, position: i + 1, matched: item }; }
       }
-      if (names.length && (mode === 'name' || mode === 'both')) {
+      if (nameAllowed && names.length) {
         const text = (item.title || '') + ' ' + (item.snippet || '') + ' ' + (item.url || '') + ' ' + (item.text || '');
         for (const nm of names) {
           if (nameMatches(text, nm)) { return { found: true, position: i + 1, matched: item }; }

@@ -135,6 +135,9 @@ export function matchResults(items, cfg) {
   const mode = config.matchMode || 'both';
   const hasDomain = !!String(config.storeDomain || '').trim();
   const names = storeNames(config);
+  // سياسة 1.19.7 — الدومين أولاً: الدومين مضبوط؟ الحكم بالدومين بس في both/named-mix،
+  // والاسم يفضل احتياطي لوضع name أو لما الدومين مش محدد (علاج sites بنفس الاسم)
+  const nameAllowed = mode === 'name' || (mode === 'both' && !hasDomain);
   const list = Array.isArray(items) ? items : [];
 
   for (let i = 0; i < list.length; i++) {
@@ -144,7 +147,7 @@ export function matchResults(items, cfg) {
     if (hasDomain && (mode === 'domain' || mode === 'both')) {
       if (hostMatches(item.host || '', config.storeDomain)) { hit = true; reasons.push('domain'); }
     }
-    if (!hit && names.length && (mode === 'name' || mode === 'both')) {
+    if (!hit && nameAllowed && names.length) {
       const text = (item.title || '') + ' ' + (item.snippet || '') + ' ' + (item.url || '') + ' ' + (item.text || '');
       for (const nm of names) {
         if (nameMatches(text, nm)) { hit = true; reasons.push('name'); break; }

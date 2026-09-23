@@ -510,6 +510,8 @@
     if (!txt) { return false; }
     const d = String(cfg.storeDomain || '').trim().toLowerCase();
     if (d && txt.includes(d)) { return true; }
+    // الدومين مضبوط ولسه مش على الشاشة؟ الاسم لوحده ما يفتحش البوابة — نفس سياسة المحرك
+    if (d && String(cfg.matchMode || 'both') !== 'name') { return false; }
     const names = (D.match && D.match.storeNames) ? D.match.storeNames(cfg) : [String(cfg.storeName || '').trim()].filter(Boolean);
     if (names.length && D.match && D.match.normalizeArabic) {
       const hay = D.match.normalizeArabic(txt);
@@ -525,7 +527,8 @@
   function positionByText(cfg, items) {
     const blocks = D.qsa('#search .yuRUbf');
     const d = String(cfg.storeDomain || '').trim().toLowerCase();
-    const namesList = (D.match && D.match.storeNames) ? D.match.storeNames(cfg) : [String(cfg.storeName || '')].filter(Boolean);
+    const nameGate = !d || String(cfg.matchMode || 'both') === 'name';
+    const namesList = nameGate ? ((D.match && D.match.storeNames) ? D.match.storeNames(cfg) : [String(cfg.storeName || '')].filter(Boolean)) : [];
     const nNorms = (D.match && D.match.normalizeArabic) ? namesList.map((x) => D.match.normalizeArabic(x)).filter((x) => x.length >= 3) : [];
     for (let i = 0; i < blocks.length; i++) {
       let t = '';

@@ -894,7 +894,11 @@ export class QueueEngine {
       const dom = String(cfg.storeDomain || '').trim().toLowerCase();
       const label = dom ? dom.split('.')[0] : '';
       const domHit = !!(dom && hay.includes(dom)) || !!(label && label.length >= 6 && hay.includes(label));
-      const nameHit = [cfg.storeName, cfg.storeNameEn]
+      // الدومين مضبوط؟ ذكر الاسم في نص الـ AI ما كفيش لوحده (موقع بنفس الاسم مش ظهورك) —
+      // نفس سياسة 1.19.7: الاسم يحتكم بيه لما الدومين مش موجود أو الوضع name صراحةً
+      const aiMode = String(cfg.matchMode || 'both');
+      const nameAllowed = aiMode === 'name' || (aiMode === 'both' && !dom);
+      const nameHit = nameAllowed && [cfg.storeName, cfg.storeNameEn]
         .map((x) => normalizeArabic(x || ''))
         .some((n) => n.length >= 3 && hayN.includes(n));
       if (nameHit || domHit) {

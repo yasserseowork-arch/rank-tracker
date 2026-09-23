@@ -20,11 +20,13 @@ export async function localCheck(keyword, cfg) {
     if (!cards.length) { cards = Array.from(doc.querySelectorAll('a[href*="/maps/place/"]')); }
     const domain = String(cfg.storeDomain || '').trim().toLowerCase();
     const label = domain ? domain.split('.')[0] : '';
+    // الدومين أولاً (1.19.7): مضبوط؟ كروت الخرائط تتحكم بالدومين بس زي الطبقات التانية
+    const nameAllowed = String(cfg.matchMode || 'both') === 'name' || (String(cfg.matchMode || 'both') === 'both' && !domain);
     for (let i = 0; i < cards.length; i++) {
       const text = cards[i].textContent || '';
-      for (const nm of [cfg.storeName, cfg.storeNameEn].filter((x) => x && String(x).trim())) {
+      if (nameAllowed) { for (const nm of [cfg.storeName, cfg.storeNameEn].filter((x) => x && String(x).trim())) {
         if (nameMatches(text, nm)) { return { found: true, position: i + 1 }; }
-      }
+      } }
       if (label && label.length >= 5 && text.toLowerCase().includes(label)) { return { found: true, position: i + 1 }; }
     }
     return { found: false, position: null };

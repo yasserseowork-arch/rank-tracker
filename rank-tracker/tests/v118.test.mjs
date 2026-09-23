@@ -468,10 +468,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.6');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.6'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.6'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.6\]/m);
+  assert.equal(man.version, '1.19.7');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.7'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.7'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.7\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -530,4 +530,42 @@ test('v1196: شبكة الإنقاذ الأخيرة — فحص الشاشة قب
   const finalReturn = serp.indexOf('early: false, settled: settled');
   const fetchAt = serp.indexOf('selfFetchMore(cfg, items, aiItems)');
   assert.ok(fetchAt < lateAt && lateAt < finalReturn, 'ترتيب الإنقاذ غلط');
+});
+
+/* ---------------- v1.19.7 — الدومين أولاً: مفيش تشابه أسماء بيخرب الترتيب ---------------- */
+
+test('v1197: الدومين محطوط في both؟ موقع تاني بنفس الاسم بيتجاهل تمامًا والترتيب من دويمينك انت', () => {
+  const items = [
+    { url: 'https://rivalsite.com/lamisa', host: 'rivalsite.com', title: 'لمسة - المتجر الأصلي', snippet: 'توصيل', text: 'لمسة · الرياض' },
+    { url: 'https://shop.mystore.com.sa/p', host: 'shop.mystore.com.sa', title: 'عباية كاشمير', snippet: '', text: 'لمسة' },
+  ];
+  const cfg = { matchMode: 'both', storeDomain: 'mystore.com.sa', storeName: 'لمسة', storeNameEn: 'Lamisa Store' };
+  const r = v119matchResults(items, cfg);
+  assert.equal(r.found, true);
+  assert.equal(r.position, 2, 'اتحلت عند منافس بنفس الاسم بدل الدومين — السياسة مش بتطبّق');
+  const c = v119classic.matchItems(items, cfg);
+  assert.equal(c.position, 2, 'الكلاسيك مش ماشي حذاء-بحذاء مع الموديول');
+  // هروب وضع «الاسم بس» لسه متاح للي عايز الاسم صراحة
+  assert.equal(v119classic.matchItems(items, { matchMode: 'name', storeName: 'لمسة', storeDomain: 'mystore.com.sa' }).position, 1);
+  // وبلا دومين؟ الاسم بيحكم زي الأول
+  assert.equal(v119matchResults(items, { matchMode: 'both', storeName: 'لمسة' }).position, 1);
+});
+
+test('v1197: كل الطبقات التانية بتطبق نفس السياسة — الشاشة، الخرائط، وحكم الـ AI النصي', () => {
+  assert.match(serp, /if \(d && String\(cfg\.matchMode \|\| 'both'\) !== 'name'\) \{ return false; \}/,
+    'بوابة bodyHasTarget لسه بتفتح بالاسم لوحده والدامين مضبوط');
+  assert.match(serp, /const nameGate = !d \|\| String\(cfg\.matchMode \|\| 'both'\) === 'name';/,
+    'positionByText لسه بيعدّي ترتيبات منافسين بنفس الاسم');
+  assert.match(read('src/background/core/localcheck.js'), /nameAllowed/, 'كروت الخرائط مش واخدة السياسة');
+  assert.match(queue, /const nameAllowed = aiMode === 'name' \|\| \(aiMode === 'both' && !dom\);/,
+    'حكم الـ AI النصي لسه بيرفع علم ai لذكر اسم منافس بنفس البراند');
+});
+
+test('v1197: مسمّى الوضع اتحدّث في اللوحة والمعاجم — «الدومين بالظبط»', () => {
+  const i18n = read('src/lib/i18n-ui.js');
+  assert.match(i18n, /الدومين بالظبط \(والاسم لو مفيش دومين\)/);
+  assert.match(i18n, /Domain exact \(name only if no domain\)/);
+  assert.ok(!i18n.includes("'الدومين أو الاسم'"), 'لسه المسمّى القديم بيوعِد بالاسم كمان');
+  const html = read('src/sidepanel/side-panel.html');
+  assert.match(html, /<option value="both"[^>]*>الدومين بالظبط/);
 });
