@@ -468,10 +468,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.7');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.7'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.7'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.7\]/m);
+  assert.equal(man.version, '1.19.8');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.8'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.8'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.8\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -568,4 +568,17 @@ test('v1197: مسمّى الوضع اتحدّث في اللوحة والمعاج
   assert.ok(!i18n.includes("'الدومين أو الاسم'"), 'لسه المسمّى القديم بيوعِد بالاسم كمان');
   const html = read('src/sidepanel/side-panel.html');
   assert.match(html, /<option value="both"[^>]*>الدومين بالظبط/);
+});
+
+/* ---------------- v1.19.8 — المراكز من 11 لـ100 ما تضيعش بصمت ---------------- */
+
+test('v1198: الجلب الخلفي اتقوّى — إعادة محاولة، num=20، فك تحويلات، وتوقيت ذاتي-التصحيح', () => {
+  assert.match(serp, /u\.searchParams\.set\('num', '20'\)/, 'صفحة الجلب الخلفي لسه بلا num=20');
+  assert.match(serp, /uu\.searchParams\.get\('q'\) \|\| uu\.searchParams\.get\('url'\)/, 'روابط /url?q= لسه بتسقط النتيجة بدل ما تتفك');
+  assert.ok(serp.includes('سكتة ثم فرصة تانية'), 'الدفعة الفاشلة لسه بتتمحو من غير إعادة محاولة');
+  assert.match(serp, /start = Math\.ceil\(merged\.length \/ 10\) \* 10; \/\/ تصحيح ذاتي/, 'التوقيت لسه +=10 أعمى');
+  assert.match(serp, /selfFetchMaxBatches \|\| 9/, 'الفول-باك لسه 6 دفعات');
+  assert.match(serp, /🛰 الجلب الخلفي/, 'مفيش سجل شفافية للتغطية');
+  assert.ok(!/if \(!resp\.ok\) \{ break; \}/.test(serp), 'لسه break صامت على خطأ HTTP');
+  assert.ok(!/const more = extractFrom\(doc, false\);\s*\n\s*if \(!more\.length\) \{ break; \}/.test(serp), 'لسه break صامت على صفحة فاضية');
 });

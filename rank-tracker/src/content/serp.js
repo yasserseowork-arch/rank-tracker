@@ -187,6 +187,14 @@
       }
     } catch (_) {}
     if (!url && a && a.href && /^https?:/i.test(a.href) && !/\/(goto|url)\?/i.test(a.href)) { url = a.href; }
+    // صفحة ثابتة (مجلوبة خلفيًا) بلا cite؟ الرابط الحقيقي مستور في /url?q= — نفكّه
+    if (!url && a && a.href && /\/goto\/?\?|\/url\/?\?/i.test(a.href)) {
+      try {
+        const uu = new URL(a.href);
+        const q = uu.searchParams.get('q') || uu.searchParams.get('url');
+        if (q && /^https?:/i.test(q)) { url = q; }
+      } catch (_) {}
+    }
     if (!display) { display = url; }
     return { url: url, display: display };
   }
@@ -466,36 +474,63 @@
     const merged = baseItems.slice();
     const seen = new Set(merged.map((i) => i.url));
     let start = Math.ceil(merged.length / 10) * 10;
-    const maxBatches = cfg.selfFetchMaxBatches || 6;
+    const maxBatches = cfg.selfFetchMaxBatches || 9;
+    let attempts = 0;
+
+    // دفعة فاشلة كانت بتمحو تغطية المراكز الغويط بصمت (شكوى: «موقعي في #20 واتسجل مش
+    // موجود») — بقى فيه إعادة محاولة عاقلة للدفعة نفسها، وتوقيت ذاتي-التصحيح
+    async function grab(s) {
+      const u = new URL(href);
+      u.searchParams.set('start', String(s));
+      u.searchParams.set('num', '20'); // للصفحات المجلوبة بس — تاب المستخدم يفضل بلا بصمة
+      const resp0 = await fetch(u.toString(), { credentials: 'include', redirect: 'follow' });
+      if (!resp0.ok) { return { err: 'http-' + resp0.status }; }
+      const html = await resp0.text();
+      if (/\/sorry\/|unusual traffic|حركة مرور غير عادية/i.test(html)) {
+        D.msg.send(C.MSG.SERP_FETCH_BLOCKED, { reason: 'captcha', pageUrl: u.toString() });
+        return { blocked: true };
+      }
+      return { doc: new DOMParser().parseFromString(html, 'text/html') };
+    }
 
     for (let batch = 0; batch < maxBatches && merged.length < expectedNum; batch++) {
-      const u = new URL(href);
-      u.searchParams.set('start', String(start));
-      let doc = null;
-      try {
-        const resp = await fetch(u.toString(), { credentials: 'include', redirect: 'follow' });
-        if (!resp.ok) { break; }
-        const html = await resp.text();
-        if (/\/sorry\/|unusual traffic|حركة مرور غير عادية/i.test(html)) {
-          D.msg.send(C.MSG.SERP_FETCH_BLOCKED, { reason: 'captcha', pageUrl: u.toString() });
-          break;
+      let res = null;
+      try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
+      if (res.blocked) { break; }
+      if (res.err) {
+        await D.sleep(2500); // سكتة ثم فرصة تانية لنفس الدفعة — من غير ما نفقد الباقي
+        try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
+        if (res.err) {
+          attempts++;
+          if (attempts >= 2) { break; }
+          start += 10;
+          continue;
         }
-        doc = new DOMParser().parseFromString(html, 'text/html');
-      } catch (_) { break; }
-      const more = extractFrom(doc, false);
-      if (!more.length) { break; }
+      }
+      const more = extractFrom(res.doc, false);
       let added = 0;
       for (const item of more) {
         if (!seen.has(item.url)) { seen.add(item.url); merged.push(item); added++; }
       }
-      if (!added) { break; }
-      start += 10;
+      if (!more.length || !added) {
+        attempts++;
+        if (attempts >= 2) { break; } // صفحتين ورا بعض فاضيتين = جوجل قافل الجلب، كفاية أدب
+        start += 10;
+        await D.humanSleep(900, 400);
+        continue;
+      }
+      attempts = 0;
+      start = Math.ceil(merged.length / 10) * 10; // تصحيح ذاتي لو الصفحة جت 20 أو 10
       const hit = quickFind(merged, aiItems, cfg);
       if (hit) {
         live.early = true;
         return { items: merged, aiItems: aiItems, early: true, hit: hit, selfFetched: true };
       }
       await D.humanSleep(900, 400);
+    }
+    if (merged.length > baseItems.length || attempts) {
+      D.msg.send(C.MSG.LOG, { level: attempts ? 'warn' : 'info', scope: 'serp',
+        text: `🛰 الجلب الخلفي: التغطية بقت ${merged.length} نتيجة (من ${expectedNum})${attempts ? ' — جوجل قفل الجلب بعد ' + attempts + ' محاولات، وقَفنا بأدب' : ''}` });
     }
     return { items: merged, aiItems: aiItems, early: false, selfFetched: true };
   }
