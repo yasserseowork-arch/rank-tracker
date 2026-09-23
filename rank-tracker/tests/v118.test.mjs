@@ -468,10 +468,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.8');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.8'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.8'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.8\]/m);
+  assert.equal(man.version, '1.19.9');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.9'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.9'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.9\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -557,8 +557,8 @@ test('v1197: كل الطبقات التانية بتطبق نفس السياسة
   assert.match(serp, /const nameGate = !d \|\| String\(cfg\.matchMode \|\| 'both'\) === 'name';/,
     'positionByText لسه بيعدّي ترتيبات منافسين بنفس الاسم');
   assert.match(read('src/background/core/localcheck.js'), /nameAllowed/, 'كروت الخرائط مش واخدة السياسة');
-  assert.match(queue, /const nameAllowed = aiMode === 'name' \|\| \(aiMode === 'both' && !dom\);/,
-    'حكم الـ AI النصي لسه بيرفع علم ai لذكر اسم منافس بنفس البراند');
+  // v1.19.9: طبقة الحضور في الـ AI اتفصلت عن سياسة الترتيب — الاسم العربي/الإنجليزي رجع يحكم
+  assert.ok(!/const nameAllowed/.test(queue), 'حكم الـ AI بقى أي ضلع من الثلاثة (بلا بوابة nameAllowed)');
 });
 
 test('v1197: مسمّى الوضع اتحدّث في اللوحة والمعاجم — «الدومين بالظبط»', () => {
@@ -581,4 +581,38 @@ test('v1198: الجلب الخلفي اتقوّى — إعادة محاولة، 
   assert.match(serp, /🛰 الجلب الخلفي/, 'مفيش سجل شفافية للتغطية');
   assert.ok(!/if \(!resp\.ok\) \{ break; \}/.test(serp), 'لسه break صامت على خطأ HTTP');
   assert.ok(!/const more = extractFrom\(doc, false\);\s*\n\s*if \(!more\.length\) \{ break; \}/.test(serp), 'لسه break صامت على صفحة فاضية');
+});
+
+/* ---------------- v1.19.9 — الحكمين انفصلوا: ترتيب بالدومين، وAI بأي ضلع ---------------- */
+
+test('v1199: حضور AI Overview = دومين أو اسم عربي أو إنجليزي — أي واحدة تكفي', () => {
+  assert.match(queue, /matchResults\(serp\.aiItems, Object\.assign\(\{\}, cfg, \{ matchMode: 'domain' \}\)\)/,
+    'اقتباسات الـ AI مفروض عليها جولة دومين الأول');
+  assert.match(queue, /matchResults\(serp\.aiItems, Object\.assign\(\{\}, cfg, \{ matchMode: 'name' \}\)\)/,
+    'مفيش جولة أسماء احتياطية للاقتباسات');
+  assert.ok(!/const nameAllowed/.test(queue), 'بوابة nameAllowed لسه مكمّمة حكم الـ AI في queue');
+  assert.match(queue, /const nameHit = \[cfg\.storeName, cfg\.storeNameEn\]/,
+    'نص الـ AI مفروض يستشير الاسمين دايماً');
+  // سياسة الترتيب 1.19.7 في مكانها — مفيش ارتداد
+  assert.match(read('src/lib/matchlib.js'), /const nameAllowed = mode === 'name' \|\| \(mode === 'both' && !hasDomain\);/,
+    'مكتبة المطابقة فقدت بوابة الدومين للترتيب!');
+  assert.match(read('src/background/core/match.js'), /const nameAllowed = mode === 'name' \|\| \(mode === 'both' && !hasDomain\);/,
+    'match.js فقد بوابة الدومين للترتيب!');
+});
+
+test('v1199: ضربة AI لوحدها ما بقتش توقف المسح — ترتيبات #20+ ما تسقطش', () => {
+  assert.match(serp, /if \(h && h\.where === 'organic'\)/, 'الانتظار الأول لسه بيخرج على أي ضربة');
+  assert.match(serp, /if \(hit && hit\.where === 'organic'\)/, 'الحلقة العميقة لسه بتخرج على ضربة AI');
+  assert.match(serp, /🤖 الموقع باين في AI Overview — كمّل نزول/, 'مفيش سجل «كمّل بحث عن العضوي»');
+});
+
+test('v1199: الكابتشا العنيدة تأجّل الكلمة لجولة أخيرة بدل ما تلغيها', () => {
+  assert.match(queue, /this\.deferred = this\.deferred \|\| new Set\(\);/, 'مجموعة التأجيل مش محروسة');
+  assert.match(queue, /return 'deferred';/, 'استنفاد الكابتشا لسه بيسجل «غير موجود» على طول');
+  assert.match(queue, /إعادة متأخرة بعد كابتشا/, 'الكلمة المؤجلة مش واخدة نووت مرئية');
+  assert.match(queue, /الجولة المتأخرة/, 'مفيش جولة متأخرة آخر الحلقة');
+  assert.match(queue, /كابتشا حتى بعد الجولة المتأخرة؛ سُجلت كغير موجود/, 'الفشل التاني مفروض يسجل عادي — لا تأجيل أبدي');
+  assert.match(queue, /this\.deferred = new Set\(\); \/\/ جولة جديدة = فرص تأجيل جديدة/, 'رن جديد مش مصفّر التأجيلات');
+  // التوقيت والأمان: فاصل قبل الفرصة الأخيرة
+  assert.match(queue, /await sleep\(4000, this\.signal\(\)\); \/\/ فاصل أمان/, 'مفيش فاصل أمان قبل الجولة المتأخرة');
 });

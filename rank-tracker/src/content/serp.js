@@ -496,7 +496,7 @@
     for (let batch = 0; batch < maxBatches && merged.length < expectedNum; batch++) {
       let res = null;
       try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
-      if (res.blocked) { break; }
+      if (res.blocked) { attempts++; break; }
       if (res.err) {
         await D.sleep(2500); // سكتة ثم فرصة تانية لنفس الدفعة — من غير ما نفقد الباقي
         try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
@@ -606,6 +606,10 @@
   function relock() { scrollLocked = true; lockScroll(); }
   function releaseScroll() { scrollLocked = false; }
 
+  function logger_serp(text) {
+    try { D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: text }); } catch (_) {}
+  }
+
   function logEarly(hit, items) {
     relock();
     const pos = hit && hit.match && hit.match.position ? hit.match.position : (hit && hit.match ? 'AI' : '?');
@@ -625,12 +629,15 @@
 
     // 1) من أول نتيجة بتظهر: فحص مطابقة كل 250ms — الموقع فوق؟ خروج فوري
     //    بدون أي توسيع AI أو تمرير قبل كده (التوسيع بيتأجل لوقت الحكم بعدم وجوده)
+    let aiSeenLogged = false;
     const firstHit = await D.waitFor(() => {
       const snap = collect();
       if (!snap.items.length) { return D.first(C.SEL.serp.noResults); }
       const ai = collectAi();
       const h = immediateFind(cfg, snap, ai.items);
-      if (h) { early = { items: snap.items, ai: ai, hit: h }; }
+      // ضربة «AI» لوحدها مش خروج — ترتيبك العضوي ممكن يكون تحت في #20+؛ بنعلّم وبس
+      if (h && h.where === 'organic') { early = { items: snap.items, ai: ai, hit: h }; }
+      else if (h && !aiSeenLogged) { aiSeenLogged = true; D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: '🤖 الموقع باين في AI Overview — كمّل نزول بحثاً عن الترتيب العضوي' }); }
       return true;
     }, { timeoutMs: Math.min(maxWait, 20000), intervalMs: 250, desc: 'first-result' });
 
@@ -664,10 +671,15 @@
       if (companionActive()) { companionSeen = true; }
 
       const hit = immediateFind(cfg, snapshot, ai.items);
-      if (hit) {
+      if (hit && hit.where === 'organic') {
         logEarly(hit, snapshot.items);
         const aiF = await finalizeAi(ai);
         return { items: snapshot.items, aiItems: aiF.items, aiText: aiF.text || aiText, adsCount: snapshot.adsCount, early: true, hit: hit };
+      }
+      if (hit && !aiSeenLogged) {
+        // AI بس؟ علّم وكَمّل — الخروج البدري هنا بيضيّع ترتيب المراكز البعيدة
+        aiSeenLogged = true;
+        await logger_serp('🤖 الموقع باين في AI Overview — كمّل نزول بحثاً عن الترتيب العضوي');
       }
       // الهدف مش على الشاشة خالص؟ فقط حينها نفك القفل وننزل ندور
       const now = Date.now();

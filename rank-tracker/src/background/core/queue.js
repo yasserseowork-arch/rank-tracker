@@ -27,6 +27,7 @@ export class QueueEngine {
     this.ownedTabs = new Set(); // تبانين فتحتهم الأداة — بنخليها واحدة واحدة بس
     this.pendingRestart = false;
     this.index = 0;
+    this.deferred = new Set(); // كلمات اتأجلت بسبب كابتشا (v1.19.9)
     this.abortController = null;
     this.currentTabId = null;
     this.wireBus();
@@ -223,6 +224,7 @@ export class QueueEngine {
       await state.setKeywords(keywords.map((k) => Object.assign({}, k, { status: C.STATUS.KW.PENDING })));
       this.index = 0;
     }
+    this.deferred = new Set(); // جولة جديدة = فرص تأجيل جديدة
     this.abortController = new AbortController();
     await state.setRun({
       status: C.STATUS.RUN.RUNNING,
@@ -308,7 +310,7 @@ export class QueueEngine {
     }
   }
 
-  /* -------------------------------- الحلقة utama -------------------------------- */
+  /* -------------------------------- الحلقة الرئيسية -------------------------------- */
 
   async loop() {
     if (this.looping) { return; }
@@ -337,6 +339,23 @@ export class QueueEngine {
         await state.setRun({ breakUntil: null, breakTotalMs: null });
         this.broadcast();
       }
+
+      // 🕗 الجولة المتأخرة: اللي اتأجلت من الكابتشا تاخد فرصة أخيرة واحدة بعد ما
+      // القائمة كلها تخلص — والشعلة تبقى هادية (مفيش إعادة تأجيل تانية)
+      if (this.deferred && this.deferred.size) {
+        const deferredIds = Array.from(this.deferred);
+        for (const kwId of deferredIds) {
+          const runNow = await state.getRun();
+          if (runNow.status !== C.STATUS.RUN.RUNNING) { brokeForPause = true; break; }
+          const list2 = await state.getKeywords();
+          const kw2 = list2.find((x) => x.id === kwId);
+          if (!kw2) { this.deferred.delete(kwId); continue; }
+          await sleep(4000, this.signal()); // فاصل أمان بعد دفاية المحاولات السابقة
+          await this.runKeyword(kw2);
+          this.deferred.delete(kwId);
+        }
+      }
+
       const run = await state.getRun();
       const exhausted = this.index >= (await state.getKeywords()).length;
       if (run.status === C.STATUS.RUN.RUNNING && exhausted && !brokeForPause) {
@@ -469,7 +488,16 @@ export class QueueEngine {
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
         // فشل الحل التلقائي: الخطة الاحتياطية — مسح بيانات المتصفح + نفس الكلمة في تاب جديد
         if (captchaClears >= maxClears) {
-          await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — كابتشا حتى بعد محاولة الحل التلقائي ومسح البيانات؛ سُجلت كغير موجود`);
+          this.deferred = this.deferred || new Set();
+          if (!this.deferred.has(kw.id)) {
+            // «إلغاء الكلمة» وهي معلقة كان بيفقد نتائج حقيقية: تأجيل لجولة أخيرة واحدة
+            this.deferred.add(kw.id);
+            await state.updateKeyword(kw.id, { status: C.STATUS.KW.PENDING,
+              note: (kw.note ? kw.note + ' | ' : '') + 'إعادة متأخرة بعد كابتشا' });
+            await logger.warn('queue', `🕗 "${kw.keyword}" — الكابتشا عنيدة؛ الكلمة اتأجلت لجولة أخيرة بعد كل الكلمات (مش ملغاة)`);
+            return 'deferred';
+          }
+          await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — كابتشا حتى بعد الجولة المتأخرة؛ سُجلت كغير موجود`);
           return this.recordExhausted(kw, cfg);
         }
         captchaClears += 1;
@@ -885,20 +913,26 @@ export class QueueEngine {
       match.position = match.matched.counterPos;
       match.viaCounter = true;
     }
-    let aiMatch = (serp.aiItems && serp.aiItems.length) ? matchResults(serp.aiItems, cfg) : { found: false, position: null, matched: null };
+    // حكم الحضور في AI Overview: «أي ضلع من الثلاثة» — الدومين أو الاسم العربي أو الإنجليزي.
+    // دي مش ترتيب (الترتيب يفضل بالدومين بالظبط زي 1.19.7)؛ بنرفع الراية لو جوجل نطّح
+    // اسمك/دومينك جوه البلوك فعلاً — التشابه في الأسماء هنا ثمنه مقبول قدام ضياع الظهور.
+    let aiMatch = { found: false, position: null, matched: null };
+    if (serp.aiItems && serp.aiItems.length) {
+      aiMatch = matchResults(serp.aiItems, Object.assign({}, cfg, { matchMode: 'domain' }));
+      if (!aiMatch.found) {
+        const byName = matchResults(serp.aiItems, Object.assign({}, cfg, { matchMode: 'name' }));
+        if (byName.found) { aiMatch = byName; }
+      }
+    }
     if (!aiMatch.found && serp.aiText) {
-      // صارم: «AI» يتكتب بس لو الموقع مذكور فعلاً جوه نص الـ AI Overview —
-      // تطابق مباشر للاسم الكامل أو الدومين، بدون المطابقات المرنة اللي كانت بتعطي نتايج كاذبة
+      // صارم زي الأول: الكلام لازم يكون جوه نص الـ AI Overview نفسه —
+      // تطابق مباشر للاسمين أو الدومين، من غير مطابقات مرنة بتدي نتايج كاذبة
       const hay = String(serp.aiText).toLowerCase();
       const hayN = normalizeArabic(serp.aiText);
       const dom = String(cfg.storeDomain || '').trim().toLowerCase();
       const label = dom ? dom.split('.')[0] : '';
       const domHit = !!(dom && hay.includes(dom)) || !!(label && label.length >= 6 && hay.includes(label));
-      // الدومين مضبوط؟ ذكر الاسم في نص الـ AI ما كفيش لوحده (موقع بنفس الاسم مش ظهورك) —
-      // نفس سياسة 1.19.7: الاسم يحتكم بيه لما الدومين مش موجود أو الوضع name صراحةً
-      const aiMode = String(cfg.matchMode || 'both');
-      const nameAllowed = aiMode === 'name' || (aiMode === 'both' && !dom);
-      const nameHit = nameAllowed && [cfg.storeName, cfg.storeNameEn]
+      const nameHit = [cfg.storeName, cfg.storeNameEn]
         .map((x) => normalizeArabic(x || ''))
         .some((n) => n.length >= 3 && hayN.includes(n));
       if (nameHit || domHit) {
