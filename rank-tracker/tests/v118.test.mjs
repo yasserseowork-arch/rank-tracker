@@ -349,10 +349,13 @@ test('v1.18.7: شريط الاستراحة التفاعلي — بيظهر بس 
   assert.match(i18nUi, /kwCountTip: 'اتفحص \{d\} من \{t\} كلمات'/, 'تلميح العدّاد الدقيق ناقص');
 });
 
-test('v1.18.7: تاب واحد حتى بعد ما الشغل يخلص — الأداة بتقفل تابها وهي الواصل', () => {
-  const finish = queue.slice(queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'"), queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'") + 420);
-  assert.match(finish, /sweepExtraTabs\(null\)/, 'تاب الشغل لسه قايم بعد الانتهاء');
-  assert.match(finish, /workerTabId: null, ownedTabIds: \[\]/, 'حالة التاب مش بتنضف');
+test('v1.19.3 (بدل سياسة 1.18.7): الشغل يخلص والتاب والنافذة يفضلوا مفتوحين — لا تقفيل ولا مسح حالة', () => {
+  const finish = queue.slice(queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'"), queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'") + 480);
+  assert.ok(!/sweepExtraTabs\(null\)/.test(finish), 'لسه بتقفل تاب الشغل في الآخر');
+  assert.ok(!/workerTabId: null/.test(finish), 'لسه بتمسح حالة التاب — الجولة الجاية هتفتح تاب جديد بدل الاستخدام');
+  assert.ok(!/closeToolWindowIfEmpty/.test(finish), 'لسه بتقفل نافذة الأداة في آخر الجولة');
+  // ...ومفيش أي نداء لـ closeToolWindowIfEmpty في الملف كله (الدالة سايبينها للاستخدام اليدوي المستقبلي)
+  assert.ok(!queue.includes('await tabctl.closeToolWindowIfEmpty()'), 'لسه فيه قفل نافذة آلي');
 });
 
 /* ---------------- v1.18.8 — حارس الصيغة الشامل (علة الفاصلة القاتلة) ---------------- */
@@ -468,10 +471,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.2');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.2'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.2'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.2\]/m);
+  assert.equal(man.version, '1.19.3');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.3'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.3'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.3\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -518,16 +521,15 @@ test('v1192: تبويبات الأداة في نافذة خاصة خلفية —
   const q = read('src/background/core/queue.js');
   assert.ok(!q.includes('tabctl.focus(tabId)'), 'لسه في شد فوكس وقت فشل الكابتشا');
   assert.match(q, /useToolWindow: false/, 'الشيت لازم يفتح في نافذة المستخدم');
-  assert.match(q, /closeToolWindowIfEmpty/, 'آخر الجولة مفيش تنظيف للنافذة');
+  assert.ok(!/closeToolWindowIfEmpty/.test(q), 'الدالة exists في tabctl بس queue ما بيناديش' + ' — آخر الجولة بلاش قفل (طلب 1.19.3)');
 });
 
-test('v1192: النافذة تتقفل في آخر الجولة بعد الشيت — وقبله لا', () => {
+test('v1192/1193: نافذة الأداة سايبينها مفتوحة بعد الشيت — القفل التلقائي اتسحب نهائياً', () => {
   const q = read('src/background/core/queue.js');
-  const sweepAt = q.indexOf('await this.sweepExtraTabs(null);');
-  const closeAt = q.indexOf('closeToolWindowIfEmpty');
   const sheetAt = q.indexOf('writeResultsToSheet();');
-  assert.ok(sweepAt > -1 && closeAt > -1 && sheetAt > -1);
-  assert.ok(closeAt > sheetAt, 'النافذة هتتقفل قبل ما الشيت يتكتب — الشيت هيتمسح');
+  assert.ok(sheetAt > -1);
+  assert.ok(!q.includes('closeToolWindowIfEmpty('), 'قفل النافذة لسه مستورد/منادى في queue');
+  assert.ok(!/tabctl\.closeToolWindowIfEmpty/.test(q));
 });
 
 test('v1192: نص البلوك كامل بيوصل للمحرك — والاسم اللي «باين قدامك» يتسجل', () => {

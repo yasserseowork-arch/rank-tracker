@@ -342,19 +342,13 @@ export class QueueEngine {
       if (run.status === C.STATUS.RUN.RUNNING && exhausted && !brokeForPause) {
         await state.setRun({ status: C.STATUS.RUN.IDLE, finishedAt: Date.now(), captcha: null });
         await logger.info('queue', '✅ انتهى فحص كل الكلمات المفتاحية');
-        // «تاب واحد بس»: خلص الشغل → مفيش سبب يفضل أي تاب مفتوح للأداة
-        try {
-          await this.sweepExtraTabs(null);
-          await state.setRun({ workerTabId: null, ownedTabIds: [] });
-          this.currentTabId = null;
-        } catch (_) {}
+        // «سيبها مفتوحة» (طلب 1.19.3): التاب والنافذة يفضلوا زي ما هم —
+        // آخر نتيجة قدامك، والجولة الجاية تستعمل نفس التاب على طول (reuseTab)
         // كتابة النتائج في الشيت إن فُعّلت (مثل السيناريو اليدوي)
         const cfg = await state.getConfig();
         if (cfg.sheetUrl && String(cfg.sheetUrl).trim()) {
           await this.writeResultsToSheet();
         }
-        // النافذة الخاصة بالأداة تتقفل أول ما الشغل يخلص (لو مضايفة على تبويباتنا بس)
-        try { await tabctl.closeToolWindowIfEmpty(); } catch (_) {}
       }
     } catch (err) {
       await logger.error('queue', 'خطأ غير متوقع في الحلقة: ' + (err && err.stack ? err.stack : err));
