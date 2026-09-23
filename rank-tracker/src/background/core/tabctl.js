@@ -41,31 +41,8 @@ export function onRemoved(tabId, fn) {
   return () => removeWatchers.get(tabId)?.delete(fn);
 }
 
-/* ---------- «على نفس التاب» (طلب v1.19.4) ----------
-   مفيش نافذة جديدة ولا تاب فضاي: لو في نافذة الأدَاة تاب نشيط على صفحة ويب،
-   بنفتح فيه (tabs.update). اللوحة بتسجّل نافذتها في srt/panelWindow عند التشغيل.
-   noAdopt:true (زي كتابة الشيت) = تاب جديد دايمًا. مفيش أي chrome.windows.create
-   ولا windows.update — صفر شد فوكس بطبيعة الحال. */
-export async function panelWindow() {
-  try { const s = await chrome.storage.session.get('srt/panelWindow'); return (s && s['srt/panelWindow']) || 0; } catch (_) { return 0; }
-}
-
 export async function open(url, cfg) {
-  const wid = await panelWindow();
-  if (!(cfg && cfg.noAdopt) && wid) {
-    let active = null;
-    try { const r = await chrome.tabs.query({ windowId: wid, active: true }); active = r && r[0]; } catch (_) { active = null; }
-    if (active && active.id && /^https?:/i.test(active.url || '')) {
-      try {
-        await chrome.tabs.update(active.id, { url, active: true });
-        await logger.debug('tabs', `فتحت في نفس التاب #${active.id}: ${url}`);
-        return active;
-      } catch (_) { /* التاب مات للتو — هنفتح واحد جديد */ }
-    }
-  }
-  const opts = { url, active: true };
-  if (wid && !(cfg && cfg.noAdopt === 'anywhere')) { opts.windowId = wid; }
-  const tab = await chrome.tabs.create(opts);
+  const tab = await chrome.tabs.create({ url, active: !!(cfg && cfg.foregroundTab) });
   await logger.debug('tabs', `فتح تبويب #${tab.id}: ${url}`);
   return tab;
 }
@@ -139,4 +116,10 @@ export async function isAlive(tabId) {
   try { const tab = await chrome.tabs.get(tabId); return !!tab; } catch (_) { return false; }
 }
 
-/* ملاحظة v1.19.4: دالة focus() اتشالت مع مصدرها — مفيش أي لمس لفوكس النوافذ في الأداة كلها */
+export async function focus(tabId) {
+  try {
+    await chrome.tabs.update(tabId, { active: true });
+    const tab = await chrome.tabs.get(tabId);
+    if (tab && tab.windowId) { await chrome.windows.update(tab.windowId, { focused: true }); }
+  } catch (_) {}
+}

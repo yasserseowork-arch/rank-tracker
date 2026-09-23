@@ -84,10 +84,9 @@ export class QueueEngine {
       }
       if (typeof message.type !== 'string' || message.type.indexOf('srt/') !== 0) { return; }
 
-      /* ---- حارس الديبراجر (v1.19.5: رجع بطلب المستخدم، لكن مقنّن) ----
-         الضغطة الموثوقة (isTrusted) ضرورية لزرار Buster وقت الكابتشا، بس البانر بيزعج —
-         الحل: الاتصال بيتم للحظة الضغطة الواحدة وعلى تابات الشغل بتاعة الأداة بس
-         (workerTabId/ownedTabIds)، وفصل فوري بعد كل ضغطة. مفيش attach مستمر أبدًا. */
+      /* ---- حارس الديبراجر: بانر «started debugging» يظهر في تابات الشغل بس ----
+         (طلب: «الـdebuging يظهر في الحساب اللي عليه الأداة بس، مش كل حسابات جوجل»).
+         الآلة نفسها حرة زي 1.18.6 — التقييد على الضغطة الموثوقة (debugger) فقط. */
       const tabOf = sender && sender.tab ? sender.tab.id : null;
       const inScope = async () => {
         if (!tabOf) { return false; }
@@ -125,7 +124,6 @@ export class QueueEngine {
         })();
         return true;
       }
-
       const known = [C.MSG.SERP_STARTED, C.MSG.SERP_PARSED, C.MSG.SERP_ERROR, C.MSG.SERP_FETCH_BLOCKED, C.MSG.CAPTCHA_PRESENT, C.MSG.CAPTCHA_CHECKED,
         C.MSG.CAPTCHA_ATTEMPT, C.MSG.CAPTCHA_ERROR, C.MSG.CAPTCHA_CHALLENGE_CLOSED, C.MSG.CAPTCHA_FAILED,
         C.MSG.CAPTCHA_BUSTER_NOT_FOUND, C.MSG.KEEPALIVE, C.MSG.LOG];
@@ -344,8 +342,12 @@ export class QueueEngine {
       if (run.status === C.STATUS.RUN.RUNNING && exhausted && !brokeForPause) {
         await state.setRun({ status: C.STATUS.RUN.IDLE, finishedAt: Date.now(), captcha: null });
         await logger.info('queue', '✅ انتهى فحص كل الكلمات المفتاحية');
-        // «سيبها مفتوحة» (طلب 1.19.3): التاب والنافذة يفضلوا زي ما هم —
-        // آخر نتيجة قدامك، والجولة الجاية تستعمل نفس التاب على طول (reuseTab)
+        // «تاب واحد بس»: خلص الشغل → مفيش سبب يفضل أي تاب مفتوح للأداة
+        try {
+          await this.sweepExtraTabs(null);
+          await state.setRun({ workerTabId: null, ownedTabIds: [] });
+          this.currentTabId = null;
+        } catch (_) {}
         // كتابة النتائج في الشيت إن فُعّلت (مثل السيناريو اليدوي)
         const cfg = await state.getConfig();
         if (cfg.sheetUrl && String(cfg.sheetUrl).trim()) {
@@ -536,14 +538,6 @@ export class QueueEngine {
         return this.recordExhausted(kw, cfg);
       }
 
-      // 6-أ) تايم‌آوت؟ التاب يمكن متجمّد (throttling للنافذة الخلفية) مش ميت:
-      //        رسالة بتوقّظه فوراً ونستناه يلمّ نفسه — قبل ما نرمي في ريفرش.
-      //        ده بيطفي «عاصفة الريلود» اللي بتحصل لما المسح يتأخر في الخلفية.
-      if (first.type === 'timeout') {
-        const wake = await this.waitSerp(tab.id, 15000, signal, { wake: true });
-        if (wake && (wake.total > 0 || wake.noResults)) { return this.recordResult(kw, wake, cfg, 'wake-rescue'); }
-      }
-
       const kind = first.type === 'timeout' ? 'تايم‌آوت بدون نتائج' : 'تحليل فاضي/ناقص';
       await logger.warn('queue', `🔄 مشكلة (${kind}) — ريفرش ومحاولة نفس الكلمة "${kw.keyword}" (${attempt + 1}/${maxRetries})`);
       await this.notify('🔄 إعادة محاولة', `مشكلة (${kind}) — ريفرش ونفس الكلمة: ${kw.keyword}`);
@@ -643,10 +637,7 @@ export class QueueEngine {
     });
   }
 
-  waitSerp(tabId, timeoutMs, signal, opts) {
-    // opts.wake: نبعت SERP_CMD_STATE — حتى لو تايمرات التبويب مجمّدة، وصول الرسالة
-    // بيوقّظ الـ content script فوراً فيكمل هو ويرسل SERP_PARSED
-    if (opts && opts.wake) { try { chrome.tabs.sendMessage(tabId, { type: C.MSG.SERP_CMD_STATE }).catch(() => {}); } catch (_) {} }
+  waitSerp(tabId, timeoutMs, signal) {
     return new Promise((resolve) => {
       let settled = false;
       const offs = [];
@@ -721,7 +712,7 @@ export class QueueEngine {
       });
       await logger.warn('queue', `فشل حل الكابتشا بعد ${result.attempts} محاولات — إيقاف مؤقت (اختياري من الإعدادات). الحل اليدوي يستأنف تلقائياً، أو اضغط استئناف للتخطي.`);
       await this.notify('فشل حل الكابتشا', `تعذر حل الكابتشا للكلمة: ${kw.keyword}. حلها يدوياً أو اضغط استئناف/تخطي من اللوحة.`);
-      // مفيش شد فوكس للنافذة — الإشعار جوه اللوحة وزر «روحت للتبويب» اختياريين
+      await tabctl.focus(tabId);
 
       if (cfg.autoResumeOnManualSolve) {
         // راقب الحل اليدوي: تغيّر الرابط بعيداً عن /sorry/
@@ -861,8 +852,7 @@ export class QueueEngine {
     try {
       const all = await chrome.tabs.query({});
       tab = all.find((t) => (t.url || '').indexOf('docs.google.com/spreadsheets') !== -1);
-      // الشيت يتفتح في تاب جديد دايمًا (noAdopt) — مينفعش نهدم صفحة المستخدم الحالية بيه
-      if (!tab) { tab = await tabctl.open(cfg.sheetUrl, { foregroundTab: true, noAdopt: true }); }
+      if (!tab) { tab = await tabctl.open(cfg.sheetUrl, { foregroundTab: true }); }
     } catch (_) { return { ok: false, reason: 'tab-error' }; }
     await tabctl.waitForComplete(tab.id, C.LIMITS.TAB_LOAD_TIMEOUT_MS);
     await scheduler.wait(4000, 'sheet-settle');

@@ -321,12 +321,10 @@ test('v1.18.9: جزء الكابتشا رجع لزي ما كان في 1.18.6 ب�
   assert.match(cap, /finish\(null\), timeoutMs \|\| 60000\)/, 'تايم اوت النسخ مش رجع لـ60 ثانية');
   assert.match(queue, /message\.id === 'transcribeAudio' && message\.audioUrl/, 'الخلفية ما بتردّش على خدمة النسخ باسمها الأصلي');
   assert.match(queue, /solver\.transcribeAudioUrl/, 'الخلفية ما بتناديش محرك النسخ بتاعنا');
-  // v1.19.5: الديبراجر رجع بطلب المستخدم — بس مؤمّن: حارس تابات الشغل + لحظات attach وفصل فوري
+  // حارس الديبراجر لسه مقيّد بتابات الشغل (طلب Debug banner مش لكل الحسابات)
   const coord = queue.slice(queue.indexOf('if (coordMsg &&'), queue.indexOf('if (coordMsg &&') + 900);
   assert.match(coord, /if \(!\(await inScope\(\)\)\) \{ sendResponse\(\{ ok: false, error: 'out-of-scope' \}\); return; \}/,
-    'الضغطة الموثوقة بتتبعت لأي تبويب — لازم حارس تابات الشغل بس');
-  const man1195 = JSON.parse(read('manifest.json'));
-  assert.ok(man1195.permissions.includes('debugger'), 'صلاحية debugger مش رجعت');
+    'الضغطة الموثوقة (debugger) لسه بتتبعت لأي تبويب — banner هيظهر في حسابات تانية');
   // مفيش pollings غريبة في أول الملف زي 1.18.7
   assert.ok(!/scopePoll/.test(cap), 'لسه في polling النطاق في التبويب');
 });
@@ -351,13 +349,10 @@ test('v1.18.7: شريط الاستراحة التفاعلي — بيظهر بس 
   assert.match(i18nUi, /kwCountTip: 'اتفحص \{d\} من \{t\} كلمات'/, 'تلميح العدّاد الدقيق ناقص');
 });
 
-test('v1.19.3 (بدل سياسة 1.18.7): الشغل يخلص والتاب والنافذة يفضلوا مفتوحين — لا تقفيل ولا مسح حالة', () => {
-  const finish = queue.slice(queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'"), queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'") + 480);
-  assert.ok(!/sweepExtraTabs\(null\)/.test(finish), 'لسه بتقفل تاب الشغل في الآخر');
-  assert.ok(!/workerTabId: null/.test(finish), 'لسه بتمسح حالة التاب — الجولة الجاية هتفتح تاب جديد بدل الاستخدام');
-  assert.ok(!/closeToolWindowIfEmpty/.test(finish), 'لسه بتقفل نافذة الأداة في آخر الجولة');
-  // ...ومفيش أي نداء لـ closeToolWindowIfEmpty في الملف كله (الدالة سايبينها للاستخدام اليدوي المستقبلي)
-  assert.ok(!queue.includes('await tabctl.closeToolWindowIfEmpty()'), 'لسه فيه قفل نافذة آلي');
+test('v1.18.7: تاب واحد حتى بعد ما الشغل يخلص — الأداة بتقفل تابها وهي الواصل', () => {
+  const finish = queue.slice(queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'"), queue.indexOf("'✅ انتهى فحص كل الكلمات المفتاحية'") + 420);
+  assert.match(finish, /sweepExtraTabs\(null\)/, 'تاب الشغل لسه قايم بعد الانتهاء');
+  assert.match(finish, /workerTabId: null, ownedTabIds: \[\]/, 'حالة التاب مش بتنضف');
 });
 
 /* ---------------- v1.18.8 — حارس الصيغة الشامل (علة الفاصلة القاتلة) ---------------- */
@@ -473,10 +468,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.5');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.5'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.5'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.5\]/m);
+  assert.equal(man.version, '1.19.1');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.1'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.1'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.1\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -510,70 +505,4 @@ test('v1191: ميجريشن v5 — اللي قاعد على القيم القد�
   assert.match(st2, /cfg\.batchSettleMs, 10\) === 5000/, 'ما بنقلش ثبات العدّاد القديم (5000→6500)');
   assert.match(st2, /cfg\.selfFetchMaxBatches, 10\) === 6/, 'ما بنقلش الدفعات القديمة (6→9)');
   assert.match(st2, /cfg\.selfFetchMore === false/, 'selfFetchMore القديم مقفول للأبد — لازم يتفعّل');
-});
-
-/* ---------------- v1.19.5 — ديبراجر مؤمّن: ضغطة لحظية وفصل فوري ---------------- */
-
-test('v1195: الديبراجر رجع مقنّن — attach/detach في نفس البلوك، والضغطة البشرية الكاملة', () => {
-  const q = read('src/background/core/queue.js');
-  const at = q.indexOf('if (coordMsg &&');
-  assert.ok(at > -1, 'بلوك الضغطة بالإحداثيات مش موجود');
-  const block = q.slice(at, at + 1600);
-  assert.match(block, /chrome\.debugger\.attach\(target, '1\.3'\)/, 'مفيش attach');
-  assert.match(block, /'mouseMoved'/, 'مفيش حركة ماوس بشرية قبل الضغط');
-  assert.match(block, /'mousePressed'/, 'مفيش ضغط');
-  assert.match(block, /'mouseReleased'/, 'مفيش فك');
-  assert.match(block, /chrome\.debugger\.detach\(target\)/, 'مفيش فصل فوري بعد الضغطة — البانر هيفضل');
-  assert.match(block, /setTimeout\(r, 150\)\);\s*\n\s*try \{ await chrome\.debugger\.detach/, 'الفصل لازم يكون آخر حاجة بعد راحة قصيرة');
-  // مفيش أي نداء debugger تاني بره البلوك ده (ولا في أي محتوى تاني)
-  const stripped = q.replace(block, '');
-  assert.ok(!/chrome\.debugger\./.test(stripped), 'في نداءات debugger بره بلوك الضغطة — ممنوع');
-  for (const f of ['src/content/captcha.js', 'src/background/core/captcha-orchestrator.js', 'src/background/core/solver.js', 'src/content/serp.js']) {
-    assert.ok(!/chrome\.debugger\./.test(read(f)), f + ': بينادي debugger من غير الحارس — ممنوع');
-  }
-});
-
-
-test('v1194: الشغل على نفس التاب — مفيش نافذة جديدة ولا stub ولا شد فوكس (تجربة 1.19.2 اتسحبت)', () => {
-  const tc = read('src/background/core/tabctl.js');
-  assert.ok(!/chrome\.windows\.create\(/.test(tc), 'tabctl لسه بيفتح نافذة جديدة');
-  assert.ok(!/windows\.update\(/.test(tc), 'tabctl لسه بيلمس فوكس النوافذ');
-  assert.match(tc, /srt\/panelWindow/, 'مفيش تسجيل لنافذة اللوحة');
-  assert.match(tc, /tabs\.update\(active\.id, \{ url, active: true \}\)/, 'مفيش فتح في نفس التاب النشيط');
-  assert.match(tc, /cfg\.noAdopt/, 'وضع التاب الجديد (الشيت) مش محترم — صفحة المستخدم ممكن تتهدم');
-  const q = read('src/background/core/queue.js');
-  assert.ok(!q.includes('tabctl.focus(tabId)'), 'لسه في شد فوكس وقت فشل الكابتشا');
-  assert.match(q, /noAdopt: true/, 'كتابة الشيت لسه adopt — لا');
-  const panel = read('src/sidepanel/side-panel.js');
-  assert.match(panel, /'srt\/panelWindow'/, 'اللوحة بتسجلش النافذة عند التشغيل');
-});
-
-test('v1194: إيقاظ قبل الريفرش — التاب المتجمد ياخد فرصته، وعاصفة الريلود تتلغي', () => {
-  assert.match(queue, /waitSerp\(tab\.id, 15000, signal, \{ wake: true \}\)/, 'لسه بتقفز لريفراش على التايم‌آوت');
-  assert.match(queue, /'wake-rescue'/, 'إنقاذ الإيقاظ مش بيتسجل كمصدر نتيجة');
-  assert.match(queue, /opts\.wake/, 'waitSerp مش بيبعت رسالة الإيقاظ');
-  assert.match(queue, /SERP_CMD_STATE \}\)\.catch\(\(\) => \{\}\)/, 'رسالة الإيقاظ مش مبتلعة الأخطاء (تاب ميت ما يرميش استثناء)');
-});
-
-test('v1192/1193: نافذة الأداة سايبينها مفتوحة بعد الشيت — القفل التلقائي اتسحب نهائياً', () => {
-  const q = read('src/background/core/queue.js');
-  const sheetAt = q.indexOf('writeResultsToSheet();');
-  assert.ok(sheetAt > -1);
-  assert.ok(!q.includes('closeToolWindowIfEmpty('), 'قفل النافذة لسه مستورد/منادى في queue');
-  assert.ok(!/tabctl\.closeToolWindowIfEmpty/.test(q));
-});
-
-test('v1192: نص البلوك كامل بيوصل للمحرك — والاسم اللي «باين قدامك» يتسجل', () => {
-  assert.match(serp, /text: blockText\(block \|\| a\)/, 'extractFrom مش بيحمّل item.text');
-  // سلوكي: اسم الموقع موجود بس في سطر الاسم المعروض (مش العنوان/الوصف)
-  const items = [{ url: 'https://x.com/p', host: 'x.com', title: 'عباية كاشمير سوداء', snippet: 'خامة فاخرة', text: 'لمسة · الرياض · توصيل مجاني' }];
-  const cfg = { matchMode: 'name', storeName: 'لمسة' };
-  assert.equal(v119classic.matchItems(items, cfg).found, true, 'الكلاسيك ميفتحش النص المحمّل');
-  assert.equal(v119matchResults(items, cfg).found, true, 'الموديول مش بيفتح النص المحمّل');
-});
-
-test('v1192: شبكة الإنقاذ الأخيرة — مطابقة الشاشة قبل حكم «غير موجود» وبعدين الجلب', () => {
-  assert.match(serp, /const lastHit = immediateFind\(cfg, \{ items: items \}, aiItems\);/, 'حكم النهاية لسه quickFind حصري');
-  assert.match(serp, /const lateHit = immediateFind/, 'مفيش إعادة فحص بعد الجلب الخلفي');
-  assert.match(serp, /rescued: true/, 'الإنقاذ مش متعلّم في الـ payload');
 });
