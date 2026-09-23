@@ -548,6 +548,8 @@ async function main() {
   bindConfigForm();
 
   $('btnStart').addEventListener('click', async () => {
+    // v1.19.4: الأداة بتشتغل على نفس التاب النشيط في النافذة دي — نسجّل المعرّف للخلفية
+    try { const w = await chrome.windows.getCurrent(); await chrome.storage.session.set({ 'srt/panelWindow': w.id }); } catch (_) {}
     const res = await send(C.MSG.QUEUE_START);
     if (res && res.ok === false && res.reason === 'no-target') { alert(t('errNoTarget')); }
     if (res && res.ok === false && res.reason === 'no-keywords') { alert(t('errNoKeywords')); }
