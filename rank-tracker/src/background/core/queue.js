@@ -84,12 +84,47 @@ export class QueueEngine {
       }
       if (typeof message.type !== 'string' || message.type.indexOf('srt/') !== 0) { return; }
 
-      // v1.19.4 — chrome.debugger اتشال بالكلية (طلب المستخدم): بانر «started debugging»
-      // بيغطي كل نوافذ العملية المشتركة لو فتحت بروفايل تاني من نفس instance، والمنفعة
-      // كانت طبقة تأمين بس: الضغطات الأساسية بتتم DOM-ستايل جوه إطارات reCAPTCHA (الصلاحيات
-      // تغطيها)، ولو فشل أي ضغط بننزل لمسار النسخ الصوتي (محرك Whisper بتاعنا) أوتوماتيك.
+      /* ---- حارس الديبراجر (v1.19.5: رجع بطلب المستخدم، لكن مقنّن) ----
+         الضغطة الموثوقة (isTrusted) ضرورية لزرار Buster وقت الكابتشا، بس البانر بيزعج —
+         الحل: الاتصال بيتم للحظة الضغطة الواحدة وعلى تابات الشغل بتاعة الأداة بس
+         (workerTabId/ownedTabIds)، وفصل فوري بعد كل ضغطة. مفيش attach مستمر أبدًا. */
+      const tabOf = sender && sender.tab ? sender.tab.id : null;
+      const inScope = async () => {
+        if (!tabOf) { return false; }
+        const run = await state.getRun();
+        if (run.workerTabId === tabOf) { return true; }
+        return Array.isArray(run.ownedTabIds) && run.ownedTabIds.indexOf(tabOf) !== -1;
+      };
+
+      // ضغطة ماوس حقيقية بالإحداثيات (موثوقة — isTrusted) من داخل تبويب:
+      // بتوصل من إطار التحدي (زرار Buster) أو من الصفحة العليا (زرار التحقق الصوتي)
       const coordMsg = message.type === C.MSG.CAPTCHA_COORD_CLICK || message.type === C.MSG.CAPTCHA_VERIFY_CLICK;
-      if (coordMsg) { sendResponse({ ok: false, error: 'debugger-removed' }); return false; }
+      if (coordMsg && sender.tab && sender.tab.id) {
+        const tabId = sender.tab.id;
+        (async () => {
+          // تبويب شخصي للمستخدم؟ مفيش debugger ولا ضغطات — خالص (الحارس الأول)
+          if (!(await inScope())) { sendResponse({ ok: false, error: 'out-of-scope' }); return; }
+          try {
+            const target = { tabId: tabId };
+            try { await chrome.debugger.attach(target, '1.3'); } catch (_) { /* مثبت بالفعل */ }
+            const evt = { x: message.x, y: message.y, button: 'left', clickCount: 1 };
+            // رتم بشري: الماوس يتحرك الأول ويستقر، ضغط، سكتة قصيرة، فك — وراحة قبل الـdetach
+            await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: message.x, y: message.y, button: 'none' });
+            await new Promise((r) => setTimeout(r, 140));
+            await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', Object.assign({ type: 'mousePressed' }, evt));
+            await new Promise((r) => setTimeout(r, 90));
+            await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', Object.assign({ type: 'mouseReleased' }, evt));
+            await new Promise((r) => setTimeout(r, 150));
+            try { await chrome.debugger.detach(target); } catch (_) {}
+            await logger.info('captcha', `🖱 ضغطة حقيقية بالإحداثيات (${message.x},${message.y}) — ${message.stage || ''}`);
+            sendResponse({ ok: true });
+          } catch (err) {
+            await logger.warn('captcha', `تعذرت الضغطة بالإحداثيات: ${err && err.message}`);
+            sendResponse({ ok: false, error: String(err && err.message) });
+          }
+        })();
+        return true;
+      }
 
       const known = [C.MSG.SERP_STARTED, C.MSG.SERP_PARSED, C.MSG.SERP_ERROR, C.MSG.SERP_FETCH_BLOCKED, C.MSG.CAPTCHA_PRESENT, C.MSG.CAPTCHA_CHECKED,
         C.MSG.CAPTCHA_ATTEMPT, C.MSG.CAPTCHA_ERROR, C.MSG.CAPTCHA_CHALLENGE_CLOSED, C.MSG.CAPTCHA_FAILED,

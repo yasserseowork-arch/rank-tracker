@@ -145,7 +145,7 @@ test('كابتشا v1.18.3: رتم صبر حقيقي — رسم قبل فعل، 
   assert.match(cap, /Date\.now\(\) - S\.challengeSince < 3500/, 'ما فيش 3.5 ثانية settle قبل أي ضغطة');
   assert.match(cap, /75000/, 'نافذة صبر Buster لسه 50 ثانية — محتاجة 75 (النافذة الصغيرة بتكبر على مهل)');
   assert.match(cap, /er\.width < 14 \|\| er\.height < 14/, 'مفيش حرس حجم الزر قبل الضغط');
-  assert.ok(!/chrome\.debugger\./.test(queue), 'في نداء chrome.debugger فعلًا في queue — البانر هيروح');
+  assert.match(queue, /'mouseMoved'/, 'الضغطة الحقيقية بتحصل من غير حركة ماوس أولًا — مش بشرية');
   assert.match(orch, /await sleep\(2500, signal\)/, 'المنسّق بيغزر على الصفحة — لازم نفس 2.5 ثانية أولًا');
   assert.match(orch, /waitChallenge\(tabId, 20000\)/, 'بوابة ظهور التحدي لسه 12 ثانية — بطأها');
 });
@@ -321,13 +321,12 @@ test('v1.18.9: جزء الكابتشا رجع لزي ما كان في 1.18.6 ب�
   assert.match(cap, /finish\(null\), timeoutMs \|\| 60000\)/, 'تايم اوت النسخ مش رجع لـ60 ثانية');
   assert.match(queue, /message\.id === 'transcribeAudio' && message\.audioUrl/, 'الخلفية ما بتردّش على خدمة النسخ باسمها الأصلي');
   assert.match(queue, /solver\.transcribeAudioUrl/, 'الخلفية ما بتناديش محرك النسخ بتاعنا');
-  // v1.19.4: chrome.debuger اتشال خالص — مفيش بانر في أي نافذة، والصلاحية نفسها مش موجودة
-  assert.ok(!/chrome\.debugger\./.test(queue), 'queue.js لسه بينادي chrome.debugger فعلًا');
-  assert.match(queue, /if \(coordMsg\) \{ sendResponse\(\{ ok: false, error: 'debugger-removed' \}\); return false; \}/,
-    'طلب الضغطة بالإحداثيات مش بيرفض بأدب');
-  assert.ok(!/chrome\.debugger/.test(cap), 'captcha.js لسه بيشير للديبراجر في نصه');
-  const man1194 = JSON.parse(read('manifest.json'));
-  assert.ok(!man1194.permissions.includes('debugger'), 'صلاحية debugger لسه في الـ manifest');
+  // v1.19.5: الديبراجر رجع بطلب المستخدم — بس مؤمّن: حارس تابات الشغل + لحظات attach وفصل فوري
+  const coord = queue.slice(queue.indexOf('if (coordMsg &&'), queue.indexOf('if (coordMsg &&') + 900);
+  assert.match(coord, /if \(!\(await inScope\(\)\)\) \{ sendResponse\(\{ ok: false, error: 'out-of-scope' \}\); return; \}/,
+    'الضغطة الموثوقة بتتبعت لأي تبويب — لازم حارس تابات الشغل بس');
+  const man1195 = JSON.parse(read('manifest.json'));
+  assert.ok(man1195.permissions.includes('debugger'), 'صلاحية debugger مش رجعت');
   // مفيش pollings غريبة في أول الملف زي 1.18.7
   assert.ok(!/scopePoll/.test(cap), 'لسه في polling النطاق في التبويب');
 });
@@ -474,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.4');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.4'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.4'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.4\]/m);
+  assert.equal(man.version, '1.19.5');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.5'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.5'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.5\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -513,7 +512,27 @@ test('v1191: ميجريشن v5 — اللي قاعد على القيم القد�
   assert.match(st2, /cfg\.selfFetchMore === false/, 'selfFetchMore القديم مقفول للأبد — لازم يتفعّل');
 });
 
-/* ---------------- v1.19.2 — عزلة النافذة + إنقاذ المراكز ---------------- */
+/* ---------------- v1.19.5 — ديبراجر مؤمّن: ضغطة لحظية وفصل فوري ---------------- */
+
+test('v1195: الديبراجر رجع مقنّن — attach/detach في نفس البلوك، والضغطة البشرية الكاملة', () => {
+  const q = read('src/background/core/queue.js');
+  const at = q.indexOf('if (coordMsg &&');
+  assert.ok(at > -1, 'بلوك الضغطة بالإحداثيات مش موجود');
+  const block = q.slice(at, at + 1600);
+  assert.match(block, /chrome\.debugger\.attach\(target, '1\.3'\)/, 'مفيش attach');
+  assert.match(block, /'mouseMoved'/, 'مفيش حركة ماوس بشرية قبل الضغط');
+  assert.match(block, /'mousePressed'/, 'مفيش ضغط');
+  assert.match(block, /'mouseReleased'/, 'مفيش فك');
+  assert.match(block, /chrome\.debugger\.detach\(target\)/, 'مفيش فصل فوري بعد الضغطة — البانر هيفضل');
+  assert.match(block, /setTimeout\(r, 150\)\);\s*\n\s*try \{ await chrome\.debugger\.detach/, 'الفصل لازم يكون آخر حاجة بعد راحة قصيرة');
+  // مفيش أي نداء debugger تاني بره البلوك ده (ولا في أي محتوى تاني)
+  const stripped = q.replace(block, '');
+  assert.ok(!/chrome\.debugger\./.test(stripped), 'في نداءات debugger بره بلوك الضغطة — ممنوع');
+  for (const f of ['src/content/captcha.js', 'src/background/core/captcha-orchestrator.js', 'src/background/core/solver.js', 'src/content/serp.js']) {
+    assert.ok(!/chrome\.debugger\./.test(read(f)), f + ': بينادي debugger من غير الحارس — ممنوع');
+  }
+});
+
 
 test('v1194: الشغل على نفس التاب — مفيش نافذة جديدة ولا stub ولا شد فوكس (تجربة 1.19.2 اتسحبت)', () => {
   const tc = read('src/background/core/tabctl.js');
