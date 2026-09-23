@@ -1,10 +1,11 @@
 /**
  * serp.js — Content Script لصفحة نتائج جوجل — الإصدار 1.4
  *
- * الإصدار 1.9 — الاستيل القديم الموثوق + قاعدة الـ20 ثانية:
+ * الإصدار 1.9 — الاستيل القديم الموثوق + قاعدة الـ20 ثانية «الواعية بالتقدّم»:
  *  ─ نزول تدريجي بشري + مسح حي بعد كل دفعة نتائج.
  *  ─ أول ما الموقع يظهر بين النتائج → ترتيب فوري وانتقال فوري للكلمة التالية.
- *  ─ 20 ثانية بدون ترتيب = الكلمة تُسجل غير موجود (-) وننتقل.
+ *  ─ العدّاد بيقولف (نتائج جديدة بتنزل)؟ كمّل لحد سقف scanHardCapMs — المراكز
+ *    الغويط (#30-#100) ما تتقطعش في النص. العدّاد واقع 20 ثانية؟ غير موجود (-) وننتقل.
  *  ─ AI Overview: توسيع بالنقر المزدوج + مطابقة بالاسم العربي.
  *  ─ صفحات الخطأ → ريفرش تلقائي، و403/404 → تاب جديد. نص كابتشا → إعلان دوري.
  */
@@ -646,8 +647,11 @@
         settled = true;
         break;
       }
-      // قاعدة الـ20 ثانية: مفيش ترتيب بعدها = نكتفي بالمقروء
-      if (now - started >= maxWait) { break; }
+      // قاعدة الـ20 ثانية «واعية بالتقدّم»: العدّاد واقف؟ خلاص نكتفي بالمقروء.
+      // لسه النتيجة الجديدة بتيجي واحدة ورا التانية؟ كمّل نزول لحد السقف
+      // (scanHardCapMs — 60 ثانية افتراضياً) — عشان المراكز الغويط (#30-#100) متضيعش.
+      if (count === lastCount && now - started >= maxWait) { break; }
+      if (now - started >= Math.max(cfg.scanHardCapMs || 60000, maxWait)) { break; }
 
       releaseScroll();
       const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 400;
@@ -671,7 +675,9 @@
       return { items: items, aiItems: aiItems, aiText: aiText, adsCount: 0, early: true, hit: lastHit };
     }
 
-    if (cfg.selfFetchMore !== false && !companionSeen && items.length < expectedNum) {
+    if (cfg.selfFetchMore !== false && items.length < expectedNum) {
+      // حتى لو الـ companion كان شغال: لو وقفنا عند نص الطريق، الدفعات الجاية تتجيب
+      // من ورا الظهر (dedupe بالـ URL مضمون — مفيش تكرار بيغيّر الترتيب)
       const sf = await selfFetchMore(cfg, items, aiItems);
       items = sf.items;
       aiItems = sf.aiItems || aiItems;

@@ -144,12 +144,12 @@
     MAX_LOGS: 400,
     MAX_HISTORY_PER_KEYWORD: 40,
     TAB_LOAD_TIMEOUT_MS: 45000,
-    SERP_AFTER_CAPTCHA_MS: 60000,
+    SERP_AFTER_CAPTCHA_MS: 100000, // المسح الواعي-بالتقدّم + التوسيع + الدفعات الخلفية ممكن ياخدوا 90+
     KEEPALIVE_INTERVAL_MS: 15000,
     HEARTBEAT_INTERVAL_MS: 20000
   };
 
-  const VERSION = '1.19.0';
+  const VERSION = '1.19.1';
 
   global.SRT_C = { VERSION, MSG, STATUS, SEL, LIMITS };
 })(globalThis);

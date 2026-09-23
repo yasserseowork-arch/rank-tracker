@@ -159,3 +159,13 @@ test('v119 setConfig: تطبيع الاسم العربي والإنجليزي �
   const cleared = await state.setConfig({ storeNameEn: '' });
   assert.equal(cleared.storeNameEn, '');
 });
+
+test('v1191 DEFAULTS: السقف والجلب الخلفي والقيم الجديدة في الإعدادات المدموجة', async () => {
+  const cfg = await state.setConfig({});
+  assert.equal(cfg.scanHardCapMs, 60000);
+  assert.equal(cfg.selfFetchMore, true);
+  assert.equal(cfg.selfFetchMaxBatches, 9);
+  assert.equal(cfg.batchSettleMs, 6500);
+  const num = await state.setConfig({ scanHardCapMs: '45000' });
+  assert.equal(num.scanHardCapMs, 45000);
+});

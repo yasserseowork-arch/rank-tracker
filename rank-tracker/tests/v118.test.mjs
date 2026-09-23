@@ -160,7 +160,7 @@ test('كابتشا v1.18.3: حلّ؟ مفيش مسح مستعجل — نتحرى
 
 test('الإعدادات v1.18.3: المحاولتين إجباريًا + المسح بقى كل 8 مع الاستراحة', () => {
   assert.match(st, /clearEveryN:\s*8,/, 'ديفولت المسح لسه 10');
-  assert.match(st, /export const SCHEMA_VERSION = 4;/, 'مفيش نسخة ميجريشن جديدة');
+  assert.match(st, /export const SCHEMA_VERSION = 5;/, 'مفيش نسخة ميجريشن جديدة');
   assert.match(st, /att > 2\) \{ patchCfg\.captchaMaxAttempts = 2; \}/, 'مفيش إجبار المحاولتين على الإعدادات القديمة');
   assert.match(st, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'المسح القديم (10) مش بيتحوّل للـ8');
 });
@@ -466,10 +466,43 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
   assert.match(serp, /storeNameEn/, 'hasTarget في serp لازم يشمل الإنجليزي');
 });
 
-test('v119: النسخة 1.19.0 في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
+test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.0');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.0'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.0'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.0\]/m);
+  assert.equal(man.version, '1.19.1');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.1'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.1'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.1\]/m);
+});
+
+/* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
+
+test('v1191: المسح بقى واعي بالتقدّم — قاعدة 20 ثانية تتطبق بس لما العدّاد يقف، وتحت سقف صلب', () => {
+  assert.match(serp, /count === lastCount && now - started >= maxWait/, 'قاعدة 20 ثانية لسه بقطع أحوائي');
+  assert.match(serp, /scanHardCapMs \|\| 60000/, 'مفيش سقف صلب للتقدّم (scanHardCapMs)');
+  assert.ok(!/if \(now - started >= maxWait\) \{ break; \}/.test(serp), 'لسه في القطع الأحوائي القديم');
+});
+
+test('v1191: الجلب الخلفي بقى افتراضي وبلا بوابة companion، وسقفه 9 دفعات', () => {
+  const st2 = read('src/background/core/state.js');
+  assert.match(st2, /selfFetchMore: true/, 'selfFetchMore لسه متقفل افتراضياً');
+  assert.match(st2, /selfFetchMaxBatches: 9/, 'الدفعات الخلفية لسه 6 — مش كافية لـ100');
+  assert.match(st2, /scanHardCapMs: 60000/, 'مفيش السقف في الـ DEFAULTS');
+  assert.match(st2, /batchSettleMs: 6500/, 'ثبات العدّاد لسه 5000 — بيسبق الشبكات البطيئة');
+  assert.match(st2, /'scanHardCapMs'/, 'السقف مش في قائمة التطهير الرقمي');
+  assert.match(serp, /selfFetchMore !== false && items\.length < expectedNum/, 'بوابة companion لسه بتقطم الجلب الخلفي');
+  assert.ok(!/selfFetchMore !== false && !companionSeen/.test(serp), 'لازم الجلب يشتغل حتى لو companion كان شغال ووقف');
+});
+
+test('v1191: الطابور يستنى على مقاس السقف الجديد — مش 20+8، ومسار ما بعد الكابتشا 100 ثانية', () => {
+  assert.match(read('src/lib/constants.js'), /SERP_AFTER_CAPTCHA_MS: 100000/, 'انتظار ما بعد الكابتشا لسه 60 ثانية — هيسبق المسح الطويل');
+  assert.match(queue, /Math\.max\(cfg\.scanHardCapMs \|\| 60000, cfg\.maxWaitResultsMs \|\| 20000\) \+ 40000/,
+    'سباق الانتظار في queue لسه بيقطع المسح الطويل');
+});
+
+test('v1191: ميجريشن v5 — اللي قاعد على القيم القديمة يتنقل للصبر الجديد من غير ما ندهس تعديلاته', () => {
+  const st2 = read('src/background/core/state.js');
+  assert.match(st2, /if \(version < 5\) \{/, 'مفيش بلوك ميجريشن v5');
+  assert.match(st2, /cfg\.batchSettleMs, 10\) === 5000/, 'ما بنقلش ثبات العدّاد القديم (5000→6500)');
+  assert.match(st2, /cfg\.selfFetchMaxBatches, 10\) === 6/, 'ما بنقلش الدفعات القديمة (6→9)');
+  assert.match(st2, /cfg\.selfFetchMore === false/, 'selfFetchMore القديم مقفول للأبد — لازم يتفعّل');
 });

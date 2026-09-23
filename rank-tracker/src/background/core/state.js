@@ -5,7 +5,7 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const K = {
   CONFIG: 'srt.config',
@@ -43,11 +43,12 @@ export const DEFAULT_CONFIG = {
   // قراءة SERP
   settleMs: 1800,
   scrollStepMs: 320,
-  maxWaitResultsMs: 20000,      // قاعدة الـ20 ثانية: بعدها الكلمة تُعتبر غير موجودة
-  batchSettleMs: 5000,          // ثبات العدّاد هذه المدة = الأداة المساعدة خلّصت
+  maxWaitResultsMs: 20000,      // قاعدة الـ20 ثانية: تُطبَّق بس لما العدّاد يوقف (مفيش نتائج جديدة)
+  scanHardCapMs: 60000,         // السقف المطلق لمسح كلمة واحدة — لسه فيه تقدم؟ كمّل لحد هنا
+  batchSettleMs: 6500,          // ثبات العدّاد هذه المدة = الأداة المساعدة خلّصت (أصبر على الشبكات البطيئة)
   rescanMs: 1800,               // فترة المسح الدوري (مثل Ctrl+F متكرر)
-  selfFetchMore: false,         // جلب خلفي اختياري (متقدم) — الافتراضي الاعتماد على التمرير
-  selfFetchMaxBatches: 6,       // أقصى دفعات خلفية (كل دفعة 10 نتائج)
+  selfFetchMore: true,          // الجلب الخلفي بقى افتراضي: مكمّل الدفعات لحد expectedNum لو السكرول وقف نص الطريق
+  selfFetchMaxBatches: 9,       // أقصى دفعات خلفية (كل دفعة 10 نتائج) — تغطي 20→100
   maxChecksPerDay: 150,         // سقف يومي احتراماً لقواعد جوجل (0 = بدون سقف)
   errorReloadMax: 2,            // ريفرش تلقائي لصفحات الخطأ (عدد المرات)
   keywordRetries: 5,            // أي مشكلة؟ ريفرش + نفس الكلمة — عدد مرات إعادة المحاولة
@@ -114,7 +115,7 @@ export async function setConfig(patch) {
   const numeric = ['num', 'delayMs', 'jitterMs', 'cooldownEvery', 'cooldownMs', 'cooldownJitterMs',
     'captchaMaxAttempts', 'captchaAttemptTimeoutMs', 'captchaGapMs', 'captchaRefreshRetries', 'keywordRetries', 'captchaClearRetries', 'settleMs', 'scrollStepMs',
     'maxWaitResultsMs', 'maxHistoryPerKeyword', 'maxChecksPerDay', 'errorReloadMax',
-    'batchSettleMs', 'rescanMs', 'selfFetchMaxBatches', 'clearEveryN'];
+    'batchSettleMs', 'rescanMs', 'selfFetchMaxBatches', 'scanHardCapMs', 'clearEveryN'];
   for (const key of numeric) {
     const n = parseInt(next[key], 10);
     if (!Number.isNaN(n)) { next[key] = n; }
@@ -315,6 +316,16 @@ export async function migrate() {
     if (!Number.isFinite(att) || att > 2) { patchCfg.captchaMaxAttempts = 2; }
     const cn = parseInt(cfg.clearEveryN, 10);
     if (!Number.isFinite(cn) || cn === 10) { patchCfg.clearEveryN = 8; }
+    if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
+  }
+  if (version < 5) {
+    // صبر المراكز الغويط: اللي راضي بقيم 1.19 الافتراضية ياخد القيم الجديدة؛
+    // أي قيمة عدّلها المستخدم بنفسه بتفضل زي ما هي (ماعدا selfFetchMore — الأمان بقى افتراضي)
+    const cfg = await getConfig();
+    const patchCfg = {};
+    if (parseInt(cfg.batchSettleMs, 10) === 5000) { patchCfg.batchSettleMs = 6500; }
+    if (parseInt(cfg.selfFetchMaxBatches, 10) === 6) { patchCfg.selfFetchMaxBatches = 9; }
+    if (cfg.selfFetchMore === false) { patchCfg.selfFetchMore = true; }
     if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
   }
   await local.set(K.SCHEMA, SCHEMA_VERSION);

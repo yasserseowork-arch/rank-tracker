@@ -571,7 +571,8 @@ export class QueueEngine {
   }
 
   raceSerpOrCaptcha(tabId, cfg, signal) {
-    const timeout = (cfg.maxWaitResultsMs || 20000) + 8000;
+    // الانتظار على مقاس المسح «الواعي بالتقدّم»: السقف 60 ثانية + هامش، مش 20 + 8
+    const timeout = Math.max(cfg.scanHardCapMs || 60000, cfg.maxWaitResultsMs || 20000) + 40000;
     return new Promise((resolve) => {
       let settled = false;
       let errorReloaded = false;
