@@ -27,7 +27,7 @@ export class QueueEngine {
     this.ownedTabs = new Set(); // تبانين فتحتهم الأداة — بنخليها واحدة واحدة بس
     this.pendingRestart = false;
     this.index = 0;
-    this.deferred = new Set(); // كلمات اتأجلت بسبب كابتشا (v1.19.9)
+    this.captchaHeat = 0; // 🌡 حرارة الكابتشا (v1.20.0)
     this.abortController = null;
     this.currentTabId = null;
     this.wireBus();
@@ -224,7 +224,7 @@ export class QueueEngine {
       await state.setKeywords(keywords.map((k) => Object.assign({}, k, { status: C.STATUS.KW.PENDING })));
       this.index = 0;
     }
-    this.deferred = new Set(); // جولة جديدة = فرص تأجيل جديدة
+    this.captchaHeat = 0; // رن جديد = حرارة صفر
     this.abortController = new AbortController();
     await state.setRun({
       status: C.STATUS.RUN.RUNNING,
@@ -331,6 +331,14 @@ export class QueueEngine {
         this.index += 1;
         const processed = this.index;
         const cfg = await state.getConfig();
+        // 🌡 صبر إضافي بعد حرارة الكابتشا: كلمتين واطفين كابتشا؟ الاستراحة الجاية أطول —
+        // ده أنفع ألف مرة من إننا نطارد جوجل بسرعة ونجيب /sorry/ تاني
+        if (this.captchaHeat >= 2) {
+          const extra = 12000 + Math.floor(Math.random() * 9000);
+          await logger.info('queue', `🌡 تبريد ${Math.round(extra / 1000)} ثانية إضافية بعد كابتشا متكررة — والصبر أمان`);
+          await sleep(extra, this.signal());
+          this.captchaHeat -= 1;
+        }
         await scheduler.cooldownIfNeeded(cfg, processed, this.signal(), async (ms) => {
           // عدّاد حي في اللوحة: وقت بداية الاستراحة ومداها — الشريط يظهر بس وإنت في واحدة بجد
           await state.setRun({ breakUntil: Date.now() + ms, breakTotalMs: ms });
@@ -338,22 +346,6 @@ export class QueueEngine {
         });
         await state.setRun({ breakUntil: null, breakTotalMs: null });
         this.broadcast();
-      }
-
-      // 🕗 الجولة المتأخرة: اللي اتأجلت من الكابتشا تاخد فرصة أخيرة واحدة بعد ما
-      // القائمة كلها تخلص — والشعلة تبقى هادية (مفيش إعادة تأجيل تانية)
-      if (this.deferred && this.deferred.size) {
-        const deferredIds = Array.from(this.deferred);
-        for (const kwId of deferredIds) {
-          const runNow = await state.getRun();
-          if (runNow.status !== C.STATUS.RUN.RUNNING) { brokeForPause = true; break; }
-          const list2 = await state.getKeywords();
-          const kw2 = list2.find((x) => x.id === kwId);
-          if (!kw2) { this.deferred.delete(kwId); continue; }
-          await sleep(4000, this.signal()); // فاصل أمان بعد دفاية المحاولات السابقة
-          await this.runKeyword(kw2);
-          this.deferred.delete(kwId);
-        }
       }
 
       const run = await state.getRun();
@@ -478,6 +470,7 @@ export class QueueEngine {
 
       // 4) كابتشا ظهرت؟ أولاً: حل تلقائي بالكامل (Buster مدمجة + إطار التحدي ذاتي القيادة) — بدون أي تدخل منك
       if (first.type === 'captcha') {
+        this.captchaHeat = (this.captchaHeat || 0) + 1; // 🌡 عدّاد الحرارة: يبرّد الاستراحة الجاية
         const solveStartedAt = Date.now();
         const auto = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
         if (auto === 'solved') {
@@ -488,17 +481,31 @@ export class QueueEngine {
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
         // فشل الحل التلقائي: الخطة الاحتياطية — مسح بيانات المتصفح + نفس الكلمة في تاب جديد
         if (captchaClears >= maxClears) {
-          this.deferred = this.deferred || new Set();
-          if (!this.deferred.has(kw.id)) {
-            // «إلغاء الكلمة» وهي معلقة كان بيفقد نتائج حقيقية: تأجيل لجولة أخيرة واحدة
-            this.deferred.add(kw.id);
-            await state.updateKeyword(kw.id, { status: C.STATUS.KW.PENDING,
-              note: (kw.note ? kw.note + ' | ' : '') + 'إعادة متأخرة بعد كابتشا' });
-            await logger.warn('queue', `🕗 "${kw.keyword}" — الكابتشا عنيدة؛ الكلمة اتأجلت لجولة أخيرة بعد كل الكلمات (مش ملغاة)`);
-            return 'deferred';
+          // 🧘 مفيش إلغاء ومفيش تأجيل لآخر الجولة (طلب 1.20.0): بنستنى الكابتشا تتحل
+          // بأي طريقة — Buster متأخر أو حل يدوي من المستخدم — وبعدها بنفسّر نفس الكلمة من الأول
+          await logger.warn('queue', `🧘 "${kw.keyword}" — الكابتشا لسه معلقة؛ هنستنى تتحل ونعيد نفس الكلمة تاني (مش ملغاة)`);
+          const cleared = await this.waitCaptchaCleared(tab.id, kw, signal);
+          if (cleared === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+          if (cleared === 'tab-closed') {
+            let re = null;
+            try { re = await tabctl.open(url, Object.assign({}, cfg, { foregroundTab: true })); } catch (_) {}
+            if (!re) {
+              await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — التاب اتقفل ومفيش بديل؛ سُجلت كغير موجود`);
+              return this.recordExhausted(kw, cfg);
+            }
+            this.ownedTabs.add(re.id);
+            await tabctl.close(tab.id);
+            this.ownedTabs.delete(tab.id);
+            tab = re;
+            await state.setRun({ workerTabId: re.id });
+            this.currentTabId = re.id;
+            await this.sweepExtraTabs(re.id);
+          } else {
+            await tabctl.reload(tab.id); // صفحة نتائج جديدة بعد الحل — مسح نضيف من الصفر
           }
-          await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — كابتشا حتى بعد الجولة المتأخرة؛ سُجلت كغير موجود`);
-          return this.recordExhausted(kw, cfg);
+          captchaClears = 0; // الكابتشا اتحلت: الكلمة تاخد ميزانيتها الكاملة من جديد
+          navigatedViaBox = false;
+          continue; // ونعيد نفس الكلمة تاني هنا، مش آخر الجولة
         }
         captchaClears += 1;
         // 😴 تبريد قصير قبل أي إعادة: صفحة /sorry/ بتحتاج وقت بسيط يهدى فيه العدّاد،
@@ -559,6 +566,17 @@ export class QueueEngine {
             if (h2 === 'solved') {
               const s2 = await this.collectAfterSolve(tab.id, solveStartedAt2, signal);
               if (s2) { return this.recordResult(kw, s2, cfg, 'new-tab-captcha'); }
+            } else if (h2 === 'failed') {
+              // 🧘 آخر محاولة كمان ما تستسلمش للكابتشا: نستنى تتحل ونسحب نفس المكان
+              const clearedL = await this.waitCaptchaCleared(tab.id, kw, signal);
+              if (clearedL === 'cleared') {
+                const r3 = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
+                if (r3.type === 'serp' && (r3.payload.total > 0 || r3.payload.noResults)) {
+                  return this.recordResult(kw, r3.payload, cfg, 'after-patience');
+                }
+              } else if (clearedL === 'aborted') {
+                return this.abortKeyword(kw, 'paused');
+              }
             }
           }
         } catch (_) {}
@@ -600,7 +618,10 @@ export class QueueEngine {
 
   raceSerpOrCaptcha(tabId, cfg, signal) {
     // الانتظار على مقاس المسح «الواعي بالتقدّم»: السقف 60 ثانية + هامش، مش 20 + 8
-    const timeout = Math.max(cfg.scanHardCapMs || 60000, cfg.maxWaitResultsMs || 20000) + 40000;
+    // v1.20.0: الجلب الخلفي (دفعات +إعادة المحاولات) بيزوّد المسح ~40 ثانية — الهامش القديم كان
+    // بيقتل مسح سليم في آخر ثانية منه ويرميه في «timeout» = كلمة متفوَّتة بلا سبب
+    const cap = Math.max(cfg.scanHardCapMs || 60000, cfg.maxWaitResultsMs || 20000);
+    const timeout = cap + (cfg.selfFetchMore === false ? 40000 : 90000);
     return new Promise((resolve) => {
       let settled = false;
       let errorReloaded = false;
@@ -793,6 +814,50 @@ export class QueueEngine {
       if (this.ownedTabs) { this.ownedTabs.delete(stale); }
     }
     try { await state.setRun({ ownedTabIds: [keepTabId] }); } catch (_) {}
+  }
+
+  /**
+   * 🧘 صبر الكابتشا (v1.20.0): الكلمة ما تتلغاش ولا تتأجل — بنفضل نستنى صفحة التحدي
+   * تروح ( Buster متأخر، أو المستخدم حلّها بإيده) وكل ما تتحل بنرجع «cleared»
+   * والندّاء بيعيد نفس الكلمة من الأول. 'tab-closed' لو التاب اتقفل، 'aborted' للإيقاف.
+   * مفيش سقف زمني — الاستئناف/الإيقاف اليدوي بس بيوقفوا الانتظار (الوعى الأساسي: الأداة ما توقفش).
+   */
+  async waitCaptchaCleared(tabId, kw, signal) {
+    await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since: Date.now() } });
+    await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
+    this.broadcast();
+    let waited = 0;
+    let flag = 'waiting'; // 'clear' | 'closed'
+    const offs = [];
+    try {
+      offs.push(bus.on(C.MSG.CAPTCHA_CHECKED, (m) => { if (m.tabId === tabId) { flag = 'clear'; } }));
+      offs.push(tabctl.onRemoved(tabId, () => { flag = 'closed'; }));
+      for (;;) {
+        if (signal && signal.aborted) { return 'aborted'; }
+        await sleep(4000, signal);
+        if (flag === 'clear') { break; }
+        if (flag === 'closed') { return 'tab-closed'; }
+        let u = null;
+        try { u = await tabctl.getUrl(tabId); } catch (_) { return 'tab-closed'; }
+        if (u == null || u === '') { return 'tab-closed'; }
+        if (!urlkit.isSorry(u)) { break; } // الصفحة بقت نتائج عادية = اتحلت
+        waited += 4;
+        if (waited % 48 === 44) {
+          await this.notify('🧩 لسه مستنّيين', `"${kw.keyword}" — الكابتشا معلقة؛ بنستنى تتحل (Buster أو يدويًا من التاب نفسه) وهنعيد نفس الكلمة تاني — مفيش إلغاء`);
+          await logger.info('queue', `🧘 لسه مستنّي الكابتشا تتحل (${waited} ثانية) علشان "${kw.keyword}"`);
+        }
+      }
+    } finally {
+      offs.forEach((off) => { try { if (off) off(); } catch (_) {} }); }
+    // بعد التحل: تهدئة قصيرة — الرجوع الفوري لجوجل = صفعة جديدة (نفس درس 1.18.6)
+    const cool = 10000 + Math.floor(Math.random() * 8000);
+    await logger.info('queue', `✅ الكابتشا اتحلت — تهدئة ${Math.round(cool / 1000)} ثانية وإعادة نفس الكلمة "${kw.keyword}"`);
+    await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+    await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+    this.broadcast();
+    await sleep(cool, signal);
+    if (signal && signal.aborted) { return 'aborted'; }
+    return 'cleared';
   }
 
   waitManualSolve(tabId, cfg, signal) {

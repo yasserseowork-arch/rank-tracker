@@ -9,7 +9,9 @@ window.BT = window.BT || {};
     aborter: null,
     settings: { target: 100, enabled: true, autoLoad: true, pureMode: false },
     lastHref: location.href,
-    concurrency: 6
+    concurrency: 6,
+    chaser: null,   // v1.2.0: auto-finish timer — doesn't wait for a human scroll
+    fetching: false
   };
   window.BT.state = state;
 })();

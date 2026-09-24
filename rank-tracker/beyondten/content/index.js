@@ -92,10 +92,7 @@
     let total = countNative() + countInjected();
     if (total >= state.settings.target) { setStatus(`Done · ${total} results`); cleanup(); return; }
 
-    const needPages = Math.ceil(state.settings.target / 10);
-    const curIdx = currentPageIndex();
-    const allTargets = [];
-    for (let i = 0; i < needPages; i++) if (i !== curIdx && !state.loadedPages.has(i)) allTargets.push(i);
+    const allTargets = remainingTargets();
 
     // Split Targets: "first load 1-2 page at once, then 3-7 on arrival"
     // Phase 1: Immediate (Next 1 page)
@@ -107,17 +104,61 @@
     if (immediateTargets.length > 0) {
       await fetchBatch(immediateTargets, ctx, signal);
     }
+    // v1.2.0: If page 2 already arrived and the total is missing (broken scroll), don't rely on the sensor —
+    // the chaser is a safety net for the two paths together
+    if (remainingTargets().length && !state.chaser) startChaser(signal);
 
-    // --- PHASE 2: DEFERRED (SCROLL TRIGGER) ---
+    // --- PHASE 2: DEFERRED (SCROLL TRIGGER + v1.2.0 auto-chaser) ---
     if (deferredTargets.length > 0) {
       // Create a sensor at the bottom
       setStatus(`Loaded ${countNative() + countInjected()}. Scroll for more...`);
       setupScrollObserver(deferredTargets, ctx, signal);
+      // 🛡v1.2.0 The scroll sensor sometimes doesn't appear (no #rso / no scroll / stuck):
+      // auto-chaser finishes off remaining batches with polite pauses — the extension never stays stuck on "Scroll for more"
+      startChaser(signal);
     } else {
       setStatus(`Done · ${countNative() + countInjected()} results`);
       ui.btn.removeAttribute("disabled");
       ui.cancel.style.display = "none";
     }
+  }
+
+  // v1.2.0: list of missing pages calculated from loadedPages — not from an old snapshot
+  function remainingTargets() {
+    const ctx = getContext();
+    if (!ctx) return [];
+    const needPages = Math.ceil(state.settings.target / 10);
+    const curIdx = currentPageIndex();
+    const out = [];
+    for (let i = 0; i < needPages; i++) if (i !== curIdx && !state.loadedPages.has(i)) out.push(i);
+    return out;
+  }
+
+  function stopChaser() {
+    if (state.chaser) { clearInterval(state.chaser); state.chaser = null; }
+  }
+
+  function startChaser(signal) {
+    if (state.chaser) return;
+    let ticks = 0;
+    state.chaser = setInterval(async () => {
+      ticks++;
+      if (signal.aborted || ticks > 60) { stopChaser(); return; } // 5 minutes then politely retreat
+      const remaining = remainingTargets();
+      if (!remaining.length) { finishAll(); return; }
+      if (state.fetching) return; // an active batch is already running
+      const ctx = getContext();
+      if (!ctx) return;
+      try { await fetchBatch(remaining, ctx, signal); } catch (e) {}
+      if (!remainingTargets().length) finishAll();
+    }, 5000);
+  }
+
+  function finishAll() {
+    stopChaser();
+    const ui = window.BT.render.getUI();
+    if (ui) { ui.btn.removeAttribute("disabled"); ui.cancel.style.display = "none"; }
+    setStatus(`Done · ${countNative() + countInjected()} results`);
   }
 
   // Helper: Fetch a specific list of pages
@@ -136,7 +177,7 @@
         catch (e) {
           if (e?.name === "AbortError" || String(e).includes("Aborted")) throw e;
           if (e && String(e).includes("consent_wall")) { setStatus("Consent needed. Click page."); consentBreak = true; break; }
-          if (/429/.test(String(e)) && attempt === 0) {
+          if (/429|sorry_page/.test(String(e)) && attempt === 0) {
             // Google rate limit — rest a bit and retry quietly once without flooding the console
             console.info("BeyondTen: rate limited (429) — cooling down, retrying once");
             setStatus(`Cooling down… (page ${label})`);
@@ -148,7 +189,11 @@
           break;
         }
       }
-      if (consentBreak) break;
+      if (consentBreak) {
+        // v1.2.0: consent wall = one calm retry after 20s (the chaser refills the rest) — not a permanent stop
+        setTimeout(() => { if (!signal.aborted) { const u = window.BT.render.getUI(); if (u && u.btn.hasAttribute("disabled")) startLoading(); } }, 20000);
+        break;
+      }
       if (htmls) {
         let appended = 0;
         htmls.forEach((html, j) => {
@@ -167,7 +212,9 @@
             unique.push(b);
           });
           appendTopLevelItems(unique);
-          window.BT.state.loadedPages.add(idxp);
+          // v1.2.0: only mark a page as "finished" if it had actual results — a block/empty page isn't
+          // marked, and the chaser retries it later. Here's where the extension used to "break": holes in 11..100 were never retried
+          if (blocks.length > 0) window.BT.state.loadedPages.add(idxp);
           appended += unique.length;
         });
         if (consentBreak) { setStatus("Consent needed. Click page."); break; }
@@ -180,8 +227,8 @@
 
   // New: Scroll Observer for Phase 2
   function setupScrollObserver(targets, ctx, signal) {
-    const rso = document.getElementById("rso") || document.querySelector("#search");
-    if (!rso) return;
+    const rso = document.getElementById("rso") || document.querySelector("#search") || document.querySelector("#center_col");
+    if (!rso) { return; } // no host? the chaser already covers — not a permanent stall
 
     // Remove old sensor
     const oldSensor = document.getElementById("bt-scroll-sensor");
@@ -218,6 +265,7 @@
   }
 
   function cancelWork() {
+    stopChaser();
     state.aborter?.abort();
     state.aborter = null;
     const ui = window.BT.render.getUI();

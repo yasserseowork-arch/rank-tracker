@@ -96,7 +96,7 @@ test('اللوحة: router بيتسجل على مستوى الموديول (ول
 });
 
 test('BeyondTen: 429 بيرجع بهدوء من غير console.warn', () => {
-  assert.match(bt, /\/429\/\.test\(String\(e\)\)/, 'مفيش معالجة 429');
+  assert.match(bt, /\/429\|sorry_page\/\.test\(String\(e\)\)/, 'مفيش معالجة 429 بهدوء (ومع /sorry/ الجديدة)');
   assert.ok(!/console\.warn\("BeyondTen: Fetch error"/.test(bt), 'لسه بيغسل الكونسول بتحذيرات');
   assert.ok(!/throw new Error\("consent_wall"\)/.test(bt.slice(bt.indexOf('async function fetchBatch'))),
     'رمي استثناء جوه forEach من غير try = unhandled rejection');
@@ -196,7 +196,8 @@ test('تاب واحد مضمون v1.18.4: الأداة بتتبع تبانبها
   assert.match(queue, /await this\.sweepExtraTabs\(tab\.id\)/, 'مفيش كنس عند الفتح الأول');
   assert.match(queue, /const lastTab = await tabctl.open/, 'مسار التاب الأخير مش بيستخدم ترتيب الجديد←القديم');
   // التاب الجديد بعد كابتشا بيتفتح foreground مرة واحدة (الباقي في الخلفية زي ما طلب)
-  assert.equal((queue.match(/Object\.assign\(\{\}, cfg, \{ foregroundTab: true \}\)/g) || []).length, 2, 'الفوكس مرة واحدة مطلوب في fallback + المحاولة الأخيرة بس');
+  // 1.20.0: الصبر أضاف حالة ثالثة — إعادة فتح التاب بعد ما اتقفل في انتظار الكابتشا (فوكس مقصود: يمكن محتاجة لمسة إيد)
+  assert.equal((queue.match(/Object\.assign\(\{\}, cfg, \{ foregroundTab: true \}\)/g) || []).length, 3, 'الفوكس مطلوب في fallback + المحاولة الأخيرة + إعادة فتح الصبر');
 });
 
 test('ضد الكابتشا من المنبع v1.18.4: مفيش num=100 ولا pws=0 في رابط البحث', () => {
@@ -468,10 +469,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.19.9');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.19\.9'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.19\.9'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.19\.9\]/m);
+  assert.equal(man.version, '1.20.0');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.0'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.0'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.0\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -495,8 +496,8 @@ test('v1191: الجلب الخلفي بقى افتراضي وبلا بوابة c
 
 test('v1191: الطابور يستنى على مقاس السقف الجديد — مش 20+8، ومسار ما بعد الكابتشا 100 ثانية', () => {
   assert.match(read('src/lib/constants.js'), /SERP_AFTER_CAPTCHA_MS: 100000/, 'انتظار ما بعد الكابتشا لسه 60 ثانية — هيسبق المسح الطويل');
-  assert.match(queue, /Math\.max\(cfg\.scanHardCapMs \|\| 60000, cfg\.maxWaitResultsMs \|\| 20000\) \+ 40000/,
-    'سباق الانتظار في queue لسه بيقطع المسح الطويل');
+  assert.match(queue, /const timeout = cap \+ \(cfg\.selfFetchMore === false \? 40000 : 90000\);/,
+    'سباق الانتظار في queue لسه بيقطع المسح الطويل (1.20.0: هامش 90s مع الجلب الخلفي)');
 });
 
 test('v1191: ميجريشن v5 — اللي قاعد على القيم القديمة يتنقل للصبر الجديد من غير ما ندهس تعديلاته', () => {
@@ -606,13 +607,34 @@ test('v1199: ضربة AI لوحدها ما بقتش توقف المسح — تر
   assert.match(serp, /🤖 الموقع باين في AI Overview — كمّل نزول/, 'مفيش سجل «كمّل بحث عن العضوي»');
 });
 
-test('v1199: الكابتشا العنيدة تأجّل الكلمة لجولة أخيرة بدل ما تلغيها', () => {
-  assert.match(queue, /this\.deferred = this\.deferred \|\| new Set\(\);/, 'مجموعة التأجيل مش محروسة');
-  assert.match(queue, /return 'deferred';/, 'استنفاد الكابتشا لسه بيسجل «غير موجود» على طول');
-  assert.match(queue, /إعادة متأخرة بعد كابتشا/, 'الكلمة المؤجلة مش واخدة نووت مرئية');
-  assert.match(queue, /الجولة المتأخرة/, 'مفيش جولة متأخرة آخر الحلقة');
-  assert.match(queue, /كابتشا حتى بعد الجولة المتأخرة؛ سُجلت كغير موجود/, 'الفشل التاني مفروض يسجل عادي — لا تأجيل أبدي');
-  assert.match(queue, /this\.deferred = new Set\(\); \/\/ جولة جديدة = فرص تأجيل جديدة/, 'رن جديد مش مصفّر التأجيلات');
-  // التوقيت والأمان: فاصل قبل الفرصة الأخيرة
-  assert.match(queue, /await sleep\(4000, this\.signal\(\)\); \/\/ فاصل أمان/, 'مفيش فاصل أمان قبل الجولة المتأخرة');
+test('v1200: الكابتشا العنيدة — صبر بلا إلغاء وبلا تأجيل لآخر الجولة', () => {
+  assert.match(queue, /async waitCaptchaCleared\(tabId, kw, signal\)/, 'مفيش ميثود الصبر waitCaptchaCleared');
+  assert.match(queue, /هنستنى تتحل ونعيد نفس الكلمة تاني \(مش ملغاة\)/, 'رسالة الصبر مش موجودة');
+  assert.match(queue, /captchaClears = 0; \/\/ الكابتشا اتحلت/, 'بعد الحل مفيش تصفير لميزانية الكلمة');
+  assert.match(queue, /continue; \/\/ ونعيد نفس الكلمة تاني هنا، مش آخر الجولة/, 'الصبر مش بيرجّع نفس الكلمة على طول');
+  assert.ok(!/return 'deferred';/.test(queue), 'لسه في تأجيل لآخر الجولة — المستخدم رفضه');
+  assert.ok(!/الجولة المتأخرة/.test(queue), 'بلوك الجولة المتأخرة لسه موجود');
+  assert.match(queue, /'after-patience'/, 'المحاولة الأخيرة بعد الصبر مسجلة بمصدرها');
+  // حل يدوي في التاب = نهاية الانتظار (نفس الدرس بتاع waitManualSolve)
+  assert.match(queue, /if \(!urlkit\.isSorry\(u\)\) \{ break; \}/, 'صبر ما يراقبش عنوان التاب');
+});
+
+test('v1200: حرارة الكابتشا تطوّل الاستراحة الجاية — والـ race ما يقتلش مسح طويل', () => {
+  assert.match(queue, /this\.captchaHeat = \(this\.captchaHeat \|\| 0\) \+ 1;/, 'حرارة الكابتشا مش بتتعد');
+  assert.match(queue, /if \(this\.captchaHeat >= 2\) \{[\s\S]{0,240}?await sleep\(extra, this\.signal\(\)\);/, 'الاستراحة الإضافية مش بتتطبق');
+  assert.match(queue, /const timeout = cap \+ \(cfg\.selfFetchMore === false \? 40000 : 90000\);/, 'هامش الـ race لسه 40 ثانية — بيقتل المسح اللي فيه جلب خلفي');
+  assert.match(queue, /this\.captchaHeat = 0; \/\/ 🌡 حرارة الكابتشا \(v1\.20\.0\)/, 'الـ constructor مش مصفّر الحرارة');
+});
+
+test('v1200: BeyondTen (إضافة الـ100) — الشاشر التلقائي بيكمل لوحده ومفيش حرق صفحات فاضية', () => {
+  const bt = read('beyondten/content/index.js');
+  const btFetch = read('beyondten/content/fetch.js');
+  assert.match(bt, /function startChaser\(signal\)/, 'مفيش شاشر تلقائي للصفحات الناقصة');
+  assert.match(bt, /function remainingTargets\(\)/, 'الحساب الناقص مش متصدر — السكرول باظ');
+  assert.match(bt, /startChaser\(signal\);\n    \} else \{/, 'الشاشر مش مربوط بمسار الـ deferred');
+  assert.match(bt, /if \(blocks\.length > 0\) window\.BT\.state\.loadedPages\.add\(idxp\);/, 'لسه بتتحرق الصفحة الفاضية للأبد');
+  assert.match(bt, /if \(remainingTargets\(\)\.length && !state\.chaser\) startChaser\(signal\);/, 'المسار اليدوي (زرار) مش متغطي بالشاشر');
+  assert.match(btFetch, /sorry_page/, 'fetch مش بيكشف صفحة /sorry/ اللي بترجع 200');
+  assert.match(btFetch, /delay\(1200\*\(attempt\+1\)/, 'الـ backoff لسه 200 مللي — بيجيب صفعة');
+  assert.match(bt, /stopChaser\(\);\n    state\.aborter\?\.abort\(\);/, 'الإلغاء مشط الشاشر — هيفضل لافّت ورا');
 });
