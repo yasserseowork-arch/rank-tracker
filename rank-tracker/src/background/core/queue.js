@@ -515,26 +515,31 @@ export class QueueEngine {
         await logger.warn('queue', `🧩 كابتشا — فشل الحل التلقائي: تبريد ${restSec}ث ثم مسح بيانات + تاب جديد (${captchaClears}/${maxClears})`);
         await sleep(restSec * 1000, signal);
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
-        let nextTab = null;
-        try {
-          nextTab = await tabctl.open(url, Object.assign({}, cfg, { foregroundTab: true }));
-        } catch (_) {}
+        // تاب واحد مضمون: الجديد يفتح، القديم وكل فائض يتقفل، وبعدين المسح —
+        // ما يبقاش في شبح تاب كابتشا قديم يربك الجلسة وقت ما البيانات بتمسح
+        const nextTab = await this.openFreshTab(kw, cfg, url, tab.id);
         if (!nextTab) {
           await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تعذر فتح تاب جديد بعد الكابتشا`);
           return this.recordExhausted(kw, cfg);
         }
-        // تاب واحد مضمون: الجديد يفتح، القديم وكل فائض يتقفل، وبعدين المسح —
-        // ما يبقاش في شبح تاب كابتشا قديم يربك الجلسة وقت ما البيانات بتمسح
-        this.ownedTabs.add(nextTab.id);
-        await tabctl.close(tab.id);
-        this.ownedTabs.delete(tab.id);
         tab = nextTab;
-        await state.setRun({ workerTabId: tab.id });
-        this.currentTabId = tab.id;
-        await this.sweepExtraTabs(tab.id);
-        try {
-          await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
-        } catch (_) {}
+        navigatedViaBox = false;
+        continue; // نفس الكلمة من الأول في التبويب الجديد
+      } else if (first.type === 'newtab') {
+        // 🚫v1.20.2: جوجل رافضنا صراحةً (403 «Your client does not have permission» / 429) —
+        // دوار ريفرش على نفس التاب كان بيضيّع 3 دورات وهي ميتة أصلًا:
+        // تبريد قصير → مسح بيانات كامل → تاب جديد بنفس الكلمة — من غير ما نسجلها «غير موجود»
+        this.captchaHeat = (this.captchaHeat || 0) + 1; // النطاق اتحرق شوية — برّد الاستراحة الجاية
+        await this.notify('🚫 جوجل رفض الصفحة', `"${kw.keyword}" — الريفرش ملوش لازمة هنا؛ بنمسح البيانات ونعيد في تاب جديد نضيف`);
+        await logger.warn('queue', `🚫 صفحة رفض (${(first.payload && first.payload.kind) || 'http-error'}) على "${kw.keyword}" — تبريد ثم مسح بيانات + تاب جديد بنفس الكلمة`);
+        await sleep(9000 + Math.floor(Math.random() * 6000), signal);
+        if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        const fresh = await this.openFreshTab(kw, cfg, url, tab.id);
+        if (!fresh) {
+          await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تعذر فتح تاب جديد بعد الرفض؛ سُجلت كغير موجود`);
+          return this.recordExhausted(kw, cfg);
+        }
+        tab = fresh;
         navigatedViaBox = false;
         continue; // نفس الكلمة من الأول في التبويب الجديد
       } else if (first.type === 'serp' && first.payload.total > 0) {
@@ -545,17 +550,14 @@ export class QueueEngine {
 
       // 6) مشكلة (تايم‌آوت / تحليل فاضي / نتائج مابعدش الكابتشا): ريفرش + نفس الكلمة
       if (attempt >= maxRetries) {
-        // آخر فرصة: تاب جديد بنفس الكلمة ثم استسلام موثق بإشعار
-        await logger.warn('queue', `🆕 مشكلة مستمرة — تاب جديد لنفس الكلمة "${kw.keyword}" كمحاولة أخيرة`);
-        await this.notify('🆕 محاولة أخيرة', `مشكلة مستمرة على "${kw.keyword}" — تاب جديد`);
+        // آخر فرصة (v1.20.2): تاب جديد + مسح بيانات — نفس وصفة الاستشفاء بدل ما نغير
+        // الهوا بقايما؛ ولو فتحتش تاب جديد نكمل بالقديم زي الأول بالظبط
+        await logger.warn('queue', `🆕 مشكلة مستمرة — مسح بيانات وتاب جديد لنفس الكلمة "${kw.keyword}" كمحاولة أخيرة`);
+        await this.notify('🆕 محاولة أخيرة', `مشكلة مستمرة على "${kw.keyword}" — مسح بيانات وتاب جديد`);
         try {
-          const lastTab = await tabctl.open(url, Object.assign({}, cfg, { foregroundTab: true }));
-          await tabctl.close(tab.id);
-          tab = lastTab || tab;
-          this.ownedTabs.add(tab.id);
-          await state.setRun({ workerTabId: tab.id });
-          this.currentTabId = tab.id;
-          await this.sweepExtraTabs(tab.id);
+          const lastTab = await this.openFreshTab(kw, cfg, url, tab.id);
+          if (lastTab) { tab = lastTab; }
+
           const lastRace = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
           if (lastRace.type === 'serp' && (lastRace.payload.total > 0 || lastRace.payload.noResults)) {
             return this.recordResult(kw, lastRace.payload, cfg, 'new-tab');
@@ -806,6 +808,28 @@ export class QueueEngine {
       if (late && late.ts >= sinceTs) { return late.payload; }
     }
     return fresh || null;
+  }
+
+  /** 🧻v1.20.2: الاستشفاء الموحد — تاب جديد بنفس الكلمة في الفوكس، قفل القديم،
+   *  كنس الفائض، ومسح بيانات كامل. بيتستخدم من: fallback الكابتشا، ومسار 403/429. */
+  async openFreshTab(kw, cfg, url, oldTabId) {
+    let nextTab = null;
+    try {
+      nextTab = await tabctl.open(url, Object.assign({}, cfg, { foregroundTab: true }));
+    } catch (_) {}
+    if (!nextTab) { return null; }
+    if (oldTabId) {
+      this.ownedTabs.add(nextTab.id);
+      await tabctl.close(oldTabId);
+      this.ownedTabs.delete(oldTabId);
+    }
+    await state.setRun({ workerTabId: nextTab.id });
+    this.currentTabId = nextTab.id;
+    await this.sweepExtraTabs(nextTab.id);
+    try {
+      await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
+    } catch (_) {}
+    return nextTab;
   }
 
   /** ضمان تاب واحد: نقفل كل تابانين فتحتهم الأداة (حتى من جلسات قبل إعادة تشغيل

@@ -184,20 +184,24 @@ const urlkit = read('src/background/core/urlkit.js');
 test('ضد الدوامة v1.18.4: تبريد إلزامي قبل إعادة الكابتشا — ومفيش لمس لبيانات غير بعد راحة', () => {
   assert.match(queue, /const restSec = 8 \+ captchaClears \* 4;/, 'مفيش تبريد قصير متصاعد قبل الإعادة');
   assert.match(queue, /await sleep\(restSec \* 1000, signal\)/, 'التبريد مش بيتنفذ بsleep قابل للإلغاء');
-  // الترتيب الجديد: فتح الجديد ← قفل القديم ← sweep ← المسح
-  const fb = queue.slice(queue.indexOf('const restSec'), queue.indexOf('navigatedViaBox = false;\n        continue;'));
-  assert.ok(fb.indexOf('nextTab = await tabctl.open') < fb.indexOf('tabctl.close(tab.id)'), 'لازم الجديد يفتح قبل ما القديم يتقفل');
+  // v1.20.2: الترتيب اتلمّ في openFreshTab: فتح الجديد ← قفل القديم ← sweep ← المسح
+  const fb = queue.slice(queue.indexOf('async openFreshTab'), queue.indexOf('ضمان تاب واحد'));
+  assert.ok(fb.indexOf('tabctl.open') < fb.indexOf('tabctl.close'), 'لازم الجديد يفتح قبل ما القديم يتقفل');
   assert.ok(fb.indexOf('sweepExtraTabs') < fb.indexOf('browsingData.remove'), 'المسح لازم يحصل والتبانين الفائضة اتقفلت قبله');
+  // وفرع الكابتشا لسه يبرد الأول قبل أي استشفاء
+  const cap = queue.slice(queue.indexOf('const restSec'), queue.indexOf('continue; // نفس الكلمة من الأول في التبويب الجديد'));
+  assert.ok(cap.indexOf('await sleep(restSec * 1000, signal)') > -1 && cap.indexOf('openFreshTab') > cap.indexOf('await sleep'), 'المسح بقى بيسبق التبريد');
 });
 
 test('تاب واحد مضمون v1.18.4: الأداة بتتبع تبانبها وتكنس الفائض (حتى بعد إعادة التشغيل)', () => {
   assert.match(queue, /this\.ownedTabs = new Set\(\)/, 'مفيش تتبع لتبانين الأداة');
   assert.match(queue, /ownedTabIds/, 'القائمة مش محفوظة في الـrun للنجاة من إعادة تشغيل الـWorker');
   assert.match(queue, /await this\.sweepExtraTabs\(tab\.id\)/, 'مفيش كنس عند الفتح الأول');
-  assert.match(queue, /const lastTab = await tabctl.open/, 'مسار التاب الأخير مش بيستخدم ترتيب الجديد←القديم');
+  assert.match(queue, /const lastTab = await this\.openFreshTab\(/, 'مسار التاب الأخير مش بيستخدم وصفة الاستشفاء (جديد←قديم←كنس←مسح)');
   // التاب الجديد بعد كابتشا بيتفتح foreground مرة واحدة (الباقي في الخلفية زي ما طلب)
-  // 1.20.0: الصبر أضاف حالة ثالثة — إعادة فتح التاب بعد ما اتقفل في انتظار الكابتشا (فوكس مقصود: يمكن محتاجة لمسة إيد)
-  assert.equal((queue.match(/Object\.assign\(\{\}, cfg, \{ foregroundTab: true \}\)/g) || []).length, 3, 'الفوكس مطلوب في fallback + المحاولة الأخيرة + إعادة فتح الصبر');
+  // 1.20.2: fallback والمحاولة الأخيرة اتحدوا في openFreshTab — بقا فوكس في مكانين بس:
+  // الهيلبر نفسه + إعادة فتح التاب في وضع الصبر (مقصود: يمكن الكابتشا محتاجة لمسة إيد)
+  assert.equal((queue.match(/Object\.assign\(\{\}, cfg, \{ foregroundTab: true \}\)/g) || []).length, 2, 'الفوكس متوقع في openFreshTab + الصبر بس');
 });
 
 test('ضد الكابتشا من المنبع v1.18.4: مفيش num=100 ولا pws=0 في رابط البحث', () => {
@@ -469,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.20.1');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.1'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.1'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.1\]/m);
+  assert.equal(man.version, '1.20.2');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.2'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.2'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.2\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -662,4 +666,27 @@ test('v1201: BeyondTen — مفيش عدو طلبات والسينسور ما ب
   assert.match(bt, /await delay\(1800 \+ Math\.random\(\) \* 1800, signal\);/, 'مفيش فاصل بين الدفعات');
   assert.match(bt, /const live = remainingTargets\(\);/, 'السينسور لسه بياخد القائمة القديمة');
 });
+
+/* ---------------- v1.20.2 — صفحة الرفض 403: مسح بيانات وتاب جديد، مش ريفرش لميت ---------------- */
+
+test('v1202: errorsig — صفحة «permission to get URL» تتعرف حتى لو العنوان ضاع', () => {
+  const esig = v119loadClassic('src/lib/errorsig.js').SRT.errorsig;
+  assert.equal(esig.detectError('Error 403 (Forbidden)!!1', "403. That's an error."), 'http-error', '403 بعنوانها مش بتتصنف');
+  const body = "403. That's an error. Your client does not have permission to get URL /search?q=test&gl=sa&hl=ar from this server. That's all we know.";
+  assert.equal(esig.detectError('Google', body), 'http-error', '403 بدون عنوان مش بتتصنف من النص');
+});
+
+test('v1202: engine — newtab/رفض = تبريد → مسح بيانات → تاب جديد → نفس الكلمة، ومن غير تسجيل «غير موجود»', () => {
+  assert.match(queue, /} else if \(first\.type === 'newtab'\) \{/, 'فرع newtab لسه بيدور ريفرش زي أي مشكلة');
+  assert.match(queue, /🚫 صفحة رفض/, 'مفيش سجل رفض واضح');
+  assert.match(queue, /بنمسح البيانات ونعيد في تاب جديد نضيف/, 'رسالة المستخدم مش بتطمن على الكلمة');
+  assert.match(queue, /const fresh = await this\.openFreshTab\(kw, cfg, url, tab\.id\);\n\s+if \(!fresh\)/, 'الاستشفاء مش على نفس وصفة الكابتشا');
+  assert.match(queue, /this\.captchaHeat = \(this\.captchaHeat \|\| 0\) \+ 1; \/\/ النطاق اتحرق/, 'الرفض ما بيولّعش الحرارة');
+  assert.match(queue, /async openFreshTab\(kw, cfg, url, oldTabId\)/, 'مفيش هيلبر استشفاء موحد');
+  assert.match(queue, /tab = fresh;\n\s+navigatedViaBox = false;\n\s+continue; \/\/ نفس الكلمة من الأول في التبويب الجديد/, 'الرفض مش بيرجّع نفس الكلمة على طول');
+  assert.match(queue, /const lastTab = await this\.openFreshTab\(kw, cfg, url, tab\.id\);/, 'المحاولة الأخيرة لسه بتغير هوا من غير مسح');
+  const nb = queue.slice(queue.indexOf("first.type === 'newtab'"), queue.indexOf("first.type === 'serp' && first.payload.total > 0"));
+  assert.ok(nb.indexOf('continue') > nb.indexOf('openFreshTab'), 'مسار الرفض مش بيرجّع الكلمة لللفة بعد الاستشفاء');
+});
+
 

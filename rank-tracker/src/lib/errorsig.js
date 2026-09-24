@@ -17,6 +17,11 @@
     if (/error\s*(40[134]|429|50[0-4])/.test(t) || /خطأ\s*(40[134]|429|50[0-4])/.test(t)) {
       return 'http-error';
     }
+    // v1.20.2: صفحة «That's an error» بتاعة 403/404 بتيجي أحياناً بعنوان عادي —
+    // بصمتها النصية ثابتة: «permission to get URL» + «That's all we know»
+    if (b.includes("that's all we know") || b.includes('permission to get url')) {
+      return 'http-error';
+    }
     if (b.includes("can't reach") || b.includes('cannot reach') || b.includes('connection was reset')
       || b.includes('لم نتمكن من الوصول') || b.includes('لا يمكن الوصول') || b.includes('تحقق من اتصالك')) {
       return 'network';
