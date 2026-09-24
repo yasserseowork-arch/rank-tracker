@@ -827,6 +827,7 @@ export class QueueEngine {
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
     this.broadcast();
     let waited = 0;
+    let focusOnce = false;
     let flag = 'waiting'; // 'clear' | 'closed'
     const offs = [];
     try {
@@ -838,7 +839,12 @@ export class QueueEngine {
         if (flag === 'clear') { break; }
         if (flag === 'closed') { return 'tab-closed'; }
         let u = null;
-        try { u = await tabctl.getUrl(tabId); } catch (_) { return 'tab-closed'; }
+        try {
+          u = await tabctl.getUrl(tabId);
+          // لو المستخدم طلع من صفحة الكابتشا لنفسه، بنسايبه يخلص براحتنا —
+          // بنديله الصفحة قدام عينه مرة واحدة بس من غير ما نلح
+          if (u && urlkit.isSorry(u) && !focusOnce) { focusOnce = true; try { await tabctl.focus(tabId); } catch (_) {} }
+        } catch (_) { return 'tab-closed'; }
         if (u == null || u === '') { return 'tab-closed'; }
         if (!urlkit.isSorry(u)) { break; } // الصفحة بقت نتائج عادية = اتحلت
         waited += 4;

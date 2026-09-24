@@ -29,8 +29,8 @@ window.BT = window.BT || {};
       }catch(e){
         lastErr = e;
         if (signal?.aborted) throw e;
-        if (String(e?.message || e).includes("sorry_page")) throw e; // Caller handles it calmly
-        await delay(1200*(attempt+1) + Math.random()*600, signal); // 1.2s/2.4s/3.6s instead of 200ms — less suspicious
+        if (String(e?.message || e).includes("sorry_page")) throw e; // المستدعي بيتعامل معها بهدوء
+        await delay(1200*(attempt+1) + Math.random()*600, signal); // 1.2/2.4/3.6 ثانية بدل 200 مللي — أقل اشتباهاً
       }
     }
     throw lastErr || new Error("Fetch failed");
