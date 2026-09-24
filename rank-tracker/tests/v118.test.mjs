@@ -154,8 +154,8 @@ test('كابتشا v1.18.3: حلّ؟ مفيش مسح مستعجل — نتحرى
   assert.match(queue, /collectAfterSolve/, 'مفيش مرحلة تهدئة بعد الحل');
   assert.match(queue, /this\.lastSerp = this\.lastSerp \|\| new Map\(\)/, 'مفيش كاش لآخر تحليل (سباق الفقد)');
   assert.match(queue, /await sleep\(6000, signal\)/, 'مفيش راحة 6 ثواني قبل قراءة آخر تحليل');
-  assert.match(queue, /collectAfterSolve\(tab\.id, solveStartedAt, signal\)/, 'مسار الحل الأساسي مش بيستخدم التهدئة');
-  assert.match(queue, /collectAfterSolve\(tab\.id, solveStartedAt2, signal\)/, 'مسار التاب الجديد مش بيستخدم التهدئة');
+  assert.match(queue, /collectAfterSolve\(tab\.id, solveStartedAt, signal, cfg\)/, 'مسار الحل الأساسي مش بيستخدم التهدئة');
+  assert.match(queue, /collectAfterSolve\(tab\.id, solveStartedAt2, signal, cfg\)/, 'مسار التاب الجديد مش بيستخدم التهدئة');
 });
 
 test('الإعدادات v1.18.3: المحاولتين إجباريًا + المسح بقى كل 8 مع الاستراحة', () => {
@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.20.2');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.2'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.2'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.2\]/m);
+  assert.equal(man.version, '1.20.3');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.3'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.3'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.3\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -688,5 +688,24 @@ test('v1202: engine — newtab/رفض = تبريد → مسح بيانات → �
   const nb = queue.slice(queue.indexOf("first.type === 'newtab'"), queue.indexOf("first.type === 'serp' && first.payload.total > 0"));
   assert.ok(nb.indexOf('continue') > nb.indexOf('openFreshTab'), 'مسار الرفض مش بيرجّع الكلمة لللفة بعد الاستشفاء');
 });
+
+/* ---------------- v1.20.3 — الكابتشا اتحلت والنتيجة موجودة؟ مفيش دوامة ريفرش ---------------- */
+
+test('v1203: التحليل المتأخر بعد الحل ليه مهلة كامل المسح + إنقاذ ليّن بدون لمس داتا', () => {
+  assert.match(queue, /const grace = C\.LIMITS\.SERP_AFTER_CAPTCHA_MS \+ \(cfg && cfg\.selfFetchMore === false \? 0 : 90000\);/,
+    'collectAfterSolve لسه بياخد 100 ثانية بس — هيفوت مسح بطيء');
+  assert.match(queue, /async collectAfterSolve\(tabId, sinceTs, signal, cfg\)/, 'الـ cfg مش داخلة على نافذة ما بعد الحل');
+  assert.ok(!/collectAfterSolve\(tab\.id, solveStartedAt, signal\)[,)]/.test(queue), 'لسه في نداء collectAfterSolve من غير cfg');
+  assert.match(queue, /captcha-solved-late/, 'مفيش سجل من الكاش للتأخير البسيط');
+  assert.match(queue, /captcha-solved-reload/, 'مفيش فرصة reload ليّنة قبل التصعيد');
+  assert.match(queue, /🩹 إنقاذ بعد الحل/, 'المستخدم مش بيتبشر إن النتيجة اتأنقذت');
+  // الإنقاذ الليّن نفسه ما بيمسحش داتا
+  const soft = queue.slice(queue.indexOf('🩹v1.20.3'), queue.indexOf('بس بعد ما ادينا الفرصة الليّنة'));
+  assert.ok(soft.indexOf('browsingData') === -1, 'مسار الإنقاذ الليّن بيلمس browsingData — ده بالظبه اللي كان بيضرب الـ100 extension');
+  assert.ok(soft.indexOf('tabctl.reload') > -1, 'مفيش ريفرش ليّن لنفس التاب');
+  // الشارة: أول ما الحل يتم الصف يطلع من CAPTCHA
+  assert.match(queue, /الصف يتحرر من شارة الكابتشا فور الحل/, 'شارة الكابتشا بتفضل على الكلمة بعد الحل');
+});
+
 
 

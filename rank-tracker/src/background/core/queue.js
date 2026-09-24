@@ -475,8 +475,36 @@ export class QueueEngine {
         const auto = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
         if (auto === 'solved') {
           // الصفحة بعد الحل محتاجة راحتها: تحميل + تحليل — مفيش استعجال على أي مسح
-          const sAfter = await this.collectAfterSolve(tab.id, solveStartedAt, signal);
+          const sAfter = await this.collectAfterSolve(tab.id, solveStartedAt, signal, cfg);
           if (sAfter) { return this.recordResult(kw, sAfter, cfg, 'captcha-auto-solved'); }
+          // 🩹v1.20.3: التحليل اتأخر بس الصفحة نفسها سليمة (مش /sorry/) — قبل أي تصعيد
+          // مدمّر (مسح بيانات+تاب جديد كان بيضرب إضافة الـ100 في cooling ويضيع نتيجة موجودة):
+          // تشيك أخير على الكاش، وبعدها reload لنفس التاب بمهلة كاملة، ومفيش لمس داتا
+          const urlNow = await tabctl.getUrl(tab.id);
+          if (!(urlNow && urlkit.isSorry(urlNow))) {
+            const late = this.lastSerp && this.lastSerp.get(tab.id);
+            if (late && late.ts >= solveStartedAt) {
+              await logger.info('queue', `🩹 "${kw.keyword}" — التحليل وصل متأخر بعد الحل؛ سجلناه من الكاش من غير أي إعادة`);
+              return this.recordResult(kw, late.payload, cfg, 'captcha-solved-late');
+            }
+            await logger.warn('queue', `🩹 "${kw.keyword}" — الكابتشا اتحلت والصفحة سليمة بس المسح مالحقش؛ reload هادي بنفس التاب (مفيش مسح بيانات)`);
+            await this.notify('🩹 إنقاذ بعد الحل', `"${kw.keyword}" — النتيجة موجودة والصفحة تمام؛ بنعيد المسح بس من غير مسح بيانات`);
+            await tabctl.reload(tab.id);
+            navigatedViaBox = false;
+            const soft = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
+            if (soft.type === 'serp' && (soft.payload.total > 0 || soft.payload.noResults)) {
+              return this.recordResult(kw, soft.payload, cfg, 'captcha-solved-reload');
+            }
+            if (soft.type === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+            if (soft.type === 'captcha') {
+              const auto2 = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
+              if (auto2 === 'solved') {
+                const s2b = await this.collectAfterSolve(tab.id, Date.now(), signal, cfg);
+                if (s2b) { return this.recordResult(kw, s2b, cfg, 'captcha-solved-soft2'); }
+              }
+            }
+            // كابتشا تانية ولا результата؟ نكمل للدورة القديمة (تبريد+مسح+تاب جديد) — بس بعد ما ادينا الفرصة الليّنة
+          }
         }
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
         // فشل الحل التلقائي: الخطة الاحتياطية — مسح بيانات المتصفح + نفس الكلمة في تاب جديد
@@ -566,7 +594,7 @@ export class QueueEngine {
             const solveStartedAt2 = Date.now();
             const h2 = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
             if (h2 === 'solved') {
-              const s2 = await this.collectAfterSolve(tab.id, solveStartedAt2, signal);
+              const s2 = await this.collectAfterSolve(tab.id, solveStartedAt2, signal, cfg);
               if (s2) { return this.recordResult(kw, s2, cfg, 'new-tab-captcha'); }
             } else if (h2 === 'failed') {
               // 🧘 آخر محاولة كمان ما تستسلمش للكابتشا: نستنى تتحل ونسحب نفس المكان
@@ -748,6 +776,7 @@ export class QueueEngine {
         captcha: null,
         captchaSolves: (run.captchaSolves || 0) + 1
       });
+      await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING }); // 🏷v1.20.3: الصف يتحرر من شارة الكابتشا فور الحل
       this.broadcast();
       // 😴 تهدئة قصيرة بعد الحل قبل ما نكمل: الرجوع الفوري لجوجل بعد كابتشا
       // بيجيب صفعة جديدة — بس من غير استنا طويلة زي الأول (8–14 ثانية كفاية)
@@ -798,11 +827,15 @@ export class QueueEngine {
   /** بعد حل الكابتشا: خدي نفس طويل للتبويب — أول حاجة آخر تحليل مخزّن (ممكن
    *  يكون وصل قبل ما نفتح الاستماع)، وبعدها استرخاء هادي. مفيش مسح بيانات
    *  قبل ما نتأكد إن مفيش فعلًا نتيجة جاية. */
-  async collectAfterSolve(tabId, sinceTs, signal) {
+  async collectAfterSolve(tabId, sinceTs, signal, cfg) {
     await sleep(6000, signal);
     const cached = this.lastSerp && this.lastSerp.get(tabId);
     if (cached && cached.ts >= sinceTs) { return cached.payload; }
-    const fresh = await this.waitSerp(tabId, C.LIMITS.SERP_AFTER_CAPTCHA_MS, signal);
+    // v1.20.3: مسح ما بعد الحل نفس المسح العادي بطوله (hardCap + جلب خلفي + AI) —
+    // نافذة الـ100 ثانية كانت بتموت والرفيق لسه في cooling، والتحليل ييجي متأخر
+    // فتتحسب «مش محلول» — ومن هنا كانت نشأت دوامة الريفرش/المسح اللي ضيّعت نتائج سليمة
+    const grace = C.LIMITS.SERP_AFTER_CAPTCHA_MS + (cfg && cfg.selfFetchMore === false ? 0 : 90000);
+    const fresh = await this.waitSerp(tabId, grace, signal);
     if (!fresh) {
       const late = this.lastSerp && this.lastSerp.get(tabId);
       if (late && late.ts >= sinceTs) { return late.payload; }
