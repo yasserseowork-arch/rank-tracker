@@ -222,6 +222,10 @@
         // Soft throttle if empty results
         if (appended < 5 && CONCURRENCY > 2) CONCURRENCY = Math.max(2, CONCURRENCY - 1);
       }
+      // v1.2.1: فاصل مهذب بين الدفعات — طلبات ورا بعضها بسرعة = /sorry/
+      if (i + CONCURRENCY < targets.length && !signal.aborted) {
+        await delay(1800 + Math.random() * 1800, signal);
+      }
     }
   }
 
@@ -248,7 +252,9 @@
         obs.disconnect();
         sensor.innerText = "Loading...";
         try {
-          await fetchBatch(targets, ctx, signal);
+          // v1.2.1: القائمة اتبليت؟ بنعيد حساب الناقص بس — مفيش إعادة سحب ولا نسيان
+          const live = remainingTargets();
+          await fetchBatch(live.length ? live : targets, ctx, signal);
           sensor.remove();
           setStatus(`Done · ${countNative() + countInjected()} results`);
         } catch (e) {

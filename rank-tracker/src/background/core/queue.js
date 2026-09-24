@@ -609,8 +609,16 @@ export class QueueEngine {
     const run = await state.getRun();
     const marker = run.clearMarker || 0;
     if (processed - marker >= everyN) {
-      await logger.info('queue', `🧹 مسح دوري مع الاستراحة (كل ${everyN} كلمة) — بيانات التصفح اتسحت بعد ${processed} كلمة مفحوصة`);
-      try { await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true }); } catch (_) {}
+      // 🌡v1.20.1: جو ساخن كابتشا؟ الكوكيز فيها إعفاءات /sorry/ — مسحها هو اللي
+      // بيجيب الكابتشا الجديدة؛ بنكنس الكاش والهيستوري وبس لحد ما الجو يهدى
+      const hot = (this.captchaHeat || 0) >= 2;
+      const opts = hot
+        ? { cacheStorage: true, history: true }
+        : { cacheStorage: true, cookies: true, history: true };
+      await logger.info('queue', hot
+        ? `🧹 مسح دوري خفيف (كاش+تاريخ فقط) — حرارة الكابتشا ${this.captchaHeat}، الكوكيز معفاة`
+        : `🧹 مسح دوري مع الاستراحة (كل ${everyN} كلمة) — بيانات التصفح اتسحت بعد ${processed} كلمة مفحوصة`);
+      try { await chrome.browsingData.remove({ since: 0 }, opts); } catch (_) {}
       await state.setRun({ clearMarker: processed });
       await this.notify('🧹 مسح دوري مع الاستراحة', `مسحنا بيانات التصفح تلقائياً بعد ${processed} كلمة — الفحص مكمل لوحده.`);
     }

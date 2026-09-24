@@ -526,7 +526,8 @@
         live.early = true;
         return { items: merged, aiItems: aiItems, early: true, hit: hit, selfFetched: true };
       }
-      await D.humanSleep(900, 400);
+      // v1.20.1: البين-دفعات 0.9 ثانية كانت عدو Requests — بنزول بشري هادي
+      await D.humanSleep(2400, 1600);
     }
     if (merged.length > baseItems.length || attempts) {
       D.msg.send(C.MSG.LOG, { level: attempts ? 'warn' : 'info', scope: 'serp',

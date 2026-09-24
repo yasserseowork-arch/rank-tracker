@@ -469,10 +469,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.20.0');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.0'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.0'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.0\]/m);
+  assert.equal(man.version, '1.20.1');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.1'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.1'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.1\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -638,3 +638,28 @@ test('v1200: BeyondTen (إضافة الـ100) — الشاشر التلقائي 
   assert.match(btFetch, /delay\(1200\*\(attempt\+1\)/, 'الـ backoff لسه 200 مللي — بيجيب صفعة');
   assert.match(bt, /stopChaser\(\);\n    state\.aborter\?\.abort\(\);/, 'الإلغاء مشط الشاشر — هيفضل لافّت ورا');
 });
+
+/* ---------------- v1.20.1 — بصمة الآلة اتصفّت: توقيتات بشرية من أول لسادس ---------------- */
+
+test('v1201: مفيش توقيتات دقيقة متكررة — المهلة قبل الكلمة والجلب الخلفي اتهمّنت', () => {
+  const sched = read('src/background/core/scheduler.js');
+  assert.match(sched, /const ms = 8500 \+ Math\.floor\(Math\.random\(\) \* 5500\);/,
+    'المهلة لسه 10000ms بالمللي كل كلمة — بصمة');
+  assert.match(serp, /await D\.humanSleep\(2400, 1600\);/, 'دفعات الجلب الخلفي لسه سريعة عدوِّ');
+  assert.ok(!/const ms = 10000;/.test(sched), 'القيمة الثابتة لسه موجودة');
+});
+
+test('v1201: المسح الدوري ما بيضربش إعفاءات الكابتشا في الجو الساخن', () => {
+  assert.match(queue, /const hot = \(this\.captchaHeat \|\| 0\) >= 2;/, 'مفيش فحص حرارة في المسح الدوري');
+  assert.match(queue, /\? \{ cacheStorage: true, history: true \}/, 'المسح الخفيف مش متوفر');
+  assert.match(queue, /الكوكيز معفاة/, 'مفيش سجل يوضح إن الكوكيز اترفدت');
+});
+
+test('v1201: BeyondTen — مفيش عدو طلبات والسينسور ما بيشتغلش بقايما قديمة', () => {
+  const btState = read('beyondten/content/state.js');
+  const bt = read('beyondten/content/index.js');
+  assert.match(btState, /concurrency: 2,/, 'لسه 6 متزامنة = 429 أكيد');
+  assert.match(bt, /await delay\(1800 \+ Math\.random\(\) \* 1800, signal\);/, 'مفيش فاصل بين الدفعات');
+  assert.match(bt, /const live = remainingTargets\(\);/, 'السينسور لسه بياخد القائمة القديمة');
+});
+

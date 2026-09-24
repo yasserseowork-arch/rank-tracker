@@ -9,8 +9,8 @@ window.BT = window.BT || {};
     aborter: null,
     settings: { target: 100, enabled: true, autoLoad: true, pureMode: false },
     lastHref: location.href,
-    concurrency: 6,
-    chaser: null,   // v1.2.0: auto-finish timer — doesn't wait for a human scroll
+    concurrency: 2, // v1.2.1: 6 دفعات متزامنة = بصمة بوت تجيب 429 — اتنين بهدوء
+    chaser: null,   // v1.2.0: مؤقت الإنهاء التلقائي — مش مستني سكرول بشري
     fetching: false
   };
   window.BT.state = state;

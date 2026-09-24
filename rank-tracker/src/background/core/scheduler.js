@@ -65,9 +65,10 @@ export function pendingAlarms() {
   return Array.from(alarmResolvers.keys());
 }
 
-/** المهلة التلقائية الثابتة قبل كل كلمة: 10 ثواني بالضبط (قرار المستخدم) */
+/** المهلة التلقائية قبل كل كلمة: ~10 ثواني (قرار المستخدم) — v1.20.1
+ *  العشر بالظبط المتكررة كل مرة بصمة آلية؛ بنحافظ على المتوسط ونجيب هامان 8.5–14 ثانية */
 export async function preKeywordDelay(cfg, context, signal) {
-  const ms = 10000;
+  const ms = 8500 + Math.floor(Math.random() * 5500);
   await logger.info('scheduler', `مهلة قبل الكلمة #${(context && context.index || 0) + 1}: ${(ms / 1000).toFixed(1)}ث`);
   return wait(ms, 'predelay', signal);
 }
