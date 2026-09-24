@@ -477,34 +477,16 @@ export class QueueEngine {
           // الصفحة بعد الحل محتاجة راحتها: تحميل + تحليل — مفيش استعجال على أي مسح
           const sAfter = await this.collectAfterSolve(tab.id, solveStartedAt, signal, cfg);
           if (sAfter) { return this.recordResult(kw, sAfter, cfg, 'captcha-auto-solved'); }
-          // 🩹v1.20.3: التحليل اتأخر بس الصفحة نفسها سليمة (مش /sorry/) — قبل أي تصعيد
-          // مدمّر (مسح بيانات+تاب جديد كان بيضرب إضافة الـ100 في cooling ويضيع نتيجة موجودة):
-          // تشيك أخير على الكاش، وبعدها reload لنفس التاب بمهلة كاملة، ومفيش لمس داتا
-          const urlNow = await tabctl.getUrl(tab.id);
-          if (!(urlNow && urlkit.isSorry(urlNow))) {
-            const late = this.lastSerp && this.lastSerp.get(tab.id);
-            if (late && late.ts >= solveStartedAt) {
-              await logger.info('queue', `🩹 "${kw.keyword}" — التحليل وصل متأخر بعد الحل؛ سجلناه من الكاش من غير أي إعادة`);
-              return this.recordResult(kw, late.payload, cfg, 'captcha-solved-late');
-            }
-            await logger.warn('queue', `🩹 "${kw.keyword}" — الكابتشا اتحلت والصفحة سليمة بس المسح مالحقش؛ reload هادي بنفس التاب (مفيش مسح بيانات)`);
-            await this.notify('🩹 إنقاذ بعد الحل', `"${kw.keyword}" — النتيجة موجودة والصفحة تمام؛ بنعيد المسح بس من غير مسح بيانات`);
-            await tabctl.reload(tab.id);
-            navigatedViaBox = false;
-            const soft = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
-            if (soft.type === 'serp' && (soft.payload.total > 0 || soft.payload.noResults)) {
-              return this.recordResult(kw, soft.payload, cfg, 'captcha-solved-reload');
-            }
-            if (soft.type === 'aborted') { return this.abortKeyword(kw, 'paused'); }
-            if (soft.type === 'captcha') {
-              const auto2 = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
-              if (auto2 === 'solved') {
-                const s2b = await this.collectAfterSolve(tab.id, Date.now(), signal, cfg);
-                if (s2b) { return this.recordResult(kw, s2b, cfg, 'captcha-solved-soft2'); }
-              }
-            }
-            // كابتشا تانية ولا результата؟ نكمل للدورة القديمة (تبريد+مسح+تاب جديد) — بس بعد ما ادينا الفرصة الليّنة
-          }
+        }
+        if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        // 🩹v1.20.4: الإنقاذ الليّن بقى بيشوف «الصفحة نفسها» مش «كلام المحلول» —
+        // لو المنسّق اتلخبط أو قال فشل (و Buster reload أودى لسيرب سليم، أو المستخدم حلها بإيده)
+        // بنسجل اللي على الشاشة قبل أي تصعيد مدمّر كان بيضرب إضافة الـ100 في cooling
+        const rescue = await this.softRescueAfterCaptcha(tab.id, kw, cfg, signal, solveStartedAt);
+        if (rescue && rescue.abort) { return this.abortKeyword(kw, 'paused'); }
+        if (rescue) {
+          if (rescue.reloaded) { navigatedViaBox = false; }
+          return this.recordResult(kw, rescue.payload, cfg, rescue.via);
         }
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
         // فشل الحل التلقائي: الخطة الاحتياطية — مسح بيانات المتصفح + نفس الكلمة في تاب جديد
@@ -819,6 +801,7 @@ export class QueueEngine {
     // وضع تلقائي بالكامل: مفيش إيقاف مؤقت — نرجع الحالة «شغال» فوراً والخطة الاحتياطية
     // (مسح بيانات + تبويب جديد) بتتولى الكلمة تلقائياً من غير ما البانر يعلق أبداً
     await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+    await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING }); // 🏷v1.20.4: الصف يطلع من شارة «CAPTCHA» حتى مع الفشل — إحنا بنعيد المسح دلوقتي
     this.broadcast();
     await logger.warn('queue', `الكلمة "${kw.keyword}" فشل حلها التلقائي — الخطة الاحتياطية (مسح بيانات + تبويب جديد) بتتولى تلقائياً`);
     return 'failed';
@@ -863,6 +846,43 @@ export class QueueEngine {
       await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
     } catch (_) {}
     return nextTab;
+  }
+
+  /**
+   * 🩹v1.20.4: «الصفحة تمام؟» — حكم مستقل عن نتيجة المنسّق. بترجع:
+   * { payload, via } جاهزة للتسجيل | { abort: true } | null (مفيش إنقاذ — كمّل التصعيد العادي).
+   * مفيش browsingData.remove ولا تاب جديد هنا خالص — ده بالظبط اللي كان بيحرق الجلسة.
+   */
+  async softRescueAfterCaptcha(tabId, kw, cfg, signal, sinceTs) {
+    if (signal && signal.aborted) { return { abort: true }; }
+    let urlNow = null;
+    try { urlNow = await tabctl.getUrl(tabId); } catch (_) { return null; }
+    if (urlNow && urlkit.isSorry(urlNow)) { return null; } // لسه صفحة تحدي — الإنقاذ مكانش لازم
+    // كاش آخر تحليل: يمكن وصل متأخر بس موجود أصلًا
+    const late = this.lastSerp && this.lastSerp.get(tabId);
+    if (late && late.ts >= sinceTs) {
+      await logger.info('queue', `🩹 "${kw.keyword}" — التحليل وصل متأخر؛ سجلناه من الكاش من غير أي إعادة`);
+      return { payload: late.payload, via: 'captcha-solved-late' };
+    }
+    // المسح يمكن لسه شغال دلوقتي — 12 ثانية استنانة أخيرة قبل أي ريستارت
+    for (let i = 0; i < 8; i++) {
+      await sleep(1500, signal);
+      if (signal && signal.aborted) { return { abort: true }; }
+      const c2 = this.lastSerp && this.lastSerp.get(tabId);
+      if (c2 && c2.ts >= sinceTs) {
+        await logger.info('queue', `🩹 "${kw.keyword}" — المسح كان بيخلص؛ جابه في اللحظة الأخيرة`);
+        return { payload: c2.payload, via: 'captcha-solved-late' };
+      }
+    }
+    await logger.warn('queue', `🩹 "${kw.keyword}" — الصفحة سليمة بس مفيش تحليل؛ reload هادي لنفس التاب (مفيش مسح بيانات)`);
+    await this.notify('🩹 إنقاذ بعد الحل', `"${kw.keyword}" — الصفحة تمام؛ بنعيد المسح بس من غير مسح بيانات`);
+    try { await tabctl.reload(tabId); } catch (_) { return null; }
+    const soft = await this.raceSerpOrCaptcha(tabId, cfg, signal);
+    if (soft.type === 'aborted') { return { abort: true }; }
+    if (soft.type === 'serp' && (soft.payload.total > 0 || soft.payload.noResults)) {
+      return { payload: soft.payload, via: 'captcha-solved-reload', reloaded: true };
+    }
+    return null; // كابتشا تانية أو timeout — نرجع للدورة القديمة (تبريد/مسح/تاب جديد) بعد ما خدنا الفرصة الليّنة
   }
 
   /** ضمان تاب واحد: نقفل كل تابانين فتحتهم الأداة (حتى من جلسات قبل إعادة تشغيل

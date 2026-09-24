@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.20.3');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.3'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.3'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.3\]/m);
+  assert.equal(man.version, '1.20.4');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.4'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.4'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.4\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -689,6 +689,23 @@ test('v1202: engine — newtab/رفض = تبريد → مسح بيانات → �
   assert.ok(nb.indexOf('continue') > nb.indexOf('openFreshTab'), 'مسار الرفض مش بيرجّع الكلمة لللفة بعد الاستشفاء');
 });
 
+/* ---------------- v1.20.4 — الإنقاذ مبينبش لكلام المنسّق، ينبح للصفحة ---------------- */
+
+test('v1204: صفحة سيرب سليمة بعد «فشل» المنسق = تسجيل فوري، لا ريفرش ولا مسح بيانات', () => {
+  // نداء الإنقاذ برا بلوك solved — قبل التصعيد مباشرة
+  const idxRescue = queue.indexOf("const rescue = await this.softRescueAfterCaptcha");
+  const idxEscal = queue.indexOf("if (captchaClears >= maxClears)");
+  assert.ok(idxRescue > -1 && idxEscal > -1 && idxRescue < idxEscal, 'الإنقاذ لسه مش قبل التصعيد');
+  // الميثود بتتحقق من الـ URL مش من رايات المحلول
+  const m = queue.slice(queue.indexOf('async softRescueAfterCaptcha'), queue.indexOf('ضمان تاب واحد'));
+  assert.match(m, /urlkit\.isSorry\(urlNow\)/, 'مفيش فحص URL في الإنقاذ');
+  assert.ok(m.indexOf('browsingData') === -1, 'الإنقاذ بيلمس داتا — ده الجحيم اللي كان بيضرب الـ100 extension');
+  assert.ok(m.indexOf('tabctl.open') === -1, 'الإنقاذ بيفتح تاب جديد — كان لازم يبقى نفس التاب');
+  assert.match(m, /for \(let i = 0; i < 8; i\+\+\)/, 'مفيش استنانة أخيرة للمسح الشغال قبل الريستارت');
+  // الشارة حتى في الفشل:
+  assert.match(queue, /الصف يطلع من شارة «CAPTCHA» حتى مع الفشل/, 'شارة الكابتشا بتفضل بعد فشل الحل والسيرب طالع');
+});
+
 /* ---------------- v1.20.3 — الكابتشا اتحلت والنتيجة موجودة؟ مفيش دوامة ريفرش ---------------- */
 
 test('v1203: التحليل المتأخر بعد الحل ليه مهلة كامل المسح + إنقاذ ليّن بدون لمس داتا', () => {
@@ -699,8 +716,9 @@ test('v1203: التحليل المتأخر بعد الحل ليه مهلة كا�
   assert.match(queue, /captcha-solved-late/, 'مفيش سجل من الكاش للتأخير البسيط');
   assert.match(queue, /captcha-solved-reload/, 'مفيش فرصة reload ليّنة قبل التصعيد');
   assert.match(queue, /🩹 إنقاذ بعد الحل/, 'المستخدم مش بيتبشر إن النتيجة اتأنقذت');
-  // الإنقاذ الليّن نفسه ما بيمسحش داتا
-  const soft = queue.slice(queue.indexOf('🩹v1.20.3'), queue.indexOf('بس بعد ما ادينا الفرصة الليّنة'));
+  assert.match(queue, /softRescueAfterCaptcha\(tab\.id, kw, cfg, signal, solveStartedAt\)/, 'الإنقاذ لسه محبوس جوه solved فقط');
+  // الإنقاذ الليّن نفسه ما بيمسحش داتا (v1.20.4: بقا ميثود مستقلة)
+  const soft = queue.slice(queue.indexOf('async softRescueAfterCaptcha'), queue.indexOf('ضمان تاب واحد'));
   assert.ok(soft.indexOf('browsingData') === -1, 'مسار الإنقاذ الليّن بيلمس browsingData — ده بالظبه اللي كان بيضرب الـ100 extension');
   assert.ok(soft.indexOf('tabctl.reload') > -1, 'مفيش ريفرش ليّن لنفس التاب');
   // الشارة: أول ما الحل يتم الصف يطلع من CAPTCHA
