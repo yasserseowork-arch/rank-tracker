@@ -5,7 +5,7 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const K = {
   CONFIG: 'srt.config',
@@ -31,7 +31,7 @@ export const DEFAULT_CONFIG = {
   delayMs: 4000,                // مهلة إلزامية قبل كل كلمة (طلب المستخدم: 4 ثوانٍ)
   jitterMs: 1500,
   cooldownEvery: 8,             // كل N كلمات خذ استراحة طويلة
-  cooldownMs: 45000,
+  cooldownMs: 30000,           // v1.20.5: 45←30 ثانية — الأمان لسه في الـcooldownEvery والـjitter العشوائي
   cooldownJitterMs: 20000,
   // الكابتشا
   captchaMaxAttempts: 2,
@@ -316,6 +316,13 @@ export async function migrate() {
     if (!Number.isFinite(att) || att > 2) { patchCfg.captchaMaxAttempts = 2; }
     const cn = parseInt(cfg.clearEveryN, 10);
     if (!Number.isFinite(cn) || cn === 10) { patchCfg.clearEveryN = 8; }
+    if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
+  }
+  if (version < 6) {
+    // تسريع 1.20.5: الافتراضي القديم 45000 يتنقل لـ30000 — أي قيمة عدّلها المستخدم بيديها بتفضل
+    const cfg = await getConfig();
+    const patchCfg = {};
+    if (parseInt(cfg.cooldownMs, 10) === 45000) { patchCfg.cooldownMs = 30000; }
     if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
   }
   if (version < 5) {

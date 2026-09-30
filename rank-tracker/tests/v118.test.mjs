@@ -153,14 +153,14 @@ test('كابتشا v1.18.3: رتم صبر حقيقي — رسم قبل فعل، 
 test('كابتشا v1.18.3: حلّ؟ مفيش مسح مستعجل — نتحرى عن النتائج بهدوء الأول', () => {
   assert.match(queue, /collectAfterSolve/, 'مفيش مرحلة تهدئة بعد الحل');
   assert.match(queue, /this\.lastSerp = this\.lastSerp \|\| new Map\(\)/, 'مفيش كاش لآخر تحليل (سباق الفقد)');
-  assert.match(queue, /await sleep\(6000, signal\)/, 'مفيش راحة 6 ثواني قبل قراءة آخر تحليل');
+  assert.match(queue, /await sleep\(3500, signal\); \/\/ v1\.20\.5/, 'مفيش تهدئة قبل قراءة آخر تحليل (1.20.5: 6←3.5ث)');
   assert.match(queue, /collectAfterSolve\(tab\.id, solveStartedAt, signal, cfg\)/, 'مسار الحل الأساسي مش بيستخدم التهدئة');
   assert.match(queue, /collectAfterSolve\(tab\.id, solveStartedAt2, signal, cfg\)/, 'مسار التاب الجديد مش بيستخدم التهدئة');
 });
 
 test('الإعدادات v1.18.3: المحاولتين إجباريًا + المسح بقى كل 8 مع الاستراحة', () => {
   assert.match(st, /clearEveryN:\s*8,/, 'ديفولت المسح لسه 10');
-  assert.match(st, /export const SCHEMA_VERSION = 5;/, 'مفيش نسخة ميجريشن جديدة');
+  assert.match(st, /export const SCHEMA_VERSION = 6;/, 'مفيش نسخة ميجريشن جديدة');
   assert.match(st, /att > 2\) \{ patchCfg\.captchaMaxAttempts = 2; \}/, 'مفيش إجبار المحاولتين على الإعدادات القديمة');
   assert.match(st, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'المسح القديم (10) مش بيتحوّل للـ8');
 });
@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.20.4');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.4'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.4'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.4\]/m);
+  assert.equal(man.version, '1.20.5');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.5'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.5'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.5\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -647,9 +647,9 @@ test('v1200: BeyondTen (إضافة الـ100) — الشاشر التلقائي 
 
 test('v1201: مفيش توقيتات دقيقة متكررة — المهلة قبل الكلمة والجلب الخلفي اتهمّنت', () => {
   const sched = read('src/background/core/scheduler.js');
-  assert.match(sched, /const ms = 8500 \+ Math\.floor\(Math\.random\(\) \* 5500\);/,
+  assert.match(sched, /const ms = 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/,
     'المهلة لسه 10000ms بالمللي كل كلمة — بصمة');
-  assert.match(serp, /await D\.humanSleep\(2400, 1600\);/, 'دفعات الجلب الخلفي لسه سريعة عدوِّ');
+  assert.match(serp, /await D\.humanSleep\(1500, 900\);/, 'فاصل الجلب الخلفي مش على مقاس 1.20.5');
   assert.ok(!/const ms = 10000;/.test(sched), 'القيمة الثابتة لسه موجودة');
 });
 
@@ -663,7 +663,7 @@ test('v1201: BeyondTen — مفيش عدو طلبات والسينسور ما ب
   const btState = read('beyondten/content/state.js');
   const bt = read('beyondten/content/index.js');
   assert.match(btState, /concurrency: 2,/, 'لسه 6 متزامنة = 429 أكيد');
-  assert.match(bt, /await delay\(1800 \+ Math\.random\(\) \* 1800, signal\);/, 'مفيش فاصل بين الدفعات');
+  assert.match(bt, /await delay\(1200 \+ Math\.random\(\) \* 1200, signal\);/, 'مفيش فاصل بين الدفعات');
   assert.match(bt, /const live = remainingTargets\(\);/, 'السينسور لسه بياخد القائمة القديمة');
 });
 
@@ -689,6 +689,24 @@ test('v1202: engine — newtab/رفض = تبريد → مسح بيانات → �
   assert.ok(nb.indexOf('continue') > nb.indexOf('openFreshTab'), 'مسار الرفض مش بيرجّع الكلمة لللفة بعد الاستشفاء');
 });
 
+/* ---------------- v1.20.5 — مفيش قفل لكروم + تسريع آمن ---------------- */
+
+test('v1205: كنس التابات مابيقدرش يقفل كروم — كل قفل عدّى على الحماية', () => {
+  assert.match(queue, /try \{ await tabctl\.close\(stale\); \} catch \(_\) \{\}/, 'الكنس لسه بيقفل بـchrome.tabs.remove العاري');
+  assert.ok(!/chrome\.tabs\.remove/.test(queue), 'لسه في remove عاري في queue — آخر تاب = قفل نافذة = قفل كروم');
+  assert.match(read('src/background/core/tabctl.js'), /win && win\.tabs && win\.tabs\.length <= 1/, 'حماية آخر تاب مش في tabctl');
+});
+
+test('v1205: التسريع الآمن متقفل بالأرقام — والافتراضي القديم بيتهاجر لـ30 ثانية', () => {
+  const sched = read('src/background/core/scheduler.js');
+  assert.match(sched, /const ms = 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'المهلة قبل الكلمة مش على مقاس 1.20.5');
+  assert.match(serp, /await D\.humanSleep\(1500, 900\);/, 'فاصل الدفعات مش متسارع بأمان');
+  assert.match(st, /cooldownMs: 30000,/, 'الافتراضي الجديد مش 30 ثانية');
+  assert.match(st, /if \(parseInt\(cfg\.cooldownMs, 10\) === 45000\) \{ patchCfg\.cooldownMs = 30000; \}/, 'مفيش ميجريشن من الـ45000 القديم');
+  assert.match(queue, /const extra = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تبريد الحرارة لسه 12–21 ثانية');
+  assert.match(read('beyondten/content/index.js'), /\}, 4000\); \/\/ v1\.2\.2/, 'الشاشر لسه كل 5 ثواني');
+});
+
 /* ---------------- v1.20.4 — الإنقاذ مبينبش لكلام المنسّق، ينبح للصفحة ---------------- */
 
 test('v1204: صفحة سيرب سليمة بعد «فشل» المنسق = تسجيل فوري، لا ريفرش ولا مسح بيانات', () => {
@@ -701,7 +719,7 @@ test('v1204: صفحة سيرب سليمة بعد «فشل» المنسق = تس�
   assert.match(m, /urlkit\.isSorry\(urlNow\)/, 'مفيش فحص URL في الإنقاذ');
   assert.ok(m.indexOf('browsingData') === -1, 'الإنقاذ بيلمس داتا — ده الجحيم اللي كان بيضرب الـ100 extension');
   assert.ok(m.indexOf('tabctl.open') === -1, 'الإنقاذ بيفتح تاب جديد — كان لازم يبقى نفس التاب');
-  assert.match(m, /for \(let i = 0; i < 8; i\+\+\)/, 'مفيش استنانة أخيرة للمسح الشغال قبل الريستارت');
+  assert.match(m, /for \(let i = 0; i < 5; i\+\+\)/, 'مفيش استنانة أخيرة للمسح الشغال قبل الريستارت');
   // الشارة حتى في الفشل:
   assert.match(queue, /الصف يطلع من شارة «CAPTCHA» حتى مع الفشل/, 'شارة الكابتشا بتفضل بعد فشل الحل والسيرب طالع');
 });

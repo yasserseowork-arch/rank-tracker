@@ -334,7 +334,7 @@ export class QueueEngine {
         // 🌡 صبر إضافي بعد حرارة الكابتشا: كلمتين واطفين كابتشا؟ الاستراحة الجاية أطول —
         // ده أنفع ألف مرة من إننا نطارد جوجل بسرعة ونجيب /sorry/ تاني
         if (this.captchaHeat >= 2) {
-          const extra = 12000 + Math.floor(Math.random() * 9000);
+          const extra = 8000 + Math.floor(Math.random() * 6000);
           await logger.info('queue', `🌡 تبريد ${Math.round(extra / 1000)} ثانية إضافية بعد كابتشا متكررة — والصبر أمان`);
           await sleep(extra, this.signal());
           this.captchaHeat -= 1;
@@ -811,7 +811,7 @@ export class QueueEngine {
    *  يكون وصل قبل ما نفتح الاستماع)، وبعدها استرخاء هادي. مفيش مسح بيانات
    *  قبل ما نتأكد إن مفيش فعلًا نتيجة جاية. */
   async collectAfterSolve(tabId, sinceTs, signal, cfg) {
-    await sleep(6000, signal);
+    await sleep(3500, signal); // v1.20.5: الكاش بيقرا لحظة الوصل — الراحة الطويلة كانت تضيف دقيقة لكل كلمة
     const cached = this.lastSerp && this.lastSerp.get(tabId);
     if (cached && cached.ts >= sinceTs) { return cached.payload; }
     // v1.20.3: مسح ما بعد الحل نفس المسح العادي بطوله (hardCap + جلب خلفي + AI) —
@@ -865,8 +865,8 @@ export class QueueEngine {
       return { payload: late.payload, via: 'captcha-solved-late' };
     }
     // المسح يمكن لسه شغال دلوقتي — 12 ثانية استنانة أخيرة قبل أي ريستارت
-    for (let i = 0; i < 8; i++) {
-      await sleep(1500, signal);
+    for (let i = 0; i < 5; i++) {
+      await sleep(1200, signal);
       if (signal && signal.aborted) { return { abort: true }; }
       const c2 = this.lastSerp && this.lastSerp.get(tabId);
       if (c2 && c2.ts >= sinceTs) {
@@ -895,7 +895,10 @@ export class QueueEngine {
     } catch (_) {}
     for (const stale of ids) {
       if (stale === keepTabId || !stale) { continue; }
-      try { await chrome.tabs.remove(stale); } catch (_) {}
+      // 🛡v1.20.5: القفل العاري كان بيقفل النافذة لو التاب ده آخر تاب فيها — ومعها
+      // كروم كله (بلاغ المستخدم). tabctl.close محمي: آخر تاب يتحول about:blank بدل
+      // القفل، وبيقفل watchers بتاعته كمان (كانوا بيسربوا)
+      try { await tabctl.close(stale); } catch (_) {}
       if (this.ownedTabs) { this.ownedTabs.delete(stale); }
     }
     try { await state.setRun({ ownedTabIds: [keepTabId] }); } catch (_) {}

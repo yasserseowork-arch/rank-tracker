@@ -143,7 +143,7 @@
     let ticks = 0;
     state.chaser = setInterval(async () => {
       ticks++;
-      if (signal.aborted || ticks > 60) { stopChaser(); return; } // 5 minutes then politely retreat
+      if (signal.aborted || ticks > 75) { stopChaser(); return; } // ~5 دقائق بأدب ثم انسحاب
       const remaining = remainingTargets();
       if (!remaining.length) { finishAll(); return; }
       if (state.fetching) return; // an active batch is already running
@@ -151,7 +151,7 @@
       if (!ctx) return;
       try { await fetchBatch(remaining, ctx, signal); } catch (e) {}
       if (!remainingTargets().length) finishAll();
-    }, 5000);
+    }, 4000); // v1.2.2: تشيك أنشط — الشغل بيخلص أسرع من غير ضغط على جوجل
   }
 
   function finishAll() {
@@ -222,9 +222,9 @@
         // Soft throttle if empty results
         if (appended < 5 && CONCURRENCY > 2) CONCURRENCY = Math.max(2, CONCURRENCY - 1);
       }
-      // v1.2.1: فاصل مهذب بين الدفعات — طلبات ورا بعضها بسرعة = /sorry/
+      // v1.2.2: فاصل بين الدفعات — مهدّن مع الحفاظ على الأمان (1.2–2.4 ثانية)
       if (i + CONCURRENCY < targets.length && !signal.aborted) {
-        await delay(1800 + Math.random() * 1800, signal);
+        await delay(1200 + Math.random() * 1200, signal);
       }
     }
   }
