@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.1');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.1'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.1'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.1\]/m);
+  assert.equal(man.version, '1.21.2');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.2'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.2'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.2\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -812,4 +812,31 @@ test('v1211: المكرر في نفس الرن — نسخة ذكية من غير
   const seg = queue.slice(queue.indexOf('const run0 = await state.getRun();'), queue.indexOf('// مسح دوري ذكي'));
   assert.ok(seg.indexOf('bumpDailyCount') === -1, 'المكرر المنسوخ بيحسب على السقف اليومي وهو مابعملش طلب');
   assert.ok(seg.indexOf('return \'done\';') > -1, 'المسار مش بيرجعل اللفة بـ done');
+});
+
+/* ---------------- v1.21.2 — لا تاب جديد على سلام + التحدي البايّت ليه ريلود ---- */
+
+test('v1212: بعد التبريد — نظرة على الصفحة نفسها قبل المسح والتاب الجديد', () => {
+  const gap = queue.slice(queue.indexOf('await sleep(restSec * 1000, signal);'), queue.indexOf('const nextTab = await this.openFreshTab'));
+  assert.ok(gap.length > 50, 'مفيش فجوة تبريد→تاب جديد؟');
+  assert.match(gap, /softRescueAfterCaptcha\(tab\.id, kw, cfg, signal, solveStartedAt\)/,
+    'الصفحة ماتتبعتش بعد التبريد قبل ما نضرب المسح — ده بيولد تاب جديد على SERP سليم');
+  assert.match(gap, /-cooldown-calm'\);/, 'مسار الهدوء مش متوثق في الـvia؟');
+  assert.match(gap, /return this\.recordResult\(kw, calm\.payload, cfg,/, 'الصفحة السليمة مالهاش تسجيل مباشر من جوه الفجوة');
+  assert.ok(!/recordExhausted/.test(gap), 'إعادة الفحص ما ينفعش تتحول استسلام');
+  assert.ok(!/openFreshTab/.test(gap), 'تاب جديد قبل إعادة الفحص = القفل اتكسر');
+});
+
+test('v1212: «challenge expired» — ريلود لطيف لنفس التاب، والصبر يفضل سايب للكلمة حقها', () => {
+  assert.match(queue, /check the checkbox again/, 'كاشف رسالة الإنجليزية ناقص');
+  assert.match(queue, /انتهت صلاحي|انتهت فترة/, 'كاشف الرسالة العربية ناقص');
+  assert.match(queue, /chrome\.scripting\.executeScript/, 'المسبار لازم قراءة نقية من الـSW (مفيش مساس بمحرك الحل)');
+  const wcc = queue.slice(queue.indexOf('async waitCaptchaCleared'), queue.indexOf('async tabChallengeLooksStale'));
+  assert.match(wcc, /Date\.now\(\) - lastStale > 90000/, 'مفيش معدل بحد أقصى للريلود (90 ث) — reload loop بصمة');
+  assert.match(wcc, /waited > 20 &&/, 'ريلود قبل ما Buster/المستخدم ياخدوا فرصتهم؟');
+  assert.match(wcc, /tabctl\.reload\(tabId\)/, 'الريلود يلزمه لنفس التاب');
+  assert.ok(!/openFreshTab/.test(wcc) && !/recordExhausted/.test(wcc), 'الصبر اتحول هروب — ممنوع (1.20.0)');
+  // المحرك المتجمد سايب مكانه
+  const cap = read('src/content/captcha.js');
+  assert.ok(!/tabChallengeLooksStale|challenge \(has \)?expired/.test(cap), 'captcha.js اتلمس — ممنوع');
 });

@@ -558,6 +558,17 @@ export class QueueEngine {
         await logger.warn('queue', `🧩 كابتشا — فشل الحل التلقائي: تبريد ${restSec}ث ثم مسح بيانات + تاب جديد (${captchaClears}/${maxClears})`);
         await sleep(restSec * 1000, signal);
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        // 👀 v1.21.2: قبل المسح والتاب الجديد — نظرة تانية على الصفحة نفسها: «الآلة استهلكت
+        // محاولاتها» مش معناه إن التحدي لسه موجود. ضغطة الـorange-man ممكن تكون جابت أكلها
+        // في التبريد، أو Buster المتأخر حلها، أو انت حلّها بإيدك: لو صفحة النتائج دلوقتي
+        // سليمة نسجلها ونمشي — مفيش إعادة مسح ولا تاب جديد على حاجة تمام من أصله
+        const calm = await this.softRescueAfterCaptcha(tab.id, kw, cfg, signal, solveStartedAt);
+        if (calm && calm.abort) { return this.abortKeyword(kw, 'paused'); }
+        if (calm && calm.payload) {
+          if (calm.reloaded) { navigatedViaBox = false; }
+          await logger.info('queue', `✅ "${kw.keyword}" — الصفحة كانت بطمنّت في فترة التبريد؛ النتيجة اتسجلت من غير تاب جديد ولا مسح بيانات`);
+          return this.recordResult(kw, calm.payload, cfg, (calm.via || 'late') + '-cooldown-calm');
+        }
         // تاب واحد مضمون: الجديد يفتح، القديم وكل فائض يتقفل، وبعدين المسح —
         // ما يبقاش في شبح تاب كابتشا قديم يربك الجلسة وقت ما البيانات بتمسح
         const nextTab = await this.openFreshTab(kw, cfg, url, tab.id);
@@ -949,6 +960,7 @@ export class QueueEngine {
     this.broadcast();
     let waited = 0;
     let focusOnce = false;
+    let lastStale = 0; // ⏳ v1.21.2: آخر ريلود لـ«التحدي البايّت»
     let flag = 'waiting'; // 'clear' | 'closed'
     const offs = [];
     try {
@@ -969,6 +981,16 @@ export class QueueEngine {
         if (u == null || u === '') { return 'tab-closed'; }
         if (!urlkit.isSorry(u)) { break; } // الصفحة بقت نتائج عادية = اتحلت
         waited += 4;
+        // ⏳ v1.21.2: «Verification challenge expired. Check the checkbox again.» = التحدي
+        // مات وهي في إيده — الضغط على الصندوق في الحالة دي ملوش أي جدوى للأبد، والاستنى
+        // بيطول (بلاغ: 476 ثانية وعدادى). ريلود لنفس التاب يولّد تحدي طازة، والصبر يكمل
+        // عادي — مفيش abandoning للكلمة، ومفيش مساس بمحرك الحل نفسه. حدا مرة كل 90 ثانية
+        if (waited > 20 && Date.now() - lastStale > 90000 && (await this.tabChallengeLooksStale(tabId))) {
+          lastStale = Date.now();
+          await logger.info('queue', `⏳ "${kw.keyword}" — التحدي على الصفحة بايّت («expired»)؛ ريلود لنفس التاب عشان كابتشا طازة تكمل المحاولة`);
+          try { await tabctl.reload(tabId); } catch (_) { return 'tab-closed'; }
+          await sleep(4000, signal);
+        }
         if (waited % 48 === 44) {
           await this.notify('🧩 لسه مستنّيين', `"${kw.keyword}" — الكابتشا معلقة؛ بنستنى تتحل (Buster أو يدويًا من التاب نفسه) وهنعيد نفس الكلمة تاني — مفيش إلغاء`);
           await logger.info('queue', `🧘 لسه مستنّي الكابتشا تتحل (${waited} ثانية) علشان "${kw.keyword}"`);
@@ -985,6 +1007,21 @@ export class QueueEngine {
     await sleep(cool, signal);
     if (signal && signal.aborted) { return 'aborted'; }
     return 'cleared';
+  }
+
+  /** ⏳ v1.21.2: التحدي «بايّت»؟ جوجل بيكتبها حرفيًا على الصفحة دي. مسبار قراءة بحتة
+   *  من الـService Worker — ما بيلامسش المحرك ولا بيضغط ولا بيغير حاجة */
+  async tabChallengeLooksStale(tabId) {
+    try {
+      const [inj] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const t = String((document.body && document.body.innerText) || '').slice(0, 40000);
+          return /challenge (?:has )?expired|check the checkbox again|انتهت صلاحي|انتهت فترة/i.test(t);
+        }
+      });
+      return !!(inj && inj.result);
+    } catch (_) { return false; }
   }
 
   waitManualSolve(tabId, cfg, signal) {
