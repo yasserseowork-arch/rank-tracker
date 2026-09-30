@@ -35,10 +35,31 @@ export class QueueEngine {
 
   /**
    * ساعة حراسة: إن مات الـ Service Worker في منتصف كلمة (لا عملاء keep-alive)،
-   * يوقظه alarm بعد دقيقتين ويستأنف الحلقة من currentIndex المحفوظة.
+   * يوقظه alarm ويستأنف الحلقة من currentIndex المحفوظة.
+   * v1.21.3: النبض بقى كل 30 ثانية (كان دقيقتين) — مش استئناف أسرع وخلاص:
+   * الـ alarm الحي نفسه بيخلي الـWorker صاحي طول الرن، ففترات النوم اللي كانت
+   * بتبلّع 12-20 ثانية تبريد «في اللامعقول» (المستخدم ماسح التاب وقافل اللوحة)
+   * اختفت تقريبًا — وده مصدر إحساس «مش استيبل» الأول.
    */
   armWatchdog() {
-    try { chrome.alarms.create('srt-watch', { delayInMinutes: 2 }); } catch (_) {}
+    try { chrome.alarms.create('srt-watch', { delayInMinutes: 0.5 }); } catch (_) {}
+  }
+
+  /** v1.21.3: بعد موت Worker في منتصف كلمة، السطر بيفضل معلقان بشارة
+   *  running/captcha وهو مالوش صاحب — نلمّه لـ pending قبل ما الحلقة تستأنف */
+  async healStaleBadges() {
+    try {
+      const list = await state.getKeywords();
+      let dirty = false;
+      for (const k of list) {
+        if (k && (k.status === C.STATUS.KW.RUNNING || k.status === C.STATUS.KW.CAPTCHA)) {
+          k.status = C.STATUS.KW.PENDING;
+          dirty = true;
+        }
+      }
+      if (dirty) { await state.setKeywords(list); }
+      return dirty;
+    } catch (_) { return false; }
   }
 
   disarmWatchdog() {
@@ -54,6 +75,7 @@ export class QueueEngine {
       await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null, pauseReason: null });
       this.index = run.currentIndex || 0;
       this.abortController = new AbortController();
+      await this.healStaleBadges();
       this.loop();
     } else if (active) {
       this.armWatchdog();
@@ -433,7 +455,7 @@ export class QueueEngine {
     await this.maybePeriodicClear(cfg);
 
     // 1) المهلة الإلزامية قبل كل كلمة
-    await scheduler.preKeywordDelay(cfg, { index: this.index }, signal);
+    await scheduler.preKeywordDelay(cfg, { index: this.index, cold: (this.captchaHeat || 0) === 0 }, signal);
     if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
 
     // 2) تجهيز التبويب (واحد دائم + الكلمة من صندوق البحث)

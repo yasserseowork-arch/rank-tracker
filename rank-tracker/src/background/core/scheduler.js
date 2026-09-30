@@ -68,8 +68,14 @@ export function pendingAlarms() {
 /** المهلة التلقائية قبل كل كلمة: ~10 ثواني (قرار المستخدم) — v1.20.1
  *  العشر بالظبط المتكررة كل مرة بصمة آلية؛ بنحافظ على المتوسط ونجيب هامان 8.5–14 ثانية */
 export async function preKeywordDelay(cfg, context, signal) {
-  const ms = 5500 + Math.floor(Math.random() * 3500); // v1.20.5: تسريع — 5.5–9 ثواني عشوائية لسه فوق متوسط اليدوي وأدنى متوسط بوت
-  await logger.info('scheduler', `مهلة قبل الكلمة #${(context && context.index || 0) + 1}: ${(ms / 1000).toFixed(1)}ث`);
+  // v1.21.3: ⚡ وضع بارد — الرن ما شفش كابتشا خالص (heat صفر)؟ الفاصل بقى 2.6–4.4 ثانية:
+  // سرعة المستخدم نفسه وهو بيتصفح بإيده. أول ما كابتشا تظهر بنبقى 5.5–9 ثانية على طول،
+  // والحرارة بتنزل كلمة كلمة فالحالة الباردة بترجع لوحدها — أمان 1.20.1 كامل لسه مفعّل لما يلزم
+  const cold = !!(context && context.cold);
+  const ms = cold
+    ? 2600 + Math.floor(Math.random() * 1800)
+    : 5500 + Math.floor(Math.random() * 3500); // v1.20.5: تسريع — 5.5–9 ثواني عشوائية لسه فوق متوسط اليدوي وأدنى متوسط بوت
+  await logger.info('scheduler', `${cold ? '⚡ ' : ''}مهلة قبل الكلمة #${(context && context.index || 0) + 1}: ${(ms / 1000).toFixed(1)}ث`);
   return wait(ms, 'predelay', signal);
 }
 

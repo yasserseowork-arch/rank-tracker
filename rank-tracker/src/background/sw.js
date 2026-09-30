@@ -47,6 +47,7 @@ async function boot(reason) {
     await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
     engine.index = run.currentIndex || 0;
     engine.abortController = new AbortController();
+    await engine.healStaleBadges(); // v1.21.3: بلا صفوف معلقانة بشارة ميتة
     engine.loop();
   } else if (run.status === C.STATUS.RUN.PAUSED && run.pauseReason === 'captcha-failed') {
     // إيقاف مؤقت بسبب كابتشا: الاستئناف التلقائي بيشغّل الخطة الاحتياطية لوحدها
@@ -54,6 +55,7 @@ async function boot(reason) {
     await state.setRun({ status: C.STATUS.RUN.RUNNING, pauseReason: null, captcha: null });
     engine.index = run.currentIndex || 0;
     engine.abortController = new AbortController();
+    await engine.healStaleBadges(); // v1.21.3: بلا صفوف معلقانة بشارة ميتة
     engine.loop();
   }
   await logger.info('sw', `Service Worker جاهز (${reason}) — الإصدار ${C.VERSION}`);

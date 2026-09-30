@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.2');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.2'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.2'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.2\]/m);
+  assert.equal(man.version, '1.21.3');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.3'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.3'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.3\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -647,8 +647,8 @@ test('v1200: BeyondTen (إضافة الـ100) — الشاشر التلقائي 
 
 test('v1201: مفيش توقيتات دقيقة متكررة — المهلة قبل الكلمة والجلب الخلفي اتهمّنت', () => {
   const sched = read('src/background/core/scheduler.js');
-  assert.match(sched, /const ms = 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/,
-    'المهلة لسه 10000ms بالمللي كل كلمة — بصمة');
+  assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/,
+    'المهلة لسه قيمة ثابتة كل كلمة — بصمة');
   assert.match(serp, /await D\.humanSleep\(1500, 900\);/, 'فاصل الجلب الخلفي مش على مقاس 1.20.5');
   assert.ok(!/const ms = 10000;/.test(sched), 'القيمة الثابتة لسه موجودة');
 });
@@ -699,7 +699,8 @@ test('v1205: كنس التابات مابيقدرش يقفل كروم — كل �
 
 test('v1205: التسريع الآمن متقفل بالأرقام — والافتراضي القديم بيتهاجر لـ30 ثانية', () => {
   const sched = read('src/background/core/scheduler.js');
-  assert.match(sched, /const ms = 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'المهلة قبل الكلمة مش على مقاس 1.20.5');
+  assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'المهلة قبل الكلمة مش على مقاس 1.20.5');
+  assert.match(sched, /const cold = !!\(context && context\.cold\);/, 'الفصل بين الوضعين مش في الـscheduler؟');
   assert.match(serp, /await D\.humanSleep\(1500, 900\);/, 'فاصل الدفعات مش متسارع بأمان');
   assert.match(st, /cooldownMs: 30000,/, 'الافتراضي الجديد مش 30 ثانية');
   assert.match(st, /if \(parseInt\(cfg\.cooldownMs, 10\) === 45000\) \{ patchCfg\.cooldownMs = 30000; \}/, 'مفيش ميجريشن من الـ45000 القديم');
@@ -839,4 +840,33 @@ test('v1212: «challenge expired» — ريلود لطيف لنفس التاب،
   // المحرك المتجمد سايب مكانه
   const cap = read('src/content/captcha.js');
   assert.ok(!/tabChallengeLooksStale|challenge \(has \)?expired/.test(cap), 'captcha.js اتلمس — ممنوع');
+});
+
+/* ---------------- v1.21.3 — نبضة 30 ثانية، شفاء الشارات، وسرعة يدوي في البرد ---------- */
+
+const sched = read('src/background/core/scheduler.js');
+const swf = read('src/background/sw.js');
+
+test('v1213: watchdog بنبض 30 ثانية + شفاء الصفوف المعلقة في مسارَي الاستئناف', () => {
+  assert.match(queue, /chrome\.alarms\.create\('srt-watch', \{ delayInMinutes: 0\.5 \}\)/,
+    'ساعة الحراسة لسه رجاعة كل دقيقتين — نافذة «النوم الغامض» 4 أضعاف المطلوب');
+  assert.match(queue, /async healStaleBadges\(\)/, 'مفيش دواء للشارات الميتة (running/captcha بلا صاحب)');
+  assert.match(queue, /status === C\.STATUS\.KW\.RUNNING \|\| k\.status === C\.STATUS\.KW\.CAPTCHA/,
+    'الشفاء مالوش في الحالتين الاتنين؟');
+  assert.match(queue, /await this\.healStaleBadges\(\);\n      this\.loop\(\);/, 'watchdog مابيشفيش قبل الاستئناف');
+  const boots = (swf.match(/await engine\.healStaleBadges\(\); \/\/ v1\.21\.3/g) || []).length;
+  assert.equal(boots, 2, 'مسار استئناف تاني في sw.js نسياناه — الاستيقاظ من النوم الاتنين لازم يعالجوا');
+});
+
+test('v1213: ⚡ وضع بارد بإيقاع يدوي — وبأول كابتشا رجوع كامل للإيقاع الآمن', () => {
+  assert.match(sched, /const cold = !!\(context && context\.cold\);/, 'الفصل بين الوضعين مش في الـscheduler؟');
+  assert.match(sched, /2600 \+ Math\.floor\(Math\.random\(\) \* 1800\)/, 'فاصل الوضع البارد اتغير');
+  assert.match(sched, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'الإيقاع الآمن الدافي اتبوظ — ده ممنوع');
+  assert.match(queue, /cold: \(this\.captchaHeat \|\| 0\) === 0/, 'النداء مابيحكيش حالة الحرارة');
+  // الحرارة بتبرد كلمة بكلمة (قفل سابق لسه شغال) → الوضع البارد بيرجع لوحده بعد العاصفة
+  assert.match(queue, /this\.captchaHeat -= 1;/, 'التبريد التلقائي للحرارة اتشال');
+  assert.match(queue, /if \(this\.captchaHeat >= 2\)/, 'تبريد الاستراحة الإضافي اتلمس — ممنوع');
+  // داخل المنطقة المتجمدة: مفيش أي تسريع لمسار الكابتشا
+  assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة ما بعد الحل اتبوظت — ممنوع');
+  assert.ok(!/cold/.test(queue.slice(queue.indexOf('async collectAfterSolve'), queue.indexOf('async softRescueAfterCaptcha'))), 'وضع بارد تسرّب لمسار الحل');
 });
