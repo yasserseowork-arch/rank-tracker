@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.20.5');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.20\.5'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.20\.5'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.20\.5\]/m);
+  assert.equal(man.version, '1.21.0');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.0'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.0'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.0\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -745,3 +745,46 @@ test('v1203: التحليل المتأخر بعد الحل ليه مهلة كا�
 
 
 
+
+/* ---------------- v1.21.0 — الطقم المرافق كامل: مانيفستات، أمان بصمة، وخفة حركة ---------------- */
+
+test('v1210: الطقم كامل — مانيفستات للإضافات المرافقة الثلاثة وقواعد أمان معقولة', () => {
+  for (const dir of ['beyondten', 'gsloc', 'serpcounter']) {
+    const man = JSON.parse(read(dir + '/manifest.json'));
+    assert.equal(man.manifest_version, 3, dir + ' مش MV3');
+    assert.ok(man.name && man.version && man.description, dir + ' مانيفست ناقص بيانات');
+    if (dir !== 'gsloc') {
+      const cs = man.content_scripts[0];
+      assert.match(cs.matches[0], /google\.\*\/search/, dir + ' بيحقن بره صفحات البحث');
+    }
+  }
+  const btMan = JSON.parse(read('beyondten/manifest.json'));
+  const js = btMan.content_scripts[0].js;
+  assert.ok(js.indexOf('content/index.js') > js.indexOf('content/state.js'), 'ترتيب حقن state مكسور');
+  assert.ok(js.indexOf('content/renderer.js') < js.indexOf('content/index.js'), 'الريندرر لازم يسبق index');
+  assert.ok(!JSON.parse(read('serpcounter/manifest.json')).permissions.includes('tabs'), 'serpcounter بتطلب tabs وهي DOM-only');
+});
+
+test('v1210: gsloc — الهيدر على صفحات البحث بس، والمستمع مرة واحدة، والقواعد بتعايش الـUpdate', () => {
+  const bg = read('gsloc/js/background.js');
+  assert.match(bg, /"urlFilter": "google\.com\/search"/, 'الفلترة لسه على كل google.com');
+  assert.ok(!/"image"/.test(bg) && !/"xmlhttprequest"/.test(bg) && !/"ping"/.test(bg), 'resourceTypes لسه بتغطي صور/xhr/ping — بصمة');
+  assert.equal((bg.match(/chrome\.contextMenus\.onClicked\.addListener/g) || []).length, 1, 'مستمع الكليك بيتسجل أكتر من مرة');
+  assert.match(bg, /chrome\.runtime\.onInstalled\.addListener/, 'مفيش إعادة تطبيق قواعد بعد update/ريستارت');
+  assert.match(bg, /knownPlaces\.length = 0;/, 'دمج knownPlaces لسه بيسيب شوائب');
+  assert.ok(!/console\.log\(details\)/.test(bg), 'لوجات حذف الكوكيز لسه صابحة الكونسول');
+});
+
+test('v1210: serpcounter — ديباونس، تعقيم لون، هوست أمتن، وكونسول صامت', () => {
+  const cs = read('serpcounter/content.js');
+  assert.match(cs, /function scheduleRerender\(\)/, 'مفيش تجميع لإعادة الترقيم');
+  assert.match(cs, /\}, 400\);/, 'الديباونس مش 400ms');
+  assert.match(cs, /\/\^#\[0-9a-fA-F\]\{3,8\}\$\//, 'لون innerHTML مش معقّم');
+  assert.match(cs, /closest\('\.g, \.tF2Cxc, \.MjjYud'\)/, 'سلسلة الآباء المقادة لسه موجودة');
+  assert.ok(!/console\.log/.test(cs), 'لسه في لوجات كونسول');
+  assert.ok(!/addEventListener\("scrollend"/.test(cs), 'scrollend لسه مسمّر — المسح الآلي بيفوّته');
+  assert.match(cs, /addEventListener\("scroll", scheduleRerender, \{ passive: true \}\)/, 'السكرول مش passive/مجمّع');
+  for (const f of ['serpcounter/styles.css', 'gsloc/css/styles.css']) {
+    assert.ok(!/fonts\.googleapis|bootstrapcdn/.test(read(f)), f + ' لسه بيسحب من CDN');
+  }
+});

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "GS Loc — Fake Location",
+  "version": "1.0.1",
+  "description": "يغيّر موقع نتائج بحث جوجل (UULE) — الرفيق المكاني لأداة SEO Kw Tracker.",
+  "permissions": ["cookies", "contextMenus", "storage", "declarativeNetRequest"],
+  "host_permissions": ["*://*.google.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GS Loc — الموقع"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "js/background.js"
+  }
+}

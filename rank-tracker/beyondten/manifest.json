@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "BeyondTen — 100 Results",
+  "version": "1.2.2",
+  "description": "يعرض 100 نتيجة في صفحة بحث جوجل برصيد الطلبات البشري — الرفيق الرسمي لأداة SEO Kw Tracker.",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "BeyondTen — إعدادات النتائج"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.google.*/search*"],
+      "js": [
+        "content/state.js",
+        "content/params.js",
+        "content/fetch.js",
+        "content/parser.js",
+        "content/purge.js",
+        "content/renderer.js",
+        "content/index.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

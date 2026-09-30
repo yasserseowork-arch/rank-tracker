@@ -17,6 +17,17 @@ const settings = {
 const knownPlaces = [settings];
 var gsMenuIds = []; // عناصر القائمة السياقية بتاعتنا — نمسحها بس عند إعادة البناء
 
+// v1.21.0: المستمع كان بيتسجل من جديد مع كل setupContextMenu — تكرار قوائم = تكرار
+// كليك (تخزينات ورا بعض) وتسريب مستمعين؛ يتسجل مرة واحدة في عمر الـWorker
+chrome.contextMenus.onClicked.addListener(genericOnClick);
+// v1.21.0: قواعد session بتموت مع إعادة تشغيل/تحديث كروم — نعيد تطبيقها عند التحديث
+chrome.runtime.onInstalled.addListener(function() {
+  chrome.storage.sync.get(['settings'], (data) => {
+    if (data.settings) { Object.assign(settings, data.settings); }
+    checkEnabled();
+  });
+});
+
 chrome.runtime.onStartup.addListener(function() {
   chrome.storage.sync.get(null, (data) => {
     if (data.settings) {
@@ -27,7 +38,9 @@ chrome.runtime.onStartup.addListener(function() {
       Object.assign(options, data.options);
     }
     if (data.knownPlaces) {
-      Object.assign(knownPlaces, data.knownPlaces);
+      // v1.21.0: استبدال نضيف — Object.assign على مصفوفة كان بيسيب عناصر ميتة من نسخ أقدم
+      knownPlaces.length = 0;
+      Array.prototype.push.apply(knownPlaces, data.knownPlaces);
       setupContextMenu(knownPlaces);
     }
   });
@@ -73,13 +86,12 @@ function checkEnabled() {
               ]
             },
             "condition": {
-              "urlFilter": "google.com/",
+              // v1.21.0: التصعيد كان على كل طلب google.com (صور/XHR/pings) — هيدر غريب
+              // على كل حاجة = بصمة بتخلي جوجل ريّب فينا؛ كفاية صفحات النتائج نفسها
+              "urlFilter": "google.com/search",
               "resourceTypes": [
                 "main_frame",
-                "sub_frame",
-                "image",
-                "xmlhttprequest",
-                "ping"
+                "sub_frame"
               ]
             }
           }
@@ -172,17 +184,14 @@ function setupContextMenu(allPlaces) {
       chrome.contextMenus.create({"title": item.location, "id": String(item.placeId), "parentId": parent}, () => chrome.runtime.lastError);
     }
   });
-  chrome.contextMenus.onClicked.addListener(genericOnClick);
-}
+} // mNote: onClicked listener moved to top (once per worker)
 
 function deleteUULE() {
   chrome.cookies.getAll({'name':'UULE'}, function(cookies) {
-    for (c in cookies) {
-      var cookie = cookies[c];
+    // v1.21.0: for-in على مصفوفة كان بيدي keys نصية + لوج لكل كوكي — تنضيف صامت
+    for (const cookie of (cookies || [])) {
       var url = 'https://'+cookie.domain+cookie.path;
-      chrome.cookies.remove({'name':'UULE', 'url': url}, function(details) {
-        console.log(details);
-      });
+      try { chrome.cookies.remove({'name':'UULE', 'url': url}, function() { void chrome.runtime.lastError; }); } catch (_) {}
     }
   });
 }

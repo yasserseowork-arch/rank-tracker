@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "CountMe — SERP Counter",
+  "version": "1.0.1",
+  "description": "يرقّم نتائج جوجل الخضرا على صفحة النتائج — المصدر الرسمي لرقم الترتيب لأداة SEO Kw Tracker.",
+  "permissions": ["storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "CountMe — SERP Counter"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.google.*/search*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

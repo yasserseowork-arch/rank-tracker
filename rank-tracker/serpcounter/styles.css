@@ -1,4 +1,4 @@
-@import url('https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css');
+/* v1.21.0: استيراد Bootstrap الخارجي محجوب في MV3 — كان بيرمي خطأ كونسول على كل صفحة */
 
 .countme-serp-counter {
     position: absolute;

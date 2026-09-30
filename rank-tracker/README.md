@@ -54,6 +54,10 @@ By: Muhammed Yasser المستهدف — Saudi Rank Tracker (Chrome MV3)
 1. افتح `chrome://extensions`
 2. فعّل **Developer mode / وضع المطور** (أعلى اليمين).
 3. اضغط **Load unpacked / تحميل غير مضغوط** واختر مجلد `rank-tracker`.
+   ⚠️ اختار **مجلد ثابت** (زي `Documents\rank-tracker`) مش Temporary/تنزيلات بيتنفض —
+   الإزاحة أو التنضيف بيطيّر الإضافة من كروم وهي محذوفة فعليًا من القرص.
+   🧩 من **1.21.0**: `beyondten/`، `gsloc/`، `serpcounter/` كل واحد ليه **manifest.json MV3** —
+   تركّب الأربعة من نفس الـ zip من غير أي ملفات ناقصة، وبحد أدنى من الصلاحيات.
 4. (من 1.18.9) ثبّت إضافة [Buster](https://chromewebstore.google.com/detail/buster-captcha-solver-for/hddnkoimebgkeflboejfjmnkbohjgkhh) كإضافة مستقلة — لم تعد مدمجة داخل هذه الأداة؛ الأداة تكتفي بالضغط على زرارها البرتقالي وتكمل بحلها الصوتي المحلي لو لزم.
 5. اضغط أيقونة الإضافة → تفتح **اللوحة الجانبية**.
 

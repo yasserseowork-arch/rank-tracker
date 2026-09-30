@@ -6,7 +6,9 @@ function countmeSerpMain() {
     var startCount = (currentPage - 1) * resultsPerPage + 1;
 
     chrome.storage.local.get(['numberColor'], function(result) {
-        var numberColor = result.numberColor || "#27c93f";
+        // v1.21.0: تعقيم اللون قبل innerHTML — قيمة مخزن ملوثة تعني XSS داخل صفحة جوجل
+        var raw = (result && result.numberColor) || "";
+        var numberColor = /^#[0-9a-fA-F]{3,8}$/.test(raw) ? raw : "#27c93f";
         var countDisplay = startCount;
         for (var i = 0; i < results.length; i++, countDisplay++) {
             var headerElement = results[i].querySelector('a h3');
@@ -20,8 +22,11 @@ function countmeSerpMain() {
 
             let counter = document.createElement('div');
             counter.className = 'countme-serp-counter';
-            counter.innerHTML = `<span style="color: ${numberColor};">${countDisplay}</span><span style="color: ${numberColor};">⇝</span>`;
-            results[i].parentNode.parentNode.parentNode.append(counter);
+            counter.innerHTML = `<span style="color: ${numberColor};">${countDisplay}</span><span style="color: ${numberColor};">⇛</span>`;
+            // v1.21.0: سلسلة الآباء المقادة اتقادت بتغييرات DOM جوجل؛ closest أمتن ومع fallback هادي
+            var host = results[i].closest('.g, .tF2Cxc, .MjjYud') || (results[i].parentNode && results[i].parentNode.parentNode) || null;
+            if (!host || host === document.body) continue;
+            host.append(counter);
         }
     });
 }
@@ -90,15 +95,32 @@ chrome.storage.onChanged.addListener(function(changes) {
 // Track hash changes and update search results accordingly
 var oldHash = location.hash;
 window.addEventListener('hashchange', function() {
-    setTimeout(countAndHighlight, 750);
+    lastSig = ''; // رابط اتغير = الشبكة جديدة مهما كان العدد
+    scheduleRerender();
     oldHash = location.hash;
 });
 
 // Check if the extension is active and apply counting and highlighting
+// v1.21.0: إعادة الترقيم كانت بتشتغل كاملًا مع كل scrollend (قراءتَي storage + إعادة بناء
+// DOM) والمسح الآلي بيعمل 15–25 سكرول في الكلمة — بقى مجمّع في نبضة واحدة كل 400ms
+// وبلا شغل لو شبكة النتائج ما اتغيرتش
+var lastSig = '';
+var pendingRerender = null;
+function scheduleRerender() {
+    if (pendingRerender) return;
+    pendingRerender = setTimeout(function () {
+        pendingRerender = null;
+        var n = document.querySelectorAll('#search .yuRUbf, #rso .yuRUbf').length;
+        var sig = n + '|' + (location.href.match(/&start=(\d+)/) || [0, 0])[1];
+        if (sig === lastSig && document.querySelector('.countme-serp-counter')) return;
+        lastSig = sig;
+        countAndHighlight();
+    }, 400);
+}
 chrome.storage.local.get(['key'], function(result) {
     if (result.key != 'countme-toggle-off') {
-        setTimeout(countAndHighlight, 750);
-        document.addEventListener("scrollend", countAndHighlight);
+        setTimeout(scheduleRerender, 750);
+        document.addEventListener("scroll", scheduleRerender, { passive: true });
     }
 });
 
@@ -107,14 +129,12 @@ let currentHighlightedIndex = -1; // Track the index of the current highlighted 
 // Add event listener for hotkey to jump to the next highlighted result
 document.addEventListener('keydown', function(event) {
     if (event.ctrlKey && event.shiftKey && event.key === 'H') {
-        console.log('Hotkey detected!');
+        // v1.21.0: صمت الكونسول — سياسة «أخطاء صفر» بتاعة الطقم الموحد
         let highlightedElements = document.querySelectorAll('.countme-highlighted');
         if (highlightedElements.length > 0) {
             // Move to the next highlighted element
             currentHighlightedIndex = (currentHighlightedIndex + 1) % highlightedElements.length;
             highlightedElements[currentHighlightedIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else {
-            console.log('No highlighted elements found.');
         }
     }
 });

@@ -1,5 +1,5 @@
 /* --- Minimalist CSS Theme System --- */
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+/* v1.21.0: استيراد Inter الخارجي محجوب في MV3 — سيستم فونت بدون خطأ كونسول */
 
 :root {
   /* Light Theme (Default) */
