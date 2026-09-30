@@ -16,12 +16,14 @@ test('setConfig: تطهير الأنواع والحدود الآمنة', async (
   assert.equal(cfg.verbose, true);
 });
 
-test('addKeywords: حذف المكرر بدون حساسية لحالة الأحرف', async () => {
+test('addKeywords v1.21.1: المكررات بتفضل صفوف مستقلة بنفس الترتيب — مفيش حذف', async () => {
   await state.clearKeywords();
   await state.addKeywords(['عبايات', 'عبايات ', 'OBAYAT']);
   const list = await state.getKeywords();
-  // 'عبايات ' تُقصّ إلى نفس المفتاح، لكن OBAYAT مختلفة نصياً
-  assert.equal(list.length, 2);
+  // كل سطر في الشيت = صف، حتى لو مكرر حرفيًا — عشان النسخ للترتيب يمشي سطر بسطر
+  assert.equal(list.length, 3);
+  assert.equal(list[1].keyword, 'عبايات');
+  assert.notEqual(list[0].id, list[1].id);
 });
 
 test('start: بدون كلمات → no-keywords', async () => {
@@ -92,17 +94,18 @@ test('setConfig: تنظيف الدومين من https والمسار', async () 
   assert.equal(cfg.storeDomain, 'berhatayer.org.sa');
 });
 
-test('addKeywords: المكرر يرجع للانتظار بدل التجاهل الصامت', async () => {
+test('addKeywords v1.21.1: إضافة نفس الكلمة تاني = صف جديد مش إعادة تدوير القديم', async () => {
   await state.clearKeywords();
   const first = await state.addKeywords(['كلمة مكررة']);
   assert.equal(first.added.length, 1);
   await state.updateKeyword(first.added[0].id, { status: 'done' });
   const second = await state.addKeywords(['كلمة مكررة']);
-  assert.equal(second.added.length, 0);
-  assert.equal(second.reset, 1);
+  assert.equal(second.added.length, 1);
+  assert.equal(second.reset, 0);
   const list = await state.getKeywords();
-  assert.equal(list.length, 1);
-  assert.equal(list[0].status, 'pending');
+  assert.equal(list.length, 2);
+  assert.equal(list[0].status, 'done'); // القديم بسّطره بيتلمسش
+  assert.equal(list[1].status, 'pending'); // والجديد في الطابور
 });
 
 test('handleCaptcha: فشل تلقائي بدون إيقاف مؤقت يرجع الحالة «شغال» فوراً (علة البانر العالق)', async () => {

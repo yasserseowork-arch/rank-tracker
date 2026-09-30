@@ -396,6 +396,39 @@ export class QueueEngine {
     await logger.info('queue', `🔎 فحص الكلمة: "${kw.keyword}"`);
     this.broadcast();
 
+    // ♻️ v1.21.1: الكلمة متكررة في الليستة؟ الصفوف بتتساب كلها (حق الشيت)، بس جوجل
+    // ما يدفعش مرتين في نفس الرن: لو فيه صف مطابق اتسجل في الرن ده — ننسخ له السطر
+    // والنتيجة كاملين من غير أي طلب جديد (أسرع، وأقل كابتشا، والنتيجة واحدة أصلًا)
+    const run0 = await state.getRun();
+    if (run0 && run0.startedAt) {
+      const normS = (s) => String(s || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+      const all0 = await state.getKeywords();
+      const src = all0.find((k) => k && k.id !== kw.id && normS(k.keyword) === normS(kw.keyword)
+        && k.status === C.STATUS.KW.DONE && k.lastCheckedAt && k.lastCheckedAt >= run0.startedAt);
+      if (src) {
+        await state.updateKeyword(kw.id, {
+          status: C.STATUS.KW.DONE,
+          lastPosition: src.lastPosition,
+          lastFound: src.lastFound,
+          lastAiPosition: src.lastAiPosition != null ? src.lastAiPosition : null,
+          lastAiFound: !!src.lastAiFound,
+          lastCheckedAt: Date.now(),
+          note: (kw.note ? kw.note + ' | ' : '') + '♻️ مطابقة لصف سابق في نفس الرن',
+          history: (kw.history || []).concat([Object.assign({},
+            (src.history && src.history[src.history.length - 1]) || {},
+            { ts: Date.now(), via: 'duplicate-row' })]).slice(-(cfg.maxHistoryPerKeyword || 40))
+        });
+        const results0 = await state.getResults();
+        const srcRow = results0.find((r) => r && normS(r.keyword) === normS(kw.keyword) && (r.checkedAt || 0) >= run0.startedAt);
+        if (srcRow) {
+          await state.addResult(Object.assign({}, srcRow, { checkedAt: Date.now(), via: 'duplicate-row' }));
+        }
+        await logger.info('queue', `♻️ "${kw.keyword}" — متطابقة مع صف مسجّل في الرن ده؛ النتيجة اتنسخت لصفها من غير طلب جديد لجوجل`);
+        this.broadcast();
+        return 'done';
+      }
+    }
+
     // مسح دوري ذكي: بعد كل N كلمة مفحوصة (افتراضي 8 — متزامن مع الاستراحة) — بصمة أقل وكابتشا أقل
     await this.maybePeriodicClear(cfg);
 

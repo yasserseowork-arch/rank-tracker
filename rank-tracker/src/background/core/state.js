@@ -168,18 +168,12 @@ export async function updateKeyword(id, patch) {
 export async function addKeywords(keywords, note) {
   const list = await getKeywords();
   const added = [];
-  let reset = 0;
   for (const raw of keywords || []) {
     const kw = String(raw || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
     if (!kw) { continue; }
-    const key = kw.toLowerCase();
-    const idx = list.findIndex((k) => String(k.keyword || '').trim().toLowerCase() === key);
-    if (idx >= 0) {
-      // موجودة من قبل؟ رجّعها لطابور الانتظار بدل تجاهلها الصامت
-      list[idx] = Object.assign({}, list[idx], { status: C.STATUS.KW.PENDING });
-      reset += 1;
-      continue;
-    }
+    // v1.21.1: المكررات مالهاش حذف ولا دمج — المستخدم بيشيل عمود الترتيب ويلصقه في
+    // شيته سطر بسطر: أي سطر ناقص بيبلّط الشيت كله. نفس الكلمة مرتين = صفّين في مكانّين،
+    // والفحص الذكي في queue بيخلي التاني مسخّرة من الأول من غير طلب تاني لجوجل
     const item = {
       id: makeKeywordId(kw),
       keyword: kw,
@@ -194,7 +188,7 @@ export async function addKeywords(keywords, note) {
     added.push(item);
   }
   await setKeywords(list);
-  return { added: added, reset: reset };
+  return { added: added, reset: 0 };
 }
 
 export async function removeKeyword(id) {

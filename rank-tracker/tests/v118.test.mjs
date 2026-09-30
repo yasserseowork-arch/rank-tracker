@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.0');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.0'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.0'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.0\]/m);
+  assert.equal(man.version, '1.21.1');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.1'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.1'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.1\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -787,4 +787,29 @@ test('v1210: serpcounter — ديباونس، تعقيم لون، هوست أم�
   for (const f of ['serpcounter/styles.css', 'gsloc/css/styles.css']) {
     assert.ok(!/fonts\.googleapis|bootstrapcdn/.test(read(f)), f + ' لسه بيسحب من CDN');
   }
+});
+
+/* ---------------- v1.21.1 — المكررات مواطنون من الدرجة الأولى: صف لكل سطر ---------------- */
+
+test('v1211: الاستيراد ما بيرميش سطر — المكرر صف مستقل بنفس المكانة', () => {
+  assert.ok(!/reset \+= 1;/.test(st), 'لسه في إعادة تدوير للصف الموجود بدل إضافة المكرر');
+  assert.match(st, /المكررات مالهاش حذف ولا دمج/, 'نوايا الحذف مش موثقة في الكود');
+  assert.match(st, /return \{ added: added, reset: 0 \};/, 'الشكل القديم لسه بيرجّع reset');
+  // النسخ بيمشي على صفوف المستخدم واحد واحد — متأكد من قفل سابق، وده مسمار التكرار
+  assert.match(panel, /function exportEntriesInUserOrder/, 'مفيش بناء تصدير بترتيب المستخدم');
+  const fn = panel.slice(panel.indexOf('function exportEntriesInUserOrder'), panel.indexOf('async function copyTsv'));
+  assert.ok(fn.length > 0 && !/new Set\(/.test(fn), 'في Set دامج جوه بناء النسخ — المكررات هتتبلع');
+});
+
+test('v1211: المكرر في نفس الرن — نسخة ذكية من غير ضريبة ثانية على جوجل', () => {
+  assert.match(queue, /duplicate-row/, 'مفيش مسار نسخ للمكرر');
+  assert.match(queue, /k\.status === C\.STATUS\.KW\.DONE && k\.lastCheckedAt && k\.lastCheckedAt >= run0\.startedAt/,
+    'النسخ مش مشروط بس بصف ناجح من نفس الرن');
+  assert.match(queue, /♻️ \"\$\{kw\.keyword\}\" — متطابقة مع صف/, 'مفيش سجل للمكرر المنسوخ');
+  assert.ok(queue.indexOf('run0.startedAt') < queue.indexOf('maybePeriodicClear(cfg)'), 'النسخ بيحصل بعد الشغل التقيل — يلزم يسبقه');
+  assert.match(queue, /await state\.addResult\(Object\.assign\(\{\}, srcRow/, 'صف التصدير مابياخدش النسخة — تبوظ في تصدير النتائج');
+  // من غير عدّاد يومي ومن غير ريندرز إضافية: الطلب ما اتعملش أصلًا
+  const seg = queue.slice(queue.indexOf('const run0 = await state.getRun();'), queue.indexOf('// مسح دوري ذكي'));
+  assert.ok(seg.indexOf('bumpDailyCount') === -1, 'المكرر المنسوخ بيحسب على السقف اليومي وهو مابعملش طلب');
+  assert.ok(seg.indexOf('return \'done\';') > -1, 'المسار مش بيرجعل اللفة بـ done');
 });
