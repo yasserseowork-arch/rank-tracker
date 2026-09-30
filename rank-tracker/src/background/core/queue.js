@@ -360,6 +360,10 @@ export class QueueEngine {
           await logger.info('queue', `🌡 تبريد ${Math.round(extra / 1000)} ثانية إضافية بعد كابتشا متكررة — والصبر أمان`);
           await sleep(extra, this.signal());
           this.captchaHeat -= 1;
+        } else if (this.captchaHeat === 1) {
+          // v1.21.4: الحرارة العالقة على 1 كانت بتقفل الوضع البارد للأبد (التبريد كان
+          // مشروط بـ>=2 بس) — كلمة نضيفة واحدة كفاية تطفّي آخر شرارة وترجعنا لسرعة اليدوي
+          this.captchaHeat = 0;
         }
         await scheduler.cooldownIfNeeded(cfg, processed, this.signal(), async (ms) => {
           // عدّاد حي في اللوحة: وقت بداية الاستراحة ومداها — الشريط يظهر بس وإنت في واحدة بجد

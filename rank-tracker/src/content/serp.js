@@ -623,8 +623,10 @@
   async function waitForResults(cfg) {
     const maxWait = cfg.maxWaitResultsMs || 20000;
     const batchSettle = cfg.batchSettleMs || 5000;
-    const rescan = cfg.rescanMs || 1800;
-    const settleMs = cfg.settleMs || 1800;
+    // v1.21.4: الرقم دول بيتلمسوا بس في كلمة «المتجر مش على أول شاشة» — الصف بيبقى
+    // مترسم فعلًا من أول ثانية (num=100 سيرفر-سايد)، فالسكتة الطويلة كانت ضريبة على هواها
+    const rescan = cfg.rescanMs || 1100;
+    const settleMs = cfg.settleMs || 1100;
 
     let early = null;
 

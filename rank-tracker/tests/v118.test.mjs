@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.3');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.3'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.3'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.3\]/m);
+  assert.equal(man.version, '1.21.4');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.4'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.4'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.4\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -860,7 +860,7 @@ test('v1213: watchdog بنبض 30 ثانية + شفاء الصفوف المعل�
 
 test('v1213: ⚡ وضع بارد بإيقاع يدوي — وبأول كابتشا رجوع كامل للإيقاع الآمن', () => {
   assert.match(sched, /const cold = !!\(context && context\.cold\);/, 'الفصل بين الوضعين مش في الـscheduler؟');
-  assert.match(sched, /2600 \+ Math\.floor\(Math\.random\(\) \* 1800\)/, 'فاصل الوضع البارد اتغير');
+  assert.match(sched, /cold\s*\?\s*1200 \+ Math\.floor\(Math\.random\(\) \* 1200\)/, 'فاصل الوضع البارد اتغير');
   assert.match(sched, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'الإيقاع الآمن الدافي اتبوظ — ده ممنوع');
   assert.match(queue, /cold: \(this\.captchaHeat \|\| 0\) === 0/, 'النداء مابيحكيش حالة الحرارة');
   // الحرارة بتبرد كلمة بكلمة (قفل سابق لسه شغال) → الوضع البارد بيرجع لوحده بعد العاصفة
@@ -869,4 +869,23 @@ test('v1213: ⚡ وضع بارد بإيقاع يدوي — وبأول كابتش
   // داخل المنطقة المتجمدة: مفيش أي تسريع لمسار الكابتشا
   assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة ما بعد الحل اتبوظت — ممنوع');
   assert.ok(!/cold/.test(queue.slice(queue.indexOf('async collectAfterSolve'), queue.indexOf('async softRescueAfterCaptcha'))), 'وضع بارد تسرّب لمسار الحل');
+});
+
+/* ---------------- v1.21.4 — الحرارة العالقة على 1 كانت بتلغي الوضع البارد ---------- */
+
+test('v1214: heat==1 بتطفّى بكلمة نضيفة (كانت أبدية) — والبارد بقى سرعة يدوي حقيقية', () => {
+  assert.match(queue, /else if \(this\.captchaHeat === 1\) \{/, 'لسه الحرارة على 1 مش بتنزل — الوضع البارد مستحيل ييجي');
+  assert.match(queue, /this\.captchaHeat = 0;/, 'التصفير مش مسجل نفسه');
+  assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'الإيقاع الدافي اتبوظ — ممنوع');
+  assert.match(sched, /cold\s*\?\s*1200 \+ Math\.floor\(Math\.random\(\) \* 1200\)/, 'البارد مش على 1.2–2.4');
+});
+
+test('v1214: نزول المسح الطويل اتخفّف — من غير لمس توقيتات الكابتشا المقدسة', () => {
+  assert.match(serp, /cfg\.rescanMs \|\| 1100/, 'ريسكان لسه 1800 على الصف المترسم من أول ثانية');
+  assert.match(serp, /cfg\.settleMs \|\| 1100/, 'سجل التثبيت لسه 1800');
+  // المتجمد: تهدئة ما بعد الحل، 3.5 ثانية ما بعد السولف، فاصل الدفعات، وستل-الدفعة الطويل
+  assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة بعد الحل اتلمست — ممنوع');
+  assert.match(queue, /await sleep\(3500, signal\); \/\/ v1\.20\.5/, 'راحة ما بعد السولف اتلمست — ممنوع');
+  assert.match(serp, /await D\.humanSleep\(1500, 900\);/, 'فاصل الدفعات اتلمس — ممنوع');
+  assert.match(serp, /cfg\.batchSettleMs \|\| 5000/, 'ستل الدفعات اتلمس — ممنوع');
 });
