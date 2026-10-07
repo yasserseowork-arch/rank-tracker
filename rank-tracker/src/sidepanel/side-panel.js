@@ -194,6 +194,14 @@ function renderKeywords() {
     badge.className = 'kw-status ' + (kw.status || 'pending');
     badge.textContent = (KW_STATUS_TEXT[kw.status] || KW_STATUS_TEXT.pending)();
     tdStatus.appendChild(badge);
+    if (kw.needsReview) {
+      // ⚠️ v1.21.7: «محتاج مراجعة» — مش حكم «مش موجود»، هتتعاد في آخر الرن
+      const rv = document.createElement('span');
+      rv.className = 'kw-status review';
+      rv.textContent = '⚠️';
+      rv.title = 'اتعلمت مراجعة (خطأ شبكة/بلوك وقت الفحص) — مش حكم نهائي';
+      tdStatus.appendChild(rv);
+    }
 
     const tdPos = document.createElement('td');
     const pos = document.createElement('span');
@@ -282,12 +290,69 @@ function renderChart() {
   drawPositionChart(canvas, points);
 }
 
+let lastRenderSig = '';
 function renderAll() {
+  //  v1.21.7: ريندر خفيف — بصمة بتلمس اللي بيتغير فعليًا بس؛ Broadcast كل 1.2 ثانية
+  // في الكابتشا كان بيرسم اللستة كلها من الصفر (تهنيج مع 200+ كلمة). نفس البصمة = مفيش DOM
+  const r = snapshot.run || {};
+  const sig = JSON.stringify([
+    r.status, r.currentIndex, r.checked, r.total, r.breakUntil || 0,
+    (r.captcha && r.captcha.attempts) || 0,
+    (snapshot.keywords || []).length,
+    (snapshot.keywords || []).map((k) => (k.status || '') + '|' + (k.lastPosition == null ? '' : k.lastPosition) + '|' + (k.needsReview ? 1 : 0)).join(';'),
+    (snapshot.results || []).length
+  ]);
+  if (sig === lastRenderSig) { return; }
+  lastRenderSig = sig;
   renderStatus();
   renderStats();
   renderKeywords();
   renderResults();
   renderChart();
+}
+
+/* 🧪 v1.21.7: شريط الجاهزية — تقدير الوقت، مشاكل ما قبل الرن، وتقرير آخر رن */
+async function loadPreflight() {
+  try {
+    const p = await send(C.MSG.PREFLIGHT);
+    if (!p || !p.ok) { return; }
+    const eta = $('etaHint');
+    if (eta) {
+      if (p.etaMs) {
+        eta.classList.remove('hidden');
+        eta.textContent = '⏱ تقدير الرن: ~' + Math.max(1, Math.round(p.etaMs / 60000)) + ' دقيقة ('
+          + p.perKwSec + 'ث/كلمة من آخر ' + p.runsUsed + ' رنات) — ' + p.pending + ' كلمة في الطابور'
+          + (p.dups ? ' | مكرر: ' + p.dups + ' (متساب كصفوف مستقلة)' : '');
+      } else if (p.pending) {
+        eta.classList.remove('hidden');
+        eta.textContent = '⏱ أول رن بالمعداد الجديد؟ التقدير هيظهر بعد رن كامل — ' + p.pending + ' كلمة في الطابور'
+          + (p.dups ? ' | مكرر: ' + p.dups : '');
+      } else {
+        eta.classList.add('hidden');
+      }
+    }
+    const warn = $('preflightWarn');
+    if (warn) {
+      const issues = (p.issues || []).slice();
+      warn.classList.toggle('hidden', !issues.length);
+      warn.textContent = issues.length ? ('⚠️ ' + issues.join(' • ')) : '';
+    }
+    const rep = $('runReport');
+    if (rep) {
+      const L = p.lastRun;
+      if (L && L.processed) {
+        const mins = Math.max(1, Math.round((L.durationMs || 0) / 60000));
+        const per = L.processed ? Math.round(((L.durationMs || 0) / L.processed)) / 1000 : 0;
+        rep.classList.remove('hidden');
+        rep.textContent = '📊 آخر رن: ' + L.processed + ' كلمة في ' + mins + ' دقيقة (' + per + 'ث/كلمة)'
+          + ' — كابتشا: ' + (L.captchaSeen || 0)
+          + (L.review ? ' — مراجعة: ' + L.review : '')
+          + (L.coverageAvg != null ? ' — تغطية: ' + L.coverageAvg + '%' : '');
+      } else {
+        rep.classList.add('hidden');
+      }
+    }
+  } catch (_) {}
 }
 
 /* ------------------------------- الإعدادات ------------------------------- */
@@ -510,6 +575,7 @@ async function refresh() {
     snapshot = res;
     fillConfigForm(snapshot.config || {});
     renderAll();
+    loadPreflight(); // v1.21.7: التقدير والتقرير بيتحدثوا مع كل ريفرش
   }
 }
 
@@ -524,6 +590,20 @@ async function main() {
   });
   const vt = $('versionTag');
   if (vt) { vt.textContent = 'v' + C.VERSION; }
+
+  // 🔁 v1.21.7: زرار مراجعة الفشلان (بره الرن)
+  const brv = $('btnReview');
+  if (brv) {
+    brv.addEventListener('click', async () => {
+      const res = await send(C.MSG.QUEUE_REVIEW, {});
+      if (res && res.ok === false && res.reason === 'running') {
+        alert('في رن شغال دلوقتي — مسار المراجعة هيعدّي على دول تلقائيًا في آخره');
+        return;
+      }
+      if (res && res.ok && !res.reviewed) { alert('مفيش كلمات متعلّمة ⚠️ مراجعة — كله متحسم'); }
+      await refresh();
+    });
+  }
 
   // Keep-Alive: يبقي الـ Service Worker حياً طوال فتح اللوحة
   SRT.msg.connectKeepalive('srt-sidepanel');
@@ -595,6 +675,8 @@ async function main() {
       snapshot = Object.assign({}, snapshot, message);
       maybeAutoXlsx(message.run, snapshot.config);
       renderAll();
+      // 📊 آخر رن خلص؟ التقرير بيتحدث لحظة IDLE (البريد ده نادر — مش كل نبضة)
+      if (message.run && message.run.status === 'idle') { loadPreflight(); }
     } else if (message.type === C.MSG.LOG) {
       appendLog(message);
     }

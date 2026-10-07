@@ -4,7 +4,7 @@
  * لكن الـ Service Worker module لا يحمّلها، لذلك نعيد تصديرها من هنا.
  */
 const fallback = {
-  VERSION: '1.21.6',
+  VERSION: '1.21.7',
   MSG: {
     PING: 'srt/ping',
     GET_CONFIG: 'srt/config/get',
@@ -17,6 +17,8 @@ const fallback = {
     QUEUE_PAUSE: 'srt/queue/pause',
     QUEUE_RESUME: 'srt/queue/resume',
     QUEUE_STOP: 'srt/queue/stop',
+    PREFLIGHT: 'srt/preflight',
+    QUEUE_REVIEW: 'srt/queue/review',
     KEYWORDS_SET: 'srt/keywords/set',
     KEYWORDS_ADD: 'srt/keywords/add',
     KEYWORDS_REMOVE: 'srt/keywords/remove',

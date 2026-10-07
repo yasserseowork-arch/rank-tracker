@@ -27,7 +27,8 @@ export function createRouter(engine) {
       C.MSG.PING, C.MSG.GET_CONFIG, C.MSG.SET_CONFIG, C.MSG.GET_STATE,
       C.MSG.QUEUE_START, C.MSG.QUEUE_PAUSE, C.MSG.QUEUE_RESUME, C.MSG.QUEUE_STOP,
       C.MSG.KEYWORDS_SET, C.MSG.KEYWORDS_ADD, C.MSG.KEYWORDS_REMOVE, C.MSG.KEYWORDS_CLEAR,
-      C.MSG.RESULTS_CLEAR, C.MSG.SHEETS_WRITE_NOW
+      C.MSG.RESULTS_CLEAR, C.MSG.SHEETS_WRITE_NOW,
+      C.MSG.PREFLIGHT, C.MSG.QUEUE_REVIEW
     ];
     if (!handled.includes(type)) { return; }
 
@@ -95,6 +96,12 @@ export function createRouter(engine) {
           case C.MSG.SHEETS_WRITE_NOW: {
             return engine.writeResultsToSheet();
           }
+
+          case C.MSG.PREFLIGHT:
+            return await engine.preflight();
+
+          case C.MSG.QUEUE_REVIEW:
+            return await engine.manualReview();
 
           default:
             return { ok: false };

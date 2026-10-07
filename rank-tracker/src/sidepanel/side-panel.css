@@ -188,6 +188,12 @@ body {
 .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-deep)); color: #04140a; }
 .btn-warn { background: linear-gradient(135deg, #fbbf24, #d97706); color: #1a1204; }
 .btn-danger { background: linear-gradient(135deg, #f87171, #dc2626); color: #1c0505; }
+/* 📊 v1.21.7: أشرطة الجاهزية والتقدير وتقرير آخر رن */
+.eta-hint { font-size: 12px; opacity: .8; margin: 2px 12px 6px; text-align: center; }
+.preflight-warn { color: #e8b339; opacity: 1; font-weight: 600; }
+.run-report { color: #7fd69a; opacity: 1; }
+.kw-status.review { color: #e8b339; margin-inline-start: 4px; cursor: help; }
+
 .btn-ghost {
   background: transparent;
   color: var(--text);

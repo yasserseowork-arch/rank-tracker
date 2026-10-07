@@ -377,7 +377,13 @@ export class QueueEngine {
       const run = await state.getRun();
       const exhausted = this.index >= (await state.getKeywords()).length;
       if (run.status === C.STATUS.RUN.RUNNING && exhausted && !brokeForPause) {
+        // 🔁 v1.21.7: الأول إعادة تلقائية هادية لكلمات ⚠️ (اللي اتعلمتها الشبكات والبلوكات)،
+        // وبعدها التقرير — الحكم IDLE بيتأخر لحد المراجعة ما تخلص عشان اللوحة تفضل «شغال»
+        await this.reviewPass();
+        const runB = await state.getRun();
+        if (runB.status !== C.STATUS.RUN.RUNNING) { return; }
         await state.setRun({ status: C.STATUS.RUN.IDLE, finishedAt: Date.now(), captcha: null });
+        await this.recordRunReport(runB);
         await logger.info('queue', '✅ انتهى فحص كل الكلمات المفتاحية');
         // «تاب واحد بس»: خلص الشغل → مفيش سبب يفضل أي تاب مفتوح للأداة
         try {
@@ -418,7 +424,7 @@ export class QueueEngine {
   async runKeyword(kw) {
     const cfg = await state.getConfig();
     const signal = this.signal();
-    await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+    await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING, needsReview: false }); // v1.21.7: الراية بتتمسح مع أول إعادة فحص
     await logger.info('queue', `🔎 فحص الكلمة: "${kw.keyword}"`);
     this.broadcast();
 
@@ -530,6 +536,7 @@ export class QueueEngine {
       // 4) كابتشا ظهرت؟ أولاً: حل تلقائي بالكامل (Buster مدمجة + إطار التحدي ذاتي القيادة) — بدون أي تدخل منك
       if (first.type === 'captcha') {
         this.captchaHeat = (this.captchaHeat || 0) + 1; // 🌡 عدّاد الحرارة: يبرّد الاستراحة الجاية
+        this.captchaSeenThisRun = (this.captchaSeenThisRun || 0) + 1; // 📊 للتقرير
         const solveStartedAt = Date.now();
         const auto = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
         if (auto === 'solved') {
@@ -610,6 +617,7 @@ export class QueueEngine {
         // دوار ريفرش على نفس التاب كان بيضيّع 3 دورات وهي ميتة أصلًا:
         // تبريد قصير → مسح بيانات كامل → تاب جديد بنفس الكلمة — من غير ما نسجلها «غير موجود»
         this.captchaHeat = (this.captchaHeat || 0) + 1; // النطاق اتحرق شوية — برّد الاستراحة الجاية
+        this.captchaSeenThisRun = (this.captchaSeenThisRun || 0) + 1; // 📊 للتقرير
         await this.notify('🚫 جوجل رفض الصفحة', `"${kw.keyword}" — الريفرش ملوش لازمة هنا؛ بنمسح البيانات ونعيد في تاب جديد نضيف`);
         await logger.warn('queue', `🚫 صفحة رفض (${(first.payload && first.payload.kind) || 'http-error'}) على "${kw.keyword}" — تبريد ثم مسح بيانات + تاب جديد بنفس الكلمة`);
         await sleep(9000 + Math.floor(Math.random() * 6000), signal);
@@ -630,39 +638,49 @@ export class QueueEngine {
 
       // 6) مشكلة (تايم‌آوت / تحليل فاضي / نتائج مابعدش الكابتشا): ريفرش + نفس الكلمة
       if (attempt >= maxRetries) {
-        // آخر فرصة (v1.20.2): تاب جديد + مسح بيانات — نفس وصفة الاستشفاء بدل ما نغير
-        // الهوا بقايما؛ ولو فتحتش تاب جديد نكمل بالقديم زي الأول بالظبط
-        await logger.warn('queue', `🆕 مشكلة مستمرة — مسح بيانات وتاب جديد لنفس الكلمة "${kw.keyword}" كمحاولة أخيرة`);
-        await this.notify('🆕 محاولة أخيرة', `مشكلة مستمرة على "${kw.keyword}" — مسح بيانات وتاب جديد`);
-        try {
-          const lastTab = await this.openFreshTab(kw, cfg, url, tab.id);
-          if (lastTab) { tab = lastTab; }
-
-          const lastRace = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
-          if (lastRace.type === 'serp' && (lastRace.payload.total > 0 || lastRace.payload.noResults)) {
-            return this.recordResult(kw, lastRace.payload, cfg, 'new-tab');
+        // 🔁 v1.21.7: خطأ شبكة/بلوك مابيتسجلش حكم — جولة استشفاء كاملة (مسح بيانات + تاب
+        // جديد لنفس الكلمة)، ولو لسه واقفة: تبريد أطول (15-23ث) وجولة تانية، وبعدها بس
+        // بيتعلم السطر ⚠️ «محتاج مراجعة» — مش «غير موجود»
+        for (let pass = 0; pass < 2; pass++) {
+          if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+          if (pass) {
+            await logger.info('queue', `🌙 "${kw.keyword}" — جولة الاستشفاء الأولى ما كفتش؛ تبريد أطول قبل التانية (الشبكة أحيانًا بتحتاج وقت)`);
+            await sleep(15000 + Math.floor(Math.random() * 8000), signal);
+            if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
           }
-          if (lastRace.type === 'captcha') {
-            const solveStartedAt2 = Date.now();
-            const h2 = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
-            if (h2 === 'solved') {
-              const s2 = await this.collectAfterSolve(tab.id, solveStartedAt2, signal, cfg);
-              if (s2) { return this.recordResult(kw, s2, cfg, 'new-tab-captcha'); }
-            } else if (h2 === 'failed') {
-              // 🧘 آخر محاولة كمان ما تستسلمش للكابتشا: نستنى تتحل ونسحب نفس المكان
-              const clearedL = await this.waitCaptchaCleared(tab.id, kw, signal);
-              if (clearedL === 'cleared') {
-                const r3 = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
-                if (r3.type === 'serp' && (r3.payload.total > 0 || r3.payload.noResults)) {
-                  return this.recordResult(kw, r3.payload, cfg, 'after-patience');
+          await logger.warn('queue', `🆕 مشكلة مستمرة — مسح بيانات وتاب جديد لنفس الكلمة "${kw.keyword}" (${pass ? 'جولة استشفاء ثانية' : 'محاولة أخيرة'})`);
+          await this.notify('🆕 محاولة استشفاء', `مشكلة مستمرة على "${kw.keyword}" — مسح بيانات وتاب جديد${pass ? ' (الجولة التانية)' : ''}`);
+          try {
+            const lastTab = await this.openFreshTab(kw, cfg, url, tab.id);
+            if (lastTab) { tab = lastTab; }
+
+            const lastRace = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
+            if (lastRace.type === 'serp' && (lastRace.payload.total > 0 || lastRace.payload.noResults)) {
+              return this.recordResult(kw, lastRace.payload, cfg, pass ? 'new-tab-2' : 'new-tab');
+            }
+            if (lastRace.type === 'captcha') {
+              const solveStartedAt2 = Date.now();
+              const h2 = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
+              if (h2 === 'solved') {
+                const s2 = await this.collectAfterSolve(tab.id, solveStartedAt2, signal, cfg);
+                if (s2) { return this.recordResult(kw, s2, cfg, 'new-tab-captcha'); }
+              } else if (h2 === 'failed') {
+                // 🧘 جولة الاستشفاء كمان ما تستسلمش للكابتشا: نستنى تتحل ونسحب نفس المكان
+                const clearedL = await this.waitCaptchaCleared(tab.id, kw, signal);
+                if (clearedL === 'cleared') {
+                  const r3 = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
+                  if (r3.type === 'serp' && (r3.payload.total > 0 || r3.payload.noResults)) {
+                    return this.recordResult(kw, r3.payload, cfg, 'after-patience');
+                  }
+                } else if (clearedL === 'aborted') {
+                  return this.abortKeyword(kw, 'paused');
                 }
-              } else if (clearedL === 'aborted') {
-                return this.abortKeyword(kw, 'paused');
               }
             }
-          }
-        } catch (_) {}
-        await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — استنفدنا ريفرش + تاب جديد؛ سُجلت كغير موجود`);
+          } catch (_) {}
+          if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        }
+        await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — استنفدنا الريفرش + جولتَي استشفاء؛ اتعلّمت ⚠️ «محتاج مراجعة» وهتتعاد في آخر الرن`);
         return this.recordExhausted(kw, cfg);
       }
 
@@ -1156,9 +1174,134 @@ export class QueueEngine {
   /** مزامنة الكلمات من شيت جوجل (نقطة تصدير CSV العامة — بدون API) */
   /** بعد كل المحاولات (ريفرش + تاب جديد): الكلمة تتسجل كغير موجود — مفيش تخطي أبداً */
   async recordExhausted(kw, cfg) {
-    return this.recordResult(kw, {
+    const out = await this.recordResult(kw, {
       items: [], aiItems: [], aiText: '', total: 0, noResults: true, adsCount: 0, serpUrl: ''
     }, cfg, 'retries-exhausted');
+    // ⚠️ v1.21.7: «مافيش حكم» مش «مش موجود» — الصف بيتعلّم needsReview وبيتعاد
+    // تلقائيًا في آخر الرن في جو أهدى (ومعاه زر يدوي في اللوحة)
+    await state.updateKeyword(kw.id, { needsReview: true });
+    return out;
+  }
+
+  /** 🔁 v1.21.7: مسار المراجعة — الكلمات اللي اتعلمت needsReview (خطأ شبكة/بلوك، مش حكم
+   *  حقيقي) بتعدّي تاني في آخر الرن بفواصل أطول. manual = طلب من اللوحة بره الرن.
+   *  «مفيش هروب من كابتشا» ما بيتأثرش: دول أصلًا ما خلّصوش فحصًا سليمًا */
+  async reviewPass(manual) {
+    const signal = this.signal();
+    const keywords = await state.getKeywords();
+    const pend = [];
+    for (const k of keywords) {
+      if (!k) { continue; }
+      if (k.needsReview || (manual && k.status === C.STATUS.KW.FAILED)) { pend.push(k); }
+    }
+    this.reviewRemaining = pend.length;
+    if (!pend.length) { return 0; }
+    await logger.info('queue', `🔁 مسار المراجعة${manual ? ' (بطلبك من اللوحة)' : ''}: ${pend.length} كلمة محتاجة إعادة فحص — هتعدّي دلوقتي والجو أهدى`);
+    for (const kw of pend) {
+      if (signal && signal.aborted) { break; }
+      await sleep(6000 + Math.floor(Math.random() * 5000), signal);
+      if (signal && signal.aborted) { break; }
+      try {
+        await this.runKeyword(kw);
+      } catch (err) {
+        await logger.warn('queue', 'reviewPass: ' + (err && err.message ? err.message : err));
+      }
+    }
+    const after = await state.getKeywords();
+    const left = after.filter((k) => k && k.needsReview).length;
+    this.reviewRemaining = left;
+    await logger.info('queue', left
+      ? `🔁 المراجعة خلصت: ${left} كلمة لسه محتاجة مراجعة (هتفضل متعلّمة ⚠️ وتتعاد في الرن الجاي)`
+      : '🔁 المراجعة خلصت: كل المتعلّمة ⚠️ اتحسمت ✅');
+    this.broadcast();
+    return pend.length;
+  }
+
+  /** 📊 v1.21.7: تقرير الرن — متوسط الثانية/كلمة، كابتشا، مراجعة، متوسط التغطية */
+  async recordRunReport(run) {
+    try {
+      const kws = await state.getKeywords();
+      const reviewN = kws.filter((k) => k && k.needsReview).length;
+      const started = (run && run.startedAt) || 0;
+      const dur = started ? Math.max(0, Date.now() - started) : 0;
+      const results = await state.getResults();
+      let covSum = 0;
+      let covN = 0;
+      for (const r of results) {
+        if (!r || (r.checkedAt || 0) < started) { continue; }
+        const exp = r.expectedNum || 100;
+        covSum += Math.min(1, (r.total || 0) / exp);
+        covN += 1;
+        if (covN > 400) { break; }
+      }
+      const stat = {
+        startedAt: started || null, finishedAt: Date.now(), durationMs: dur,
+        processed: this.index || 0,
+        captchaSeen: this.captchaSeenThisRun || 0,
+        captchaSolves: (run && run.captchaSolves) || 0,
+        review: reviewN,
+        coverageAvg: covN ? Math.round((100 * covSum) / covN) : null
+      };
+      await state.appendRunStat(stat);
+      this.captchaSeenThisRun = 0;
+      const perSec = stat.processed ? Math.round((dur / stat.processed) / 100) / 10 : 0;
+      await logger.info('queue', `📊 تقرير الرن: ${stat.processed} كلمة في ${(Math.round(dur / 600) / 10)} دقيقة (${perSec}ث/كلمة) — كابتشا: ${stat.captchaSeen} (اتحلّت أوتوماتيك ${stat.captchaSolves}) — مراجعة: ${stat.review}${stat.coverageAvg != null ? ' — متوسط التغطية: ' + stat.coverageAvg + '%' : ''}`);
+    } catch (_) {}
+  }
+
+  /** 🧪 v1.21.7: بريفلايت — جاهزية الإعدادات + المكررات + تقدير وقت من الرنات السابقة */
+  async preflight() {
+    const cfg = await state.getConfig();
+    const keywords = await state.getKeywords();
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const seen = new Set();
+    let dups = 0;
+    for (const k of keywords) {
+      const key = norm(k && k.keyword);
+      if (!key) { continue; }
+      if (seen.has(key)) { dups++; } else { seen.add(key); }
+    }
+    const stats = (await state.getRunStats()) || [];
+    const recent = stats.slice(-5).filter((r) => r && r.processed > 0 && r.durationMs > 0);
+    const perKw = recent.length
+      ? recent.reduce((a, r) => a + (r.durationMs / r.processed), 0) / recent.length
+      : 0;
+    const pending = keywords.filter((k) => k && k.status === C.STATUS.KW.PENDING).length;
+    const issues = [];
+    if (!String(cfg.storeDomain || '').trim() && !String(cfg.storeName || '').trim()) {
+      issues.push('مفيش هدف مضبوط: دوّم الدومين أو اسم المتجر في الإعدادات');
+    }
+    if (!pending) { issues.push('مفيش كلمات مستنية الفحص في الطابور'); }
+    const reviewCount = keywords.filter((k) => k && k.needsReview).length;
+    if (reviewCount) { issues.push(`فيه ${reviewCount} كلمة متعلّمة ⚠️ مراجعة — هتتعاد آخر الرن أو بدوس زر المراجعة`); }
+    return {
+      ok: true,
+      total: keywords.length, pending, dups, issues,
+      etaMs: (perKw && pending) ? Math.round(perKw * pending) : 0,
+      perKwSec: perKw ? Math.round(perKw / 100) / 10 : 0,
+      runsUsed: recent.length,
+      lastRun: stats.length ? stats[stats.length - 1] : null
+    };
+  }
+
+  /** 🔁 زر اللوحة: مراجعة الفشلان بره الرن — مفيش تعارض مع حلقة شغالة */
+  async manualReview() {
+    const run = await state.getRun();
+    if (run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA) {
+      return { ok: false, reason: 'running' };
+    }
+    await state.setRun({ status: C.STATUS.RUN.RUNNING, finishedAt: null, captcha: null, startedAt: Date.now() });
+    this.abortController = new AbortController();
+    this.armWatchdog();
+    let n = 0;
+    try {
+      n = await this.reviewPass(true);
+    } finally {
+      await state.setRun({ status: C.STATUS.RUN.IDLE });
+      this.disarmWatchdog();
+      this.broadcast();
+    }
+    return { ok: true, reviewed: n };
   }
 
   async recordResult(kw, serp, cfg, via) {
@@ -1220,6 +1363,7 @@ export class QueueEngine {
       topHosts: (serp.items || []).slice(0, 6).map((i) => i.host),
       via: via,
       serpUrl: serp.serpUrl || '',
+      expectedNum: serp.expectedNum || 0, // 📊 v1.21.7: للتغطية في التقرير
       checkedAt: Date.now()
     };
     // فحص النتائج المحلية (خرائط) اختياري — مثل خطوة السيناريو اليدوي

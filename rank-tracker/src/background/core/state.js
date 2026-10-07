@@ -11,6 +11,7 @@ export const K = {
   CONFIG: 'srt.config',
   KEYWORDS: 'srt.keywords',
   RESULTS: 'srt.results',
+  RUN_STATS: 'srt.runStats',
   RUN: 'srt.run',
   LOGS: 'srt.logs',
   SCHEMA: 'srt.schemaVersion'
@@ -216,6 +217,20 @@ export async function addResult(row) {
   await local.set(K.RESULTS, list);
   void cfg;
   return row;
+}
+
+/* 📊 v1.21.7: إحصاءات الرنات — أساس تقدير الوقت وتقرير آخر رن (آخر 20) */
+export async function getRunStats() {
+  const list = await local.get(K.RUN_STATS, []);
+  return Array.isArray(list) ? list : [];
+}
+
+export async function appendRunStat(entry) {
+  const list = await getRunStats();
+  list.push(entry);
+  if (list.length > 20) { list.splice(0, list.length - 20); }
+  await local.set(K.RUN_STATS, list);
+  return entry;
 }
 
 export async function clearResults() {

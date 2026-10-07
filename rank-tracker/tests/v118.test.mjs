@@ -22,6 +22,7 @@ const panel = read('src/sidepanel/side-panel.js');
 const sw = read('src/background/sw.js');
 const st = read('src/background/core/state.js');
 const bt = read('beyondten/content/index.js');
+const cons = read('src/lib/constants.js');
 
 /* أوزان v1.19 — استدعاء حي للمطابقين (كلاسيك + موديول) */
 import { loadClassic as v119loadClassic } from './helpers/load-classic.mjs';
@@ -473,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.6');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.6'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.6'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.6\]/m);
+  assert.equal(man.version, '1.21.7');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.7'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.7'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.7\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -632,6 +633,7 @@ test('v1200: حرارة الكابتشا تطوّل الاستراحة الجا�
 
 test('v1200: BeyondTen (إضافة الـ100) — الشاشر التلقائي بيكمل لوحده ومفيش حرق صفحات فاضية', () => {
   const bt = read('beyondten/content/index.js');
+const cons = read('src/lib/constants.js');
   const btFetch = read('beyondten/content/fetch.js');
   assert.match(bt, /function startChaser\(signal\)/, 'مفيش شاشر تلقائي للصفحات الناقصة');
   assert.match(bt, /function remainingTargets\(\)/, 'الحساب الناقص مش متصدر — السكرول باظ');
@@ -662,6 +664,7 @@ test('v1201: المسح الدوري ما بيضربش إعفاءات الكاب
 test('v1201: BeyondTen — مفيش عدو طلبات والسينسور ما بيشتغلش بقايما قديمة', () => {
   const btState = read('beyondten/content/state.js');
   const bt = read('beyondten/content/index.js');
+const cons = read('src/lib/constants.js');
   assert.match(btState, /concurrency: 2,/, 'لسه 6 متزامنة = 429 أكيد');
   assert.match(bt, /await delay\(1200 \+ Math\.random\(\) \* 1200, signal\);/, 'مفيش فاصل بين الدفعات');
   assert.match(bt, /const live = remainingTargets\(\);/, 'السينسور لسه بياخد القائمة القديمة');
@@ -932,4 +935,49 @@ test('v1216: x-geo بيقرأ القطر من الإعدادات — 65كم ال
   assert.match(gsl, /var rad = parseInt\(settings\.radius, 10\) \|\| 65000;/, 'القطر ثابت على 65000 تاني — المدينة هتفضل متحددة');
   assert.match(gsl, /radius: '\+rad\+'\\nlatlng/, 'القالب مابيكملش القطر المتغير');
   assert.ok(!/radius: 65000[^;]/.test(gsl), 'في قالب تاني لسه متجمد على 65000');
+});
+
+/* -------- v1.21.7 — needsReview + مسار مراجعة أوتوماتيك + preflight/تقرير + ريندر diff -------- */
+
+test('v1217: الاستنفاد بقى «⚠️ محتاج مراجعة» وجولتَي استشفاء بمسح+تاب جديد قبله', () => {
+  const rex = queue.slice(queue.indexOf('async recordExhausted'), queue.indexOf('async reviewPass'));
+  assert.match(rex, /updateKeyword\(kw\.id, \{ needsReview: true \}\)/, 'الراية مش بتتعلّم عند الاستنفاد');
+  assert.match(rex, /const out = await this\.recordResult/, 'التسجيل نفسه اتبوظ');
+  // الراية مش بتتعلّم في غير الاستنفاد: الشطف الوحيد التاني هو التطفي عند إعادة الفحص
+  const flags = (queue.match(/needsReview: true/g) || []).length;
+  assert.equal(flags, 1, 'needsReview: بتتعلّم أكتر من مرة — المفهوم اتلطش');
+  assert.match(queue, /for \(let pass = 0; pass < 2; pass\+\+\)/, 'مفيش جولتَي استشفاء على نفس الكلمة');
+  assert.match(queue, /15000 \+ Math\.floor\(Math\.random\(\) \* 8000\)/, 'التبريد الطويل قبل الجولة التانية ناقص');
+  assert.match(queue, /'new-tab-2' : 'new-tab'/, 'الجولة التانية بتسجل بنفس via الأولى؟');
+  // الصبر الأبدي ما اتلمسش: الاستشوفاء داخله waitCaptchaCleared زي الأول
+  const rec = queue.slice(queue.indexOf('for (let pass = 0; pass < 2'), queue.indexOf('محتاج مراجعة» وهتتعاد'));
+  assert.match(rec, /waitCaptchaCleared\(tab\.id, kw, signal\)/, 'جولة الاستشفاء فصلت الصبر على الكابتشا — ممنوع');
+  assert.match(rec, /after-patience/, 'سجل الصبر التاف بعد الاستشفاء اتشال');
+});
+
+test('v1217: مسار المراجعة الأوتوماتيك في آخر الرن + زر يدوي + تقرير وإحصاءات', () => {
+  const tail = queue.slice(queue.indexOf('const exhausted = this.index'), queue.indexOf('✅ انتهى فحص كل الكلمات'));
+  assert.match(tail, /await this\.reviewPass\(\);/, 'مفيش مراجعة أوتوماتيك قبل الحكم بـIDLE');
+  assert.match(tail, /if \(runB\.status !== C\.STATUS\.RUN\.RUNNING\) \{ return; \}/, 'حارس الإيقاف أثناء المراجعة ناقص');
+  assert.match(tail, /await this\.recordRunReport\(runB\);/, 'التقرير ماتسجلش');
+  assert.match(queue, /async reviewPass\(manual\)/, 'دالة المراجعة مش موجودة');
+  assert.match(queue, /async manualReview\(\)/, 'الزر اليدوي وراه مفيش حركة');
+  assert.match(queue, /reason: 'running'/, 'الحماية من التعارض مع رن شغال اتشالت');
+  assert.match(st, /RUN_STATS: 'srt\.runStats',/, 'مفتاح الإحصاءات مش في state');
+  assert.match(st, /if \(list\.length > 20\)/, 'سقف الـ20 رن — التخزين بينفجر');
+  assert.match(queue, /expectedNum: serp\.expectedNum \|\| 0/, 'صف النتيجة مابيحفظش التغطية');
+});
+
+test('v1217: بريفلايت وتقدير وقت + ريندر diff خفيف للوحة', () => {
+  assert.match(cons, /PREFLIGHT: 'srt\/preflight'/, 'رسالة البريفلايت مش مسجلة');
+  assert.match(cons, /QUEUE_REVIEW: 'srt\/queue\/review'/, 'رسالة المراجعة مش مسجلة');
+  assert.match(queue, /async preflight\(\)/, 'الدالة مش موجودة');
+  assert.match(queue, /const recent = stats\.slice\(-5\)/, 'التقدير مش بمتوسط آخر 5 رنات');
+  assert.match(panel, /let lastRenderSig = '';/, 'البصمة مش معرّفة');
+  assert.match(panel, /if \(sig === lastRenderSig\) \{ return; \}/, 'الحارس مش راجع');
+  assert.match(panel, /async function loadPreflight\(\)/, 'الشريط مابيتعبّى');
+  assert.match(panel, /etaHint/, 'سطر التقدير مش في اللوحة');
+  const pnlHtml = read('src/sidepanel/side-panel.html');
+  assert.match(pnlHtml, /id="btnReview"/, 'الزر مش في الـHTML');
+  assert.ok(!/fonts\.googleapis/.test(pnlHtml), 'لينك خط خارجي رجع — CSP بيرميه');
 });
