@@ -49,7 +49,10 @@ chrome.runtime.onStartup.addListener(function() {
 function genUULE() {
   var lat = Math.floor(settings.latitude*1e7) || 525109360;
   var lng = Math.floor(settings.longitude*1e7) || 134104990;
-  var decodedXgeo = 'role: CURRENT_LOCATION\nproducer: DEVICE_LOCATION\nradius: 65000\nlatlng <\n  latitude_e7: '+lat+'\n  longitude_e7: '+lng+'\n>';
+  // v1.21.6: قطر قابل للضبط — «السعودية كلها» بيذرعه ديفولت الأدوات المدمجة بـ1000كم،
+  // وأي مدينة يختارها المستخدم من Places بتفضل على الـ65كم التاريخي بتاع الجهاز
+  var rad = parseInt(settings.radius, 10) || 65000;
+  var decodedXgeo = 'role: CURRENT_LOCATION\nproducer: DEVICE_LOCATION\nradius: '+rad+'\nlatlng <\n  latitude_e7: '+lat+'\n  longitude_e7: '+lng+'\n>';
   var encodedXgeo = 'a '+btoa(decodedXgeo);
   return encodedXgeo
 }

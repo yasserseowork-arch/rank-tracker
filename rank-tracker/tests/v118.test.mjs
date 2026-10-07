@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.5');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.5'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.5'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.5\]/m);
+  assert.equal(man.version, '1.21.6');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.6'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.6'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.6\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -910,4 +910,26 @@ test('v1215: المسح الدوري — قبل البدء وكل N كلمات �
   // قيمة المستخدم 10 بقى ليها احترام: الميجريشن واحدة بس (v<4) وماراجعةش تاني
   const mig = st.slice(st.indexOf('if (version < 4)'), st.indexOf('if (version < 6)'));
   assert.match(mig, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'ميجريشن 10→8 اتشالت من مكانها');
+});
+
+/* ---------------- v1.21.6 — الموقع = السعودية كلها… ومفيش تحديد الرياض ------------- */
+
+const emb = read('src/background/embedded.js');
+const gsl = read('gsloc/js/background.js');
+
+test('v1216: ديفولت الأدوات المدمجة بقى قطري عام — نقطة مركز المملكة وقطر 1000كم', () => {
+  assert.match(emb, /location: 'Saudi Arabia',\n\s+name: 'Saudi Arabia',/, 'الديفولت لسه مسمّى مدينة');
+  assert.match(emb, /latitude: 24\.0,\n\s+longitude: 45\.0,/, 'نقطة المركز الجغرافي ما اتظبطتش');
+  assert.match(emb, /radius: 1000000,/, 'قطر البلد (1000كم) ناقص من الديفولت');
+  assert.match(emb, /placeId: 'KSA-COUNTRY',/, 'الـplaceId لسه بتاع الرياض');
+  // هجرة ديفولت الرياض القديم — بشرط إنه لسه ديفولتنا (مو اختيار Places ولا وضع معطّل)
+  assert.match(emb, /s\.name === 'Riyadh' && s\.location === 'Riyadh, Saudi Arabia' && s\.enabled !== false/, 'مفيش ترقية للديفولت الرياض القديم');
+  // اختيار المستخدم من Places محترم: الشرط التاني بس في الـif&&!s، ماعدا ديفولتنا ما بنكتبش فوق حد
+  assert.match(emb, /if \(!s\) \{ chrome\.storage\.sync\.set\(\{ settings: saudiDefaults \}\); return; \}/, 'زرع أول تشغيل اتبوظ');
+});
+
+test('v1216: x-geo بيقرأ القطر من الإعدادات — 65كم الافتراضي التاريخي لمدين Places لسه هو الاحتياطي', () => {
+  assert.match(gsl, /var rad = parseInt\(settings\.radius, 10\) \|\| 65000;/, 'القطر ثابت على 65000 تاني — المدينة هتفضل متحددة');
+  assert.match(gsl, /radius: '\+rad\+'\\nlatlng/, 'القالب مابيكملش القطر المتغير');
+  assert.ok(!/radius: 65000[^;]/.test(gsl), 'في قالب تاني لسه متجمد على 65000');
 });

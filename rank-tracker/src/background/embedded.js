@@ -27,16 +27,20 @@ try {
     if (!r || !r.theme) { chrome.storage.sync.set({ theme: 'dark' }); }
   });
 
-  // gs location changer: ديفولت الموقع = السعودية (الرياض، gl=SA، hl=ar) مفعّل تلقائياً —
-  // يُزرع أول تشغيل فقط، ولو المستخدم غيّر الموقع بعدها لا يُستبدل اختياره أبداً
+  // gs location changer: ديفولت الموقع = السعودية كلها — بلد بس من غير تحديد مدينة
+  // (gl=SA، hl=ar) مفعّل تلقائياً. يُزرع أول تشغيل فقط، ولو المستخدم غيّر الموقع بعدها
+  // لا يُستبدل اختياره أبداً — وديفولت الرياض مدينة-بُعيد يُرقّى تلقائياً للنسخة القطرية
   chrome.storage.sync.get('settings', (r) => {
     const s = r && r.settings;
     const saudiDefaults = {
-      latitude: 24.7136,
-      longitude: 46.6753,
-      location: 'Riyadh, Saudi Arabia',
-      name: 'Riyadh',
-      placeId: 'ChIJmznGcHZKFT4RjR3iW3nYBmU',
+      // مركز المملكة الجغرافي (نقطة عامة في عرض الجزيرة — مش نقطة مدينة) + قطر
+      // ~1000كم يغطي الرقعة: إشارة x-geo بقت «السعودية كلها» بدل «رياض سيتي سنتر 65كم»
+      latitude: 24.0,
+      longitude: 45.0,
+      location: 'Saudi Arabia',
+      name: 'Saudi Arabia',
+      placeId: 'KSA-COUNTRY',
+      radius: 1000000,
       enabled: true,
       hl: 'ar',
       gl: 'SA',
@@ -48,6 +52,12 @@ try {
     // نسخة قديمة من الديفولت الأمريكي اللي كنا بنزرعه → حدّثها للسعودية مفعّلة
     if (s.name === 'Google Building 40' && s.gl === 'US') {
       chrome.storage.sync.set({ settings: saudiDefaults });
+      return;
+    }
+    // v1.21.6: ديفولت الرياض القديم (زرعته إديتنا، مش اختيار من Places) → رقٍّ للقطري.
+    // أي حاجة تانية — اختيار مستخدم من البحث أو مدينة كتبها بنفسه أو وضع معطّل — بتتساب زي ما هي
+    if (s.name === 'Riyadh' && s.location === 'Riyadh, Saudi Arabia' && s.enabled !== false) {
+      chrome.storage.sync.set({ settings: Object.assign({}, s, saudiDefaults) });
     }
   });
 
