@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.7');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.7'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.7'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.7\]/m);
+  assert.equal(man.version, '1.21.8');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.8'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.8'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.8\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -980,4 +980,26 @@ test('v1217: بريفلايت وتقدير وقت + ريندر diff خفيف ل�
   const pnlHtml = read('src/sidepanel/side-panel.html');
   assert.match(pnlHtml, /id="btnReview"/, 'الزر مش في الـHTML');
   assert.ok(!/fonts\.googleapis/.test(pnlHtml), 'لينك خط خارجي رجع — CSP بيرميه');
+});
+
+/* -------- v1.21.8 — التحدي البايّت العنيد: نفس وصفة البلوك (مسح + تاب جديد بنفس الكلمة) -------- */
+
+test('v1218: expired بعد ريلودين = تسليم للخطة الاحتياطية، بسقف رحيم للرن', () => {
+  const wcc = queue.slice(queue.indexOf('async waitCaptchaCleared'), queue.indexOf('async tabChallengeLooksStale'));
+  assert.match(wcc, /let staleReloads = 0;/, 'عداد الريلودات مش موجود');
+  assert.match(wcc, /if \(staleReloads >= 2\) \{/, 'الريلود للأبد من غير تصعيد؟');
+  assert.match(wcc, /return 'stale';/, 'ما بيسلّمش للإشارة الجديدة');
+  assert.ok(!/recordExhausted/.test(wcc) && !/openFreshTab/.test(wcc), 'الصبر بقى بيهرب أو بيفتح تابات من جوه نفسه — التسليم للنداء مش له');
+  const idx = queue.indexOf("if (cleared === 'stale') {");
+  assert.ok(idx > -1, 'نداء الصبر مابيتعاملش مع stale');
+  const seg = queue.slice(idx, queue.indexOf("if (cleared === 'tab-closed')"));
+  assert.match(seg, /staleWipesThisRun \|\| 0\) >= 6/, 'سقف المسحات في الرن اتنسي');
+  assert.match(seg, /openFreshTab\(kw, cfg, url, tab\.id\)/, 'مفيش مسح+تاب جديد بنفس الكلمة');
+  assert.match(seg, /captchaClears = 0; \//, 'الميزانية الكاملة مالترجعتش للكلمة بعد الجلسة النضيفة');
+  assert.ok(!/recordExhausted/.test(seg), 'stale بتسجل استسلام — ممنوع');
+  // استشفاء الجولتين: stale بيرمي للجولة اللي بعدها
+  assert.match(queue, /else if \(clearedL === 'stale'\) \{\n\s+break;/);
+  // الثوابت: مفيش windows.create ومفيش توقيتات جديدة لمسار الحل نفسه
+  assert.ok(!/chrome\.windows\.create/.test(queue), 'نافذة جديدة — ممنوع');
+  assert.match(queue, /await sleep\(4000, signal\);\n        \}/, 'نوم الصبر الأساسي اتبوظ');
 });

@@ -562,6 +562,28 @@ export class QueueEngine {
           await logger.warn('queue', `🧘 "${kw.keyword}" — الكابتشا لسه معلقة؛ هنستنى تتحل ونعيد نفس الكلمة تاني (مش ملغاة)`);
           const cleared = await this.waitCaptchaCleared(tab.id, kw, signal);
           if (cleared === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+          if (cleared === 'stale') {
+            // 🧹 v1.21.8: التحدي البايّت عنيد — نفس وصفة البلوك: مسح بيانات + تاب جديد
+            // بنفس الكلمة (الكلمة ما بتتبوظش: بتتعاد من الأول في جلسة نضيفة)
+            if ((this.staleWipesThisRun || 0) >= 6) {
+              await logger.info('queue', `⏳ "${kw.keyword}" — مسحات الكابتشا البايّت وصلت سقفها في الرن؛ رجوع للصبر العادي على نفس التاب`);
+              await sleep(20000, signal);
+              if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+              continue;
+            }
+            this.staleWipesThisRun = (this.staleWipesThisRun || 0) + 1;
+            await logger.warn('queue', `🧹 "${kw.keyword}" — تحدي expired بعد ريلودين: مسح بيانات + تاب جديد بنفس الكلمة (جولة ${this.staleWipesThisRun}/6)`);
+            const sTab = await this.openFreshTab(kw, cfg, url, tab.id);
+            if (!sTab) {
+              await sleep(10000, signal);
+              if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+              continue; // مافتحتش الجديدة؟ نكمّل صبر على القديمة — مفيش هروب
+            }
+            tab = sTab;
+            captchaClears = 0; // جلسة نضيفة: الكلمة تاخد ميزانيتها الكاملة من جديد
+            navigatedViaBox = false;
+            continue; // ونفس الكلمة من الأول في التاب الجديد
+          }
           if (cleared === 'tab-closed') {
             let re = null;
             try { re = await tabctl.open(url, Object.assign({}, cfg, { foregroundTab: true })); } catch (_) {}
@@ -674,6 +696,8 @@ export class QueueEngine {
                   }
                 } else if (clearedL === 'aborted') {
                   return this.abortKeyword(kw, 'paused');
+                } else if (clearedL === 'stale') {
+                  break; // 🧹 v1.21.8: بايّت ومابيتصلّحش — الجولة الجاية مسح+تاب جديد بنفس الكلمة
                 }
               }
             }
@@ -1005,6 +1029,7 @@ export class QueueEngine {
     let waited = 0;
     let focusOnce = false;
     let lastStale = 0; // ⏳ v1.21.2: آخر ريلود لـ«التحدي البايّت»
+    let staleReloads = 0; // 🧹 v1.21.8: الريلود ما كفاش مرتين؟ دور على المسح والتاب الجديد
     let flag = 'waiting'; // 'clear' | 'closed'
     const offs = [];
     try {
@@ -1031,6 +1056,13 @@ export class QueueEngine {
         // عادي — مفيش abandoning للكلمة، ومفيش مساس بمحرك الحل نفسه. حدا مرة كل 90 ثانية
         if (waited > 20 && Date.now() - lastStale > 90000 && (await this.tabChallengeLooksStale(tabId))) {
           lastStale = Date.now();
+          staleReloads += 1;
+          if (staleReloads >= 2) {
+            // 🧹 v1.21.8 (طلب المستخدم): «expired» بعد ريلودين = الجلسة نفسها ميتة — الريلود
+            // مالوش لازمة، بنسلّم للخطة الاحتياطية الكاملة: مسح بيانات + تاب جديد بنفس الكلمة
+            await logger.warn('queue', `⏳ "${kw.keyword}" — التحدي بايّت ومابيتصلّحش بالريلود؛ بنسلّم لمسح البيانات وتاب جديد بنفس الكلمة زي أي بلوك`);
+            return 'stale';
+          }
           await logger.info('queue', `⏳ "${kw.keyword}" — التحدي على الصفحة بايّت («expired»)؛ ريلود لنفس التاب عشان كابتشا طازة تكمل المحاولة`);
           try { await tabctl.reload(tabId); } catch (_) { return 'tab-closed'; }
           await sleep(4000, signal);
@@ -1244,6 +1276,7 @@ export class QueueEngine {
       };
       await state.appendRunStat(stat);
       this.captchaSeenThisRun = 0;
+      this.staleWipesThisRun = 0; // v1.21.8: عدادات الرن بتترمس مع بداية رن جديد
       const perSec = stat.processed ? Math.round((dur / stat.processed) / 100) / 10 : 0;
       await logger.info('queue', `📊 تقرير الرن: ${stat.processed} كلمة في ${(Math.round(dur / 600) / 10)} دقيقة (${perSec}ث/كلمة) — كابتشا: ${stat.captchaSeen} (اتحلّت أوتوماتيك ${stat.captchaSolves}) — مراجعة: ${stat.review}${stat.coverageAvg != null ? ' — متوسط التغطية: ' + stat.coverageAvg + '%' : ''}`);
     } catch (_) {}
