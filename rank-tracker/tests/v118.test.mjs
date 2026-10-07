@@ -473,10 +473,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.4');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.4'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.4'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.4\]/m);
+  assert.equal(man.version, '1.21.5');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.5'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.5'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.5\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -888,4 +888,26 @@ test('v1214: نزول المسح الطويل اتخفّف — من غير لم�
   assert.match(queue, /await sleep\(3500, signal\); \/\/ v1\.20\.5/, 'راحة ما بعد السولف اتلمست — ممنوع');
   assert.match(serp, /await D\.humanSleep\(1500, 900\);/, 'فاصل الدفعات اتلمس — ممنوع');
   assert.match(serp, /cfg\.batchSettleMs \|\| 5000/, 'ستل الدفعات اتلمس — ممنوع');
+});
+
+/* ---------------- v1.21.5 — أول شاشة كاملة قبل الحكم + المسح الدوري تحت المجهر ---- */
+
+test('v1215: اللقطة الأولى الناقصة مابتنهيش — 8 بلوكات أو 4 ثواني polling خفيف', () => {
+  assert.match(serp, /if \(h && h\.where === 'organic'\) \{ early = \{ items: snap\.items, ai: ai, hit: h \}; return true; \}/,
+    'خروج فوري عند أول لقطة عضوية — لازم يفضل أسرع مسار');
+  assert.match(serp, /if \(snap\.items\.length >= 8\) \{ return true; \}/, 'سقف جاهزية أول شاشة ناقص');
+  assert.match(serp, /return firstPolls >= 16;/, 'سقف الـ4 ثواني (16×250ms) ناقص — polling من غير سقف يعلّق');
+  assert.match(serp, /let firstPolls = 0;/, 'العدادش متعرفش');
+  // الدفعات الجاية مش بتتلغى للمتاجر الغايبة — لسه تغطية #20-#100 كاملة
+  assert.match(serp, /cfg\.selfFetchMore !== false && items\.length < expectedNum/, 'تغطية الدفعات اتقطعت — ممنوع (1.19.8)');
+});
+
+test('v1215: المسح الدوري — قبل البدء وكل N كلمات — آليات مقفولة', () => {
+  assert.match(st, /clearBeforeRun: true,/, 'مسح ما قبل البدء اتطفي من الافتراضي');
+  assert.match(queue, /processed - marker >= everyN/, 'عدّاد الـN اتبوظ — المسح الدوري بيتعمل بكل كلمة أو لأبد');
+  assert.match(queue, /if \(!everyN\) \{ return; \}/, 'التعطيل بـ0 مش متعامل معاه');
+  assert.match(queue, /run\.clearMarker \|\| 0/, 'الماركر اللي بيمنع تكرار المسح لنفس العدد اتشال');
+  // قيمة المستخدم 10 بقى ليها احترام: الميجريشن واحدة بس (v<4) وماراجعةش تاني
+  const mig = st.slice(st.indexOf('if (version < 4)'), st.indexOf('if (version < 6)'));
+  assert.match(mig, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'ميجريشن 10→8 اتشالت من مكانها');
 });

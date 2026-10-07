@@ -633,15 +633,22 @@
     // 1) من أول نتيجة بتظهر: فحص مطابقة كل 250ms — الموقع فوق؟ خروج فوري
     //    بدون أي توسيع AI أو تمرير قبل كده (التوسيع بيتأجل لوقت الحكم بعدم وجوده)
     let aiSeenLogged = false;
+    let firstPolls = 0;
     const firstHit = await D.waitFor(() => {
       const snap = collect();
       if (!snap.items.length) { return D.first(C.SEL.serp.noResults); }
       const ai = collectAi();
       const h = immediateFind(cfg, snap, ai.items);
       // ضربة «AI» لوحدها مش خروج — ترتيبك العضوي ممكن يكون تحت في #20+؛ بنعلّم وبس
-      if (h && h.where === 'organic') { early = { items: snap.items, ai: ai, hit: h }; }
-      else if (h && !aiSeenLogged) { aiSeenLogged = true; D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: '🤖 الموقع باين في AI Overview — كمّل نزول بحثاً عن الترتيب العضوي' }); }
-      return true;
+      if (h && h.where === 'organic') { early = { items: snap.items, ai: ai, hit: h }; return true; }
+      if (h && !aiSeenLogged) { aiSeenLogged = true; D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: '🤖 الموقع باين في AI Overview — كمّل نزول بحثاً عن الترتيب العضوي' }); }
+      // v1.21.5: «الموقع ظاهر قدامه وهو بيغوص على الـ100» — صفحة جوجل بتوصل على 2-3
+      // دفعات؛ لو حكمنا على أول لقطة ناقصة وطينا، بلوك #1-#10 اللي كان هيطلع بعد
+      // مللي كان بيتفوّت والدورة تقيلة بـ60 ثانية سكرول. نلف polling خفيف لحد
+      // ما أول شاشة تجهز (8 بلوكات) أو 4 ثواني كحد أقصى — على نفس الـ250ms الأرخص
+      if (snap.items.length >= 8) { return true; }
+      firstPolls += 1;
+      return firstPolls >= 16;
     }, { timeoutMs: Math.min(maxWait, 20000), intervalMs: 250, desc: 'first-result' });
 
     if (early) {
