@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "short_name": "__MSG_appShortName__",
-  "version": "1.21.23",
+  "version": "1.21.24",
   "default_locale": "ar",
   "description": "__MSG_appDesc__",
   "minimum_chrome_version": "123",
@@ -380,6 +380,27 @@
         "https://*.google.ch/search*"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.google.com/search*",
+        "https://google.com/search*",
+        "https://www.google.sa/search*",
+        "https://google.sa/search*",
+        "https://www.google.com.sa/search*",
+        "https://google.com.sa/search*",
+        "https://www.google.com/sorry/*",
+        "https://google.com/sorry/*",
+        "https://www.google.sa/sorry/*",
+        "https://google.sa/sorry/*",
+        "https://www.google.com.sa/sorry/*",
+        "https://google.com.sa/sorry/*"
+      ],
+      "js": [
+        "src/content/no-alerts.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "content_security_policy": {

@@ -918,9 +918,9 @@ export class QueueEngine {
     }, 1200);
 
     let result;
-    // ⚡ v1.21.23 (طلب المستخدم الحرفي: «لو ماتحلتش في غضون 6 ثواني أو بعد أول محاولة —
+    // ⚡ v1.21.23 (طلب المستخدم) · المدة بقت 15 ثانية بطلب 1.21.24 —: «لو ماتحلتش في غضون 15 ثانية —
     // مسح بيانات وفورًا نفس الكلمة»): المحلّل لسه بيتشغّل بنفس توقيتاته المقدسة، بس إحنا
-    // مابنستناش دوره التاني ولا سكتاته — مهلة 6 ثواني، وبعدها بنوقفه بأدب (abort موصول
+    // مابنستناش دوره التاني ولا سكتاته — مهلة 15 ثانية، وبعدها بنوقفه بأدب (abort موصول
     // عنده مسارات النظافة) وبنسلّم للمسح الموحد. لو حلّ قبل المهلة؟ مجرى زي الأول بالظبط.
     const ctrl = new AbortController();
     const relay = () => { try { ctrl.abort(); } catch (_) {} };
@@ -928,7 +928,7 @@ export class QueueEngine {
     try {
       result = await Promise.race([
         this.orchestrator.solve(tabId, cfg, ctrl.signal),
-        new Promise((res) => { setTimeout(() => { res(null); }, 6000); }),
+        new Promise((res) => { setTimeout(() => { res(null); }, 15000); }),
       ]);
     } finally {
       if (signal) { try { signal.removeEventListener('abort', relay); } catch (_) {} }
@@ -939,7 +939,7 @@ export class QueueEngine {
       await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
       await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
       this.broadcast();
-      await logger.warn('queue', `⚡ "${kw.keyword}" — ست ثواني من غير حلّ: صفر تبريد، مسح بيانات وتاب جديد بنفس الكلمة حالًا`);
+      await logger.warn('queue', `⚡ "${kw.keyword}" — خمس عشرة ثانية من غير حلّ: صفر تبريد، مسح بيانات وتاب جديد بنفس الكلمة حالًا`);
       return 'stale-expired'; // نفس إشارة المسح الموحد (سقف 6 جولات/رن بيراعي الجهاز)
     }
     if (result.outcome === 'aborted' || (signal && signal.aborted)) { return 'paused'; }

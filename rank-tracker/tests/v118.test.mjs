@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.23');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.23'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.23'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.23\]/m);
+  assert.equal(man.version, '1.21.24');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.24'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.24'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.24\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1249,11 +1249,37 @@ test('v12115: الزرار «إعادة ضبط» — نفس السلوك الش�
 });
 function rt13b() { return read('src/background/core/router.js'); }
 
+/* -------- v1.21.24 — تكميم حوارات جوجل + المهلة 15 ثانية -------- */
+test('v12124: no-alerts محقون MAIN/document_start وآخر الـarray — والفهرس القديم ما اتبوظش', () => {
+  const man = JSON.parse(read('manifest.json'));
+  const cs = man.content_scripts;
+  assert.equal(cs[0].js[cs[0].js.length - 1], 'src/content/serp.js', 'ترتيب السيربتات اتبوظ — الدباشيم على [0]/[1]');
+  assert.equal(cs[1].run_at, 'document_end', 'ترتيب الكابتشا اتبوظ');
+  const na = cs[cs.length - 1];
+  assert.deepEqual(na.js, ['src/content/no-alerts.js'], 'لازم ملف التكميم موجود');
+  assert.equal(na.world, 'MAIN', 'التكميم لازم في عالم الصفحة نفسها');
+  assert.equal(na.run_at, 'document_start', 'قبل ما جوجل يرمي أي alert');
+  const src = read('src/content/no-alerts.js');
+  assert.match(src, /window\.alert = function \(\) \{\};/, 'البلع مشظبوط؟');
+  assert.ok(!/window\.confirm|window\.prompt/.test(src), 'نغير غير اللي طلبه المستخدم — alert وبس');
+  const matches = na.matches;
+  assert.ok(matches.some((m) => m.includes('search')) && matches.some((m) => m.includes('sorry')), 'مش مغطي البحث وصفحة التحدي');
+});
+
+test('v12124: المهلة 15 ثانية في الكود والرسايل — وباقي سياسة 1.21.23 حرفيًا زي ما هي', () => {
+  const hc = queue.slice(queue.indexOf('async handleCaptcha'), queue.indexOf('async collectAfterSolve'));
+  assert.ok(!hc.includes('res(null); }, 6000'), 'لسه فيه سباق الـ6000 في handleCaptcha');
+  assert.match(hc, /خمس عشرة ثانية من غير حلّ/, 'اللوج ما اتحدّثش');
+  // التبريدات ملغية، والتهدئة بعد الحل مقدسة — زي 1.21.23 حرفيًا
+  assert.match(queue, /const restMs = 500 \+ captchaClears \* 250;/, 'نَفَس ما بعد الفشل اتغير');
+  assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة ما بعد الحل اتلمست — ممنوع');
+});
+
 /* -------- v1.21.23 — ست ثواني أو المحاولة الأولى: مسح فوري بلا تبريد -------- */
 test('v12123: سباق الـ6 ثواني حوالين المحلّل — وبلا شبح وراه', () => {
   const hc = queue.slice(queue.indexOf('async handleCaptcha'), queue.indexOf('async collectAfterSolve'));
   assert.match(hc, /Promise\.race\(\[\s*this\.orchestrator\.solve\(tabId, cfg, ctrl\.signal\),/, 'solve مش في سباق ست ثواني');
-  assert.match(hc, /setTimeout\(\(\) => \{ res\(null\); \}, 6000\)/, 'المهلة مش 6000');
+  assert.match(hc, /setTimeout\(\(\) => \{ res\(null\); \}, 15000\)/, 'المهلة مش 15000 (بطلب 1.21.24)');
   assert.match(hc, /try \{ ctrl\.abort\(\); \} catch \(_\) \{\} \/\/ لو إحنا اللي كسبنا/, 'المنسّق ما بيتوقفش نظيف بعد السباق');
   assert.ok(!/result = await this\.orchestrator\.solve\(tabId, cfg, signal\);/.test(hc), 'الـawait العاري رجع — بينومنا لحد 35 ثانية');
   assert.match(hc, /return 'stale-expired'; \/\/ نفس إشارة المسح الموحد/, 'خسارة السباق ما بتسلّمش للمسح الموحد');
