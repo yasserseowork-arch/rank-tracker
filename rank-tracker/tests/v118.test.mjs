@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.18');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.18'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.18'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.18\]/m);
+  assert.equal(man.version, '1.21.19');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.19'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.19'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.19\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1060,9 +1060,9 @@ test('v12110: رفع النافذة اتشال من التركيز الآلي �
   const tc = read('src/background/core/tabctl.js');
   assert.ok(!/windows\.update/.test(tc), 'رجع يرفع النافذة فوق شغل المستخدم — ممنوع من 1.21.10');
   assert.match(tc, /chrome\.tabs\.update\(tabId, \{ active: true \}\);/, 'تنشيط التاب اتشال معه — جوجل هيختنق والتايمينج هتتبطأ');
-  // قفزة المستخدم اليدوية من اللوحة لازم تفضل رافعة النافذة — هو اللي طالبها
+  // 1.21.19 (طلب المستخدم): زرار «اعرض التبويب» نفسه اتشال — اللوحة بقى صفر رفع نافذة خالص
   const pnl = read('src/sidepanel/side-panel.js');
-  assert.match(pnl, /chrome\.windows\.update\(tab\.windowId, \{ focused: true \}\)/, 'قفزة المستخدم اليدوية اتبوظت');
+  assert.ok(!/windows\.update/.test(pnl), 'اللوحة لسه رافعة نافذة والزرار اتشال — بقى ممنوع من بابين');
   // مسار الصبر/الكابتشا مابيحاولش يرفع النافذة من حتة تانية
   assert.ok(!/windows\.update/.test(queue), 'queue.js بيلف على الحظر من باب تاني');
 });
@@ -1248,6 +1248,27 @@ test('v12115: الزرار «إعادة ضبط» — نفس السلوك الش�
   assert.match(seg, /reason: 'running'/, 'حرس الرن الشغال اتشال — لأ');
 });
 function rt13b() { return read('src/background/core/router.js'); }
+
+/* -------- v1.21.19 — بانر «كابتشا طوارئ» طار، والشريط السفلي ملك -------- */
+test('v12119: البانر مشيل من HTML/JS/CSS/i18n — والشريط وبيدج الحالة والمحرك سليمة', () => {
+  const html = read('src/sidepanel/side-panel.html');
+  const js = read('src/sidepanel/side-panel.js');
+  const css = read('src/sidepanel/side-panel.css');
+  const i18 = read('src/lib/i18n-ui.js');
+  for (const [name, src] of [['html', html], ['js', js], ['css', css], ['i18n', i18]]) {
+    assert.ok(!/captchaBanner|btnFocusCaptcha|btnShowTab|banner-|captchaLive|captchaFailed|captchaAttempts/.test(src), name + ': فيه أثر من البانر لسه');
+  }
+  // الشريط السفلي والبيدج — طلب المستخدم الحرفي «تسيب اللي تحت»
+  assert.match(html, /id="restStrip"/, 'شريط التحذير السفلي اتلمس — مطلوب يفضل!');
+  assert.match(html, /id="statusPill"/, 'بيدج الحالة اتلمس');
+  assert.match(js, /renderRestStrip/, 'رندر الشريط اتبوظ');
+  assert.match(css, /\.modal-card, \.tab-pane \{ animation: none; \}/, 'حركة reduced-motion اتبهدلت مع البانر');
+  // المحرك قدس: عداد المحاولات لسه بيغذي حالة الرن (مفيش UI بس ولازم يفضل شغال)
+  const q = read('src/background/core/queue.js');
+  assert.match(q, /attemptsTicker/, 'عداد المحاولات في queue اتلمس — ممنوع');
+  // ولا مسار رفع نافذة فضل في اللوحة
+  assert.ok(!/windows\.update/.test(js), 'side-panel.js لسه فيه رفع نافذة — مش مطلوب من 1.21.16');
+});
 
 /* -------- v1.21.18 — «expired» = مسح فورًا في ثانية، بلا ريلودات ولا محاولات ---- */
 test('v12118: بوابة expired في handleCaptcha قبل المنسّق، والندائين موصولين', () => {

@@ -205,20 +205,6 @@ body {
 
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 
-/* ------------------------------- البانر ------------------------------- */
-.banner {
-  display: flex; gap: 10px; align-items: flex-start;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  border: 1px solid #7c5a12;
-  background: linear-gradient(135deg, #3a2c07, #2c2105);
-  box-shadow: var(--shadow);
-}
-.banner-icon { font-size: 1.4rem; }
-.banner-body strong { display: block; margin-bottom: 3px; color: #fcd34d; }
-.banner-body p { margin: 0 0 6px; color: #e7d9a8; font-size: .82rem; }
-.banner-meta { display: flex; gap: 10px; align-items: center; font-size: .78rem; color: #fde68a; }
-
 /* ------------------------------- الإحصاءات ------------------------------- */
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .stat-card {
@@ -529,17 +515,11 @@ html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   to { opacity: 1; transform: none; }
 }
 .tab-pane:not(.hidden) { animation: pane-in .2s ease-out; }
-.banner:not(.hidden) { animation: pop-in .24s ease-out; }
 .kw-count { transition: transform .18s ease; }
 .data-table tbody tr { transition: background .14s ease; }
 .data-table tbody tr:hover { background: rgba(194, 146, 77, .06); }
 .btn:not(:disabled):active { transform: scale(.965); }
-.banner-icon { animation: icon-bob 2.4s ease-in-out infinite; }
-@keyframes icon-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
-}
 @media (prefers-reduced-motion: reduce) {
-  .modal-card, .tab-pane, .banner, .banner-icon { animation: none; }
+  .modal-card, .tab-pane { animation: none; }
   .btn, .data-table tbody tr, .kw-count { transition: none; }
 }

@@ -68,20 +68,6 @@ function renderStatus() {
   $('btnResume').disabled = run.status !== 'paused';
   $('btnStop').disabled = run.status === 'idle';
 
-  const banner = $('captchaBanner');
-  const showBanner = run.status === 'captcha' || (run.status === 'paused' && run.pauseReason === 'captcha-failed');
-  banner.classList.toggle('hidden', !showBanner);
-  if (showBanner) {
-    const attempts = run.captcha && run.captcha.attempts ? run.captcha.attempts : 0;
-    $('captchaAttempts').textContent = t('captchaAttemptsLabel') + ' ' + attempts;
-    if (run.status === 'paused') {
-      $('captchaBannerTitle').textContent = t('captchaFailedTitle');
-      $('captchaBannerText').textContent = t('captchaFailedText');
-    } else {
-      $('captchaBannerTitle').textContent = t('captchaLiveTitle');
-      $('captchaBannerText').textContent = t('captchaLiveText');
-    }
-  }
 }
 
 function renderStats() {
@@ -662,17 +648,6 @@ async function main() {
     if (confirm(t('confirmClearRes'))) { await send(C.MSG.RESULTS_CLEAR); await refresh(); }
   });
   $('btnClearLogs').addEventListener('click', () => { $('logConsole').textContent = ''; });
-  $('btnFocusCaptcha').addEventListener('click', async () => {
-    const tabId = snapshot.run && snapshot.run.captcha ? snapshot.run.captcha.tabId : null;
-    if (tabId) {
-      try {
-        await chrome.tabs.update(tabId, { active: true });
-        const tab = await chrome.tabs.get(tabId);
-        if (tab && tab.windowId) { await chrome.windows.update(tab.windowId, { focused: true }); }
-      } catch (_) {}
-    }
-  });
-
   // بث الحالة من الـ Service Worker
   chrome.runtime.onMessage.addListener((message) => {
     if (!message || !message.type) { return; }
