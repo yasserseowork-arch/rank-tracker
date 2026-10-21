@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.21');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.21'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.21'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.21\]/m);
+  assert.equal(man.version, '1.21.22');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.22'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.22'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.22\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -995,7 +995,7 @@ test('v1218 (حدّثها 1.21.18): expired = تسليم للخطة الاحتي
   assert.match(seg, /captchaClears = 0; \//, 'الميزانية الكاملة مالترجعتش للكلمة بعد الجلسة النضيفة');
   assert.ok(!/recordExhausted/.test(seg), 'stale بتسجل استسلام — ممنوع');
   // استشفاء الجولتين: stale بيرمي للجولة اللي بعدها
-  assert.match(queue, /else if \(clearedL === 'stale'\) \{\n\s+break;/);
+  assert.match(queue, /else if \(clearedL === 'stale' \|\| clearedL === 'park'\) \{\n\s+break;/, 'stale/park لازم يرمي للجولة اللي بعدها');
   // الثوابت: مفيش windows.create ومفيش توقيتات جديدة لمسار الحل نفسه
   assert.ok(!/chrome\.windows\.create/.test(queue), 'نافذة جديدة — ممنوع');
   assert.match(queue, /await sleep\(4000, signal\);\n        if \(flag === 'clear'\)/, 'نوم الصبر الأساسي اتبوظ');
@@ -1248,6 +1248,20 @@ test('v12115: الزرار «إعادة ضبط» — نفس السلوك الش�
   assert.match(seg, /reason: 'running'/, 'حرس الرن الشغال اتشال — لأ');
 });
 function rt13b() { return read('src/background/core/router.js'); }
+
+/* -------- v1.21.22 — سقف الركن الرحيم: 5 دقايق ← ⚠️ مراجعة ← الرن يكمل -------- */
+test('v12122: الصبر ليه أرض — park بعد 300 ثانية في اللوب وكل النداءات موصلة', () => {
+  const wcc = queue.slice(queue.indexOf('async waitCaptchaCleared'), queue.indexOf('async tabChallengeLooksStale'));
+  assert.match(wcc, /if \(waited >= 300\) \{[\s\S]{0,260}return 'park';/, 'مفيش سقف ركن رحيم جوه اللوب');
+  // السقف ما بيمنعش الإشارات التانية: cleared/stale/tab-closed لسه شغالين
+  assert.match(wcc, /return 'cleared';/, 'مسار الحل اتبوظ');
+  assert.equal((wcc.match(/return 'stale';/g) || []).length, 2, 'درب البياتة اتلمس');
+  assert.match(queue, /if \(cleared === 'park'\) \{\n\s+\/\/ 🅿️[\s\S]{0,140}return this\.recordExhausted\(kw, cfg\);/, 'نداء main مابيركّنش');
+  assert.match(queue, /if \(clearedX === 'park'\) \{ return this\.recordExhausted\(kw, cfg\); \}/, 'فرع ما بعد سقف المسحات موصّلش');
+  assert.match(queue, /else if \(clearedL === 'stale' \|\| clearedL === 'park'\)/, 'جولة الاستشفاء التانية مابتركنش');
+  // فلسفة «مفيش إلغاء» محفوظة: الركن بمراجعة مش حكم بـ«غير موجود»
+  assert.match(queue, /بتتركن بعلامة ⚠️ مراجعة/, 'الرسالة لازم تقول إنها مراجعة مش غياب');
+});
 
 /* -------- v1.21.21 — إحياء الـexpired في مكانه قبل النسف -------- */
 test('v12121: الإحياء بيسبق أي تصعيد، وبمحله في التلات بوابات', () => {

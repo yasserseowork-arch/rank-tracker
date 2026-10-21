@@ -569,6 +569,7 @@ export class QueueEngine {
           // سقف الجولات اتحقق أو التاب مافتحش؟ صبر عادي على القديمة — مفيش هروب ومفيش إلغاء
           const clearedX = await this.waitCaptchaCleared(tab.id, kw, signal);
           if (clearedX === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+          if (clearedX === 'park') { return this.recordExhausted(kw, cfg); }
           // من غير «cleared»؟ نفس رحمة السقف عند النداء الأصلي: 20 ثانية بدل لفّ حار على صفحة ميتة
           if (clearedX !== 'cleared') {
             await sleep(20000, signal);
@@ -593,6 +594,10 @@ export class QueueEngine {
           await logger.warn('queue', `🧘 "${kw.keyword}" — الكابتشا لسه معلقة؛ هنستنى تتحل ونعيد نفس الكلمة تاني (مش ملغاة)`);
           const cleared = await this.waitCaptchaCleared(tab.id, kw, signal);
           if (cleared === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+          if (cleared === 'park') {
+            // 🅿️ 1.21.22: الركن بمراجعة (مش «غير موجود») — لفة المراجعة آخر الرن هتجريها من جديد
+            return this.recordExhausted(kw, cfg);
+          }
           if (cleared === 'stale') {
             // 🧹 v1.21.8: التحدي البايّت عنيد — نفس وصفة البلوك: مسح بيانات + تاب جديد
             // بنفس الكلمة (الكلمة ما بتتبوظش: بتتعاد من الأول في جلسة نضيفة)
@@ -727,8 +732,8 @@ export class QueueEngine {
                   }
                 } else if (clearedL === 'aborted') {
                   return this.abortKeyword(kw, 'paused');
-                } else if (clearedL === 'stale') {
-                  break; // 🧹 v1.21.8: بايّت ومابيتصلّحش — الجولة الجاية مسح+تاب جديد بنفس الكلمة
+                } else if (clearedL === 'stale' || clearedL === 'park') {
+                  break; // 🧹 v1.21.8/v1.21.22: بايّت أو اتركّن — آخر اللفة بتسجّلها ⚠️ مراجعة وتكمّل
                 }
               }
             }
@@ -1082,10 +1087,12 @@ export class QueueEngine {
   }
 
   /**
-   * 🧘 صبر الكابتشا (v1.20.0): الكلمة ما تتلغاش ولا تتأجل — بنفضل نستنى صفحة التحدي
-   * تروح ( Buster متأخر، أو المستخدم حلّها بإيده) وكل ما تتحل بنرجع «cleared»
-   * والندّاء بيعيد نفس الكلمة من الأول. 'tab-closed' لو التاب اتقفل، 'aborted' للإيقاف.
-   * مفيش سقف زمني — الاستئناف/الإيقاف اليدوي بس بيوقفوا الانتظار (الوعى الأساسي: الأداة ما توقفش).
+   * 🧘 صبر الكابتشا (v1.20.0، هدّاه 1.21.22): الكلمة ما تتلغاش ولا تتأجل — بنفضل
+   * نستنى صفحة التحدي تروح (Buster متأخر، أو المستخدم حلّها بإيده) وكل ما تتحل
+   * بنرجع «cleared» والندّاء بيعيد نفس الكلمة من الأول. 'tab-closed' لو التاب اتقفل،
+   * 'aborted' للإيقاف. السقف الرحيم (طلب المستخدم «معلّق ليه»): بعد 5 دقايق من غير
+   * حلّ وبيوت صريحة، بنرجع 'park' — الكلمة بتتركن ⚠️ محتاج مراجعة (مش «غير موجود»)
+   * وهتتعاد تلقائيًا آخر الرن؛ الرن نفسه ما يعلقش أبدًا.
    */
   async waitCaptchaCleared(tabId, kw, signal) {
     await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since: Date.now() } });
@@ -1127,6 +1134,13 @@ export class QueueEngine {
         if (u == null || u === '') { return 'tab-closed'; }
         if (!urlkit.isSorry(u)) { break; } // الصفحة بقت نتائج عادية = اتحلت
         waited += 4;
+        // 🅿️ v1.21.22 (طلب المستخدم «معلّق ليه عند الكابتشا»): الاستنى للأبد كان تعليمات
+        // 1.20.0، بس فلسفة 1.21.7 بقى أدق: ⚠️ مراجعة بره الرن أحسن من تجميد الرن كله.
+        // 5 دقايق من غير حلّ؟ نركّن الكلمة بكل احترام وهتتعاد آخر الرن في جلسة أهدى.
+        if (waited >= 300) {
+          await logger.warn('queue', `🅿️ "${kw.keyword}" — خمس دقايق صبر من غير حلّ: بتتركن بعلامة ⚠️ مراجعة وهتتعاد آخر الرن تلقائيًا`);
+          return 'park';
+        }
         // 🧨 v1.21.18 (يستبدل دورة «ريلود×2 كل 90ث» من 1.21.2/1.21.8): «expired» = الجلسة
         // ميتة والريلود كان بيضيّع دقايق (بلاغ: 476 ثانية). مسبار قراءة رخيص كل تفكرة؛
         // بايّت؟ تسليم فوري 'stale' للنداء: مسح كامل + تاب جديد بنفس الكلمة — الكلمة عمرها
