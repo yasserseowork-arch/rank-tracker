@@ -409,8 +409,8 @@
 
   /** قبل أي حكم: نستنى بلوك AI يترسم (async) → نوسّع «عرض المزيد/الكل» → نعيد القراءة.
    *  كده الاستشهادات المخفية أو اللي لسه مجتش متتفوتش في أي مسار (حتى الخروج المبكر). */
-  async function finalizeAi(aiSnap) {
-    const root = await waitForAiRoot(5000);
+  async function finalizeAi(aiSnap, budgetMs) {
+    const root = await waitForAiRoot(budgetMs || 5000);
     if (!root) {
       if (aiHint()) {
         D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: 'ℹ️ الصفحة فيها بوادر بلوك AI لكنه مترسّمش جوه الـDOM — شكّل السجل ده لو تكرر، معناه جوجل غيّرت الشكل' });
@@ -595,17 +595,23 @@
   }
 
 
-  /* -------- قفل السكرول: الصفحة تفضل فوق من لحظة فتحها لحد ما نقرأ ونكتب --------
-     ممنوع أي غوص (منّا أو من أداة تحميل الـ100 نتيجة) إلا لو قررنا نحن النزول
-     لأن الموقع مش على الشاشة. بعد القراءة: قفل تاني نهائي. */
-  let scrollLocked = true;
-  function lockScroll() { try { window.scrollTo({ top: 0, behavior: 'auto' }); } catch (_) {} }
+  /* 🕊 v1.21.15 (طلب المستخدم): القفل اتلغى — «عايز الصفحة تفضل فوق وحر الحركة»
+     القفل القديم (snap كل 250ms + مستمع scroll) كان بيخطف الماوس من المستخدم نفسه
+     ويرميه لفوق. القراءة أصلا بتتم من الـDOM مش من الشاشة، فالقفل كان مسرح بصرية
+     بلا لازمة. القاعدتان الجديدتان: 1) المستخدم يلمس العجلة/اللمس/الكيبورد؟ الأداة
+     سحبت إيدها نهائيًا عن السكرول في الكلمة دي، والتغطية بتتكفل بيها الدُفعات
+     الخلفية (selfFetchMore) من غير أي حركة. 2) من غير لمس: غوصة واحدة بس للآخر
+     وقت ما التحميل الكسول محتاج تنبيه — ومفيش رجوع قسري لفوق في أي لحظة.
+     relock/releaseScroll فضلّوا أسماء فاضية عشان نداءاتهم القديمة ما تتكسرش. */
+  let userOwns = false;
   try {
-    window.addEventListener('scroll', () => { if (scrollLocked) { lockScroll(); } }, { passive: true });
-    setInterval(() => { if (scrollLocked) { lockScroll(); } }, 250);
+    const claimScroll = () => { userOwns = true; };
+    window.addEventListener('wheel', claimScroll, { passive: true });
+    window.addEventListener('touchstart', claimScroll, { passive: true });
+    window.addEventListener('keydown', claimScroll, { passive: true });
   } catch (_) {}
-  function relock() { scrollLocked = true; lockScroll(); }
-  function releaseScroll() { scrollLocked = false; }
+  function relock() { if (userOwns) { return; } }
+  function releaseScroll() {}
 
   function logger_serp(text) {
     try { D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: text }); } catch (_) {}
@@ -653,7 +659,9 @@
 
     if (early) {
       logEarly(early.hit, early.items);
-      const aiE = await finalizeAi(early.ai);
+      // v1.21.15 (طلب المستخدم): ظهر في الأول؟ بنقرا ونمشي — مفيش انتظار 5 ثواني
+      // للبلوك يت رسم؛ لو موجود بينقرأ فورًا، ولو لأ: 1.2 ثانية بس ومحسوب عليك AI لأ
+      const aiE = await finalizeAi(early.ai, 1200);
       return { items: early.items, aiItems: aiE.items, aiText: aiE.text, adsCount: 0, early: true, hit: early.hit };
     }
     if (firstHit && firstHit !== true && firstHit.nodeType) {
@@ -685,7 +693,7 @@
       const hit = immediateFind(cfg, snapshot, ai.items);
       if (hit && hit.where === 'organic') {
         logEarly(hit, snapshot.items);
-        const aiF = await finalizeAi(ai);
+        const aiF = await finalizeAi(ai, 1200); // v1.21.15: نفس مبدأ «لقيت؟ امشي» أثناء النزول
         return { items: snapshot.items, aiItems: aiF.items, aiText: aiF.text || aiText, adsCount: snapshot.adsCount, early: true, hit: hit };
       }
       if (hit && !aiSeenLogged) {
@@ -719,18 +727,20 @@
       if (now - started >= Math.max(cfg.scanHardCapMs || 60000, maxWait)) { break; }
 
       releaseScroll();
-      // 👁 v1.21.9 (طلب المستخدم): مفيش «بيعدّ على الـ100 قدام عينك» —
-      // قفزة واحدة للآخر تفعّل التحميل الكسول، وبعدين قراءة صامتة؛ ربّتة خفيفة
-      // كل 3 دورات بس لو الصفحة فضلت تولّد، وفي الحكم الأخير relock بيرجعلك لفوق
-      diveNudges += 1;
-      if (!diveStarted) {
-        diveStarted = true;
-        try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' }); } catch (_) {}
-      } else if (diveNudges % 3 === 0) {
-        const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 400;
-        if (!nearBottom) { try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' }); } catch (_) {} }
+      // 👁 v1.21.15: لو المستخدم لمس الصفحة — مفيش ولا حركة من ناحيتنا خالص؛
+      // الدفعات الجاية تتجيب من ورا الظهر (selfFetchMore) والتغطية ما بتضيعش.
+      // من غير لمس: قفزة واحدة للآخر، وبعدين ربّتة كل 5 دورات لو لسه بيولّد
+      if (!userOwns) {
+        diveNudges += 1;
+        if (!diveStarted) {
+          diveStarted = true;
+          try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' }); } catch (_) {}
+        } else if (diveNudges % 5 === 0) {
+          const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 400;
+          if (!nearBottom) { try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' }); } catch (_) {} }
+        }
+        window.dispatchEvent(new Event('scroll'));
       }
-      window.dispatchEvent(new Event('scroll'));
       await D.sleep(rescan + Math.round(Math.random() * 300));
     }
 

@@ -46,7 +46,7 @@ test('AI: التوسيع بيتم حتى في مسار الخروج المبكر
   assert.ok(earlyAt > -1, 'مفيش بلوك الخروج المبكر؟');
   assert.match(serp.slice(earlyAt, earlyAt + 500), /await finalizeAi/,
     'الخروج المبكر بيرجع من غير ما يوسّع AI — ده سبب ضياع العَلم');
-  assert.match(serp, /const aiF = await finalizeAi\(ai\);/,
+  assert.match(serp, /const aiF = await finalizeAi\(ai, 1200\);/, // v1.21.15: بدري = ميزانية قصيرة
     'مسار النزول مبيوسّعش AI قبل الرجوع');
 });
 
@@ -188,7 +188,7 @@ test('ضد الدوامة v1.18.4: تبريد إلزامي قبل إعادة ا�
   // v1.20.2: الترتيب اتلمّ في openFreshTab: فتح الجديد ← قفل القديم ← sweep ← المسح
   const fb = queue.slice(queue.indexOf('async openFreshTab'), queue.indexOf('ضمان تاب واحد'));
   assert.ok(fb.indexOf('tabctl.open') < fb.indexOf('tabctl.close'), 'لازم الجديد يفتح قبل ما القديم يتقفل');
-  assert.ok(fb.indexOf('sweepExtraTabs') < fb.indexOf('browsingData.remove'), 'المسح لازم يحصل والتبانين الفائضة اتقفلت قبله');
+  assert.ok(fb.indexOf('browsingData.remove') < fb.indexOf('tabctl.open'), 'v1.21.15: المسح بقى أول حاجة قبل ما أي تاب يتفتح (تسخين على نضافة)');
   // وفرع الكابتشا لسه يبرد الأول قبل أي استشفاء
   const cap = queue.slice(queue.indexOf('const restSec'), queue.indexOf('continue; // نفس الكلمة من الأول في التبويب الجديد'));
   assert.ok(cap.indexOf('await sleep(restSec * 1000, signal)') > -1 && cap.indexOf('openFreshTab') > cap.indexOf('await sleep'), 'المسح بقى بيسبق التبريد');
@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.14');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.14'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.14'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.14\]/m);
+  assert.equal(man.version, '1.21.15');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.15'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.15'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.15\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1009,7 +1009,7 @@ test('v1219: مفيش سكرول متقطع قدام المستخدم — قفز
   assert.ok(!/window\.scrollBy/.test(serp), 'scrollBy رجع — المنظر ده المستخدم منعه بنصه');
   assert.match(serp, /let diveStarted = false;/, 'راية القفزة الأولى مش موجودة');
   assert.match(serp, /let diveNudges = 0;/, 'عداد الربّتة مش موجود');
-  assert.match(serp, /diveNudges % 3 === 0/, 'الربّتة مش كل 3 دورات — إما دوشة أو تغطية ناقصة');
+  assert.match(serp, /diveNudges % 5 === 0/, 'الربّتة مش كل 5 دورات (1.21.15) — أد إيه هتدوش؟');
   assert.ok((serp.match(/window\.scrollTo\(\{ top: document\.body\.scrollHeight/g) || []).length === 2, 'مفروض قفزتان بالظبط: أولى للآخر + ربّتة شرطية');
   assert.match(serp, /relock\(\);\n\n    \/\/ 3\) حكم/, 'مفيش relock قبل حكم عدم الوجود — المستخدم هيتلسع بمنظر تحت');
   assert.match(serp, /cfg\.rescanMs \|\| 800/, 'ريسكان مش على 800');
@@ -1099,7 +1099,7 @@ test('v12111: صفر إيموجي زينة في الواجهة والقاموس�
   assert.match(i18n11, /langBtn: 'AR'/, 'زر اللغة في الوضع الإنجليزي مش AR');
   assert.match(i18n11, /langBtn: 'EN'/, 'زر اللغة في الوضع العربي مش EN');
   assert.match(i18n11, /btnResetCfg: '/, 'مفتاح الزرار مش في العربي');
-  assert.match(i18n11, /btnResetCfg: 'Full reset: settings \+ keywords \+ results',/, 'مفتاح الزرار مش متجدد في الإنجليزي');
+  assert.match(i18n11, /btnResetCfg: 'Reset',/, 'مفتاح الزرار مش متجدد في الإنجليزي');
   assert.match(panel, /confirm\(t\('confirmConfigReset'\)\)/, 'تأكيد إعادة الضبط مش بيستخدم المفتاح المترجم');
 });
 
@@ -1162,12 +1162,12 @@ test('v12113: التصفير الكامل — إعدادات وكلمات ونت
   assert.match(i18b, /resetBusy: 'في رن شغال/, 'رسالة الانشغال ناقصة في العربي');
   assert.match(i18b, /resetBusy: 'A run is in progress/, 'رسالة الانشغال ناقصة في الإنجليزي');
   const i18 = read('src/lib/i18n-ui.js');
-  assert.match(i18, /btnResetCfg: 'تصفير كامل: إعدادات \+ كلمات \+ نتائج',/, 'التسمية العربية ما اتحدثتش');
-  assert.match(i18, /btnResetCfg: 'Full reset: settings \+ keywords \+ results',/, 'التسمية الإنجليزية ما اتحدثتش');
+  assert.match(i18, /btnResetCfg: 'إعادة ضبط',/, 'التسمية العربية مش على قرار 1.21.15');
+  assert.match(i18, /btnResetCfg: 'Reset',/, 'التسمية الإنجليزية مش على قرار 1.21.15');
   assert.match(i18, /مش هيرجع|التصفير نهائي/, 'تحذير النهائيّة مش في العربي');
   assert.match(i18, /cannot be undone/, 'تحذير النهائيّة مش في الإنجليزي');
   const pnlHtml = read('src/sidepanel/side-panel.html');
-  assert.match(pnlHtml, /تصفير كامل: إعدادات \+ كلمات \+ نتائج<\/button>/, 'الزر في الـHTML لسه بالنص القديم');
+  assert.match(pnlHtml, /data-i18n="btnResetCfg">إعادة ضبط<\/button>/, 'الزر في الـHTML لسه بالنص الطويل');
 });
 
 function rt13() { return read('src/background/core/router.js'); }
@@ -1203,3 +1203,50 @@ test('v12114: تنزيل الملف بيبان باسم tracking + اسم الم
   assert.ok(!/srt-ranks-|srt-results-/.test(panel), 'الأسماء القديمة لسه عايشة في حتة');
   assert.match(panel, /maybeAutoXlsx[\s\S]{0,420}makeXlsx\(true\)/, 'التلقائي آخر الرن مش بيمر على نفس الدالة — لازم نفس التسمية');
 });
+
+/* -------- v1.21.15 — حرية الحركة، «لقيت؟ امشي»، وأقل 403 -------- */
+
+test('v12115: القفل اتلغى — لمس المستخدم بيلغي أي سكرول آلي في الكلمة دي', () => {
+  assert.ok(!/scrollLocked/.test(serp), 'scrollLocked رجع — خناق الماوس ممنوع');
+  assert.ok(!/setInterval\(\(\) => \{ if \(scrollLocked\)/.test(serp), 'الـsnap النصفي رجع');
+  assert.match(serp, /window\.addEventListener\('wheel', claimScroll, \{ passive: true \}\)/, 'مفيش تنصت للعجلة');
+  assert.match(serp, /touchstart/, 'لمس الشاشات المغيش — لازم كمان يتحرر');
+  assert.match(serp, /if \(!userOwns\) \{/, 'دورة السكرول مش متأمنة بلمسة المستخدم');
+  // الـno-op alias عشان نداءات قديمة ما تتكسرش
+  assert.match(serp, /function relock\(\) \{ if \(userOwns\) \{ return; \} \}/, 'relock مش على مقاس الحرية الجديدة');
+  assert.ok(!/lockScroll\(\); \}/.test(serp), 'قفل إجباري تاني تسرّل');
+});
+
+test('v12115: المسار البدري بيطير على طول — ميزانية AI قصيرة عند اللقية', () => {
+  assert.match(serp, /async function finalizeAi\(aiSnap, budgetMs\)/, 'الميزانية ما اتمررتش للدالة');
+  assert.match(serp, /waitForAiRoot\(budgetMs \|\| 5000\)/, 'الدالة مابتستخدميش الميزانية — والـ5000 للـfull لسه الأساس');
+  assert.match(serp, /finalizeAi\(early\.ai, 1200\)/, 'خروج أول شاشة لسه بمستنى الـ5 ثانية');
+  assert.match(serp, /const aiF = await finalizeAi\(ai, 1200\);/, 'خروج النزول لسه بمستنى الـ5 ثانية');
+  // حكم عدم الوجود الكامل ما اتقصّرش
+  const judgeAt = serp.indexOf('// 3) حكم عدم الوجود');
+  assert.match(serp.slice(judgeAt, judgeAt + 700), /await finalizeAi\(\{ items: \[\], text: '' \}\);/, 'ميزانية حكم النهاية اتقصّرت بالغلط — دقة AI محتاجاها');
+});
+
+test('v12115: التسخين قبل البحث — بعد كل مسح وفي أول رن بارد (403 أقل)', () => {
+  const at = queue.indexOf('async openFreshTab');
+  const fn = queue.slice(at, at + 1800);
+  assert.match(fn, /browsingData\.remove[\s\S]*?tabctl\.open\('https:\/\/www\.google\.com\/'/, 'الترتيب مش: مسح ← رئيسية جوجل ← بحث');
+  assert.match(fn, /waitForComplete\(nextTab\.id, 15000\)/, 'مفيش انتظار تحميل الرئيسية');
+  assert.match(fn, /sleep\(1000 \+ Math\.floor\(Math\.random\(\) \* 800\)\)/, 'مفيش وقفة آدمية بين التسخين والبحث');
+  assert.match(fn, /tabctl\.navigate\(nextTab\.id, url\)/, 'البحث بالكلمة ما اتعملش بعد التسخين');
+  const coldAt = queue.indexOf('const coldStart = !!cfg.clearBeforeRun');
+  assert.ok(coldAt > -1, 'أول تاب في الرن البارد مش بيتسخن');
+  assert.match(queue.slice(coldAt, coldAt + 700), /navigate\(tab\.id, url\)/, 'التسخين البارد مابيكملش للبحث');
+  // التوقيع الجاف للـ403 بقى مغطى
+  const es = read('src/lib/errorsig.js');
+  assert.match(es, /403\. that's an error/, 'توقيع 403 الجاف ناقص');
+  assert.match(es, /429\. that's an error/, 'توقيع 429 الجاف ناقص');
+});
+
+test('v12115: الزرار «إعادة ضبط» — نفس السلوك الشامل بلا تغيير', () => {
+  const at = rt13b().indexOf('case C.MSG.CONFIG_RESET');
+  const seg = rt13b().slice(at, at + 900);
+  assert.match(seg, /resetConfig[\s\S]*clearKeywords[\s\S]*clearResults/, 'ترتيب التصفير الشامل اتبوظ');
+  assert.match(seg, /reason: 'running'/, 'حرس الرن الشغال اتشال — لأ');
+});
+function rt13b() { return read('src/background/core/router.js'); }

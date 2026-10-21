@@ -481,10 +481,18 @@ export class QueueEngine {
     }
     if (!tab) {
       try {
-        tab = await tabctl.open(url, cfg);
+        // v1.21.15: أول رن بعد مسح البيانات؟ تاب البداية يفتح جوجل الأول ويتسحن —
+        // نفس وصفة openFreshTab (403 أقل). الجول الجاية على نفس التاب (صندوق بحث) أصلًا عضوية
+        const coldStart = !!cfg.clearBeforeRun;
+        tab = await tabctl.open(coldStart ? 'https://www.google.com/' : url, cfg);
         await state.setRun({ workerTabId: tab.id });
         this.ownedTabs.add(tab.id);
         await this.sweepExtraTabs(tab.id);
+        if (coldStart) {
+          try { await tabctl.waitForComplete(tab.id, 15000); } catch (_) {}
+          await sleep(1000 + Math.floor(Math.random() * 800));
+          await tabctl.navigate(tab.id, url);
+        }
       } catch (_) {
         await state.updateKeyword(kw.id, { status: C.STATUS.KW.FAILED });
         await this.notify('❌ فشل', `تعذر فتح تبويب للكلمة: ${kw.keyword}`);
@@ -941,11 +949,21 @@ export class QueueEngine {
   /** 🧻v1.20.2: الاستشفاء الموحد — تاب جديد بنفس الكلمة في الفوكس، قفل القديم،
    *  كنس الفائض، ومسح بيانات كامل. بيتستخدم من: fallback الكابتشا، ومسار 403/429. */
   async openFreshTab(kw, cfg, url, oldTabId) {
+    // 🕊 v1.21.15 (طلب المستخدم — قلة 403): الترتيب القديم كان «بحث 100 نتيجة
+    // على أول طلب بعد مسح الكوكيز خالص» — بصمة بوت صريحة بتستجلب 403 ورا بعضه.
+    // بقى: مسح كامل الأول → فتح صفحة جوجل الرئيسية عادي (الكوكيز تتقفل) →
+    // pause آدمي ثانية ونص → البحث بالكلمة. 3 ثواني زيادة على حدث المسح،
+    // ولفات الـ403 بتقل جدًا على المدى الطويل
+    try {
+      await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
+    } catch (_) {}
     let nextTab = null;
     try {
-      nextTab = await tabctl.open(url, Object.assign({}, cfg, { foregroundTab: true }));
+      nextTab = await tabctl.open('https://www.google.com/', Object.assign({}, cfg, { foregroundTab: true }));
     } catch (_) {}
     if (!nextTab) { return null; }
+    try { await tabctl.waitForComplete(nextTab.id, 15000); } catch (_) {}
+    await sleep(1000 + Math.floor(Math.random() * 800));
     if (oldTabId) {
       this.ownedTabs.add(nextTab.id);
       await tabctl.close(oldTabId);
@@ -954,9 +972,7 @@ export class QueueEngine {
     await state.setRun({ workerTabId: nextTab.id });
     this.currentTabId = nextTab.id;
     await this.sweepExtraTabs(nextTab.id);
-    try {
-      await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
-    } catch (_) {}
+    try { await tabctl.navigate(nextTab.id, url); } catch (_) {}
     return nextTab;
   }
 
