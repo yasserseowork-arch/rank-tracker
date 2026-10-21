@@ -117,9 +117,11 @@ export async function isAlive(tabId) {
 }
 
 export async function focus(tabId) {
+  // 🙈 v1.21.10 (طلب المستخدم): رفع النافذة نفسه اتشال — التاب بيتنشط جوه نافذته
+  // بس (الرسم والتايمينج بيفضلوا بسرعة كاملة)، والنافذة اللي بيكتب فيها المستخدم
+  // بتفضل فوقه من غير سحب. لما نحتاج عينه فعلًا (كابتشا موقوفة) بيوصله نوتيفيكيشن
+  // والنوتة دي بتفتح اللوحة — هو اللي ييجي بإيده
   try {
     await chrome.tabs.update(tabId, { active: true });
-    const tab = await chrome.tabs.get(tabId);
-    if (tab && tab.windowId) { await chrome.windows.update(tab.windowId, { focused: true }); }
   } catch (_) {}
 }

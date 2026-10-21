@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.9');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.9'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.9'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.9\]/m);
+  assert.equal(man.version, '1.21.10');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.10'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.10'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.10\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1054,4 +1054,17 @@ test('v1219: السرعة الجديدة مطبقة — والممنوعات Sac
   assert.match(serp, /await D\.humanSleep\(600, 250\);/, 'توسيع AI مش على مقاس 1.21.9');
   assert.match(queue, /await sleep\(4000 \+ Math\.floor\(Math\.random\(\) \* 4000\), signal\);/, 'فاصل المراجعة 4–8 مش مطبق');
   assert.match(serp, /cfg\.settleMs \|\| 1100/, 'سجل التثبيت اتلمس — لأ');
+});
+
+/* -------- v1.21.10 — وداعًا سرقة التركيز: البروفايل التاني بيتكتب؟ سيبه فوق -------- */
+
+test('v12110: رفع النافذة اتشال من التركيز الآلي — التنشيط جوه نافذة البروفايل بس', () => {
+  const tc = read('src/background/core/tabctl.js');
+  assert.ok(!/windows\.update/.test(tc), 'رجع يرفع النافذة فوق شغل المستخدم — ممنوع من 1.21.10');
+  assert.match(tc, /chrome\.tabs\.update\(tabId, \{ active: true \}\);/, 'تنشيط التاب اتشال معه — جوجل هيختنق والتايمينج هتتبطأ');
+  // قفزة المستخدم اليدوية من اللوحة لازم تفضل رافعة النافذة — هو اللي طالبها
+  const pnl = read('src/sidepanel/side-panel.js');
+  assert.match(pnl, /chrome\.windows\.update\(tab\.windowId, \{ focused: true \}\)/, 'قفزة المستخدم اليدوية اتبوظت');
+  // مسار الصبر/الكابتشا مابيحاولش يرفع النافذة من حتة تانية
+  assert.ok(!/windows\.update/.test(queue), 'queue.js بيلف على الحظر من باب تاني');
 });
