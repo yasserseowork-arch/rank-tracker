@@ -26,28 +26,25 @@
       <button id="btnLang" class="btn btn-ghost btn-sm" title="Language">EN</button>
       <div class="status-pill" id="statusPill" data-status="idle">
         <span class="dot"></span>
-        <span id="statusText">خامل</span>
+        <span id="statusText" data-i18n="statusIdle">خامل</span>
       </div>
     </div>
   </header>
 
   <nav class="tab-bar" id="tabBar">
-    <button class="tab-btn active" data-pane="paneMain" data-i18n="tabMain">🏠 الرئيسية</button>
-    <button class="tab-btn" data-pane="paneGsloc" data-i18n="tabGsloc">📍 الموقع</button>
-    <button class="tab-btn" data-pane="paneBeyondten" data-i18n="tabBeyondten">💯 تصدير النتائج</button>
+    <button class="tab-btn active" data-pane="paneMain" data-i18n="tabMain">الرئيسية</button>
+    <button class="tab-btn" data-pane="paneGsloc" data-i18n="tabGsloc">الموقع</button>
+    <button class="tab-btn" data-pane="paneBeyondten" data-i18n="tabBeyondten">تصدير النتائج</button>
   </nav>
 
   <div id="paneMain" class="tab-pane">
   <section class="controls">
-    <button id="btnStart" class="btn btn-primary" data-i18n="btnStart">▶ بدء الفحص</button>
-    <button id="btnPause" class="btn btn-warn" data-i18n="btnPause" disabled>⏸ إيقاف مؤقت</button>
-    <button id="btnResume" class="btn btn-primary" data-i18n="btnResume" disabled>⏩ استئناف</button>
-    <button id="btnStop" class="btn btn-danger" data-i18n="btnStop" disabled>⏹ إيقاف</button>
-    <button id="btnReview" class="btn btn-ghost" title="أعيد كلمات «⚠️ محتاج مراجعة» بس — بره الرن">🔁 مراجعة الفشلان</button>
+    <button id="btnStart" class="btn btn-primary" data-i18n="btnStart">بدء الفحص</button>
+    <button id="btnPause" class="btn btn-warn" data-i18n="btnPause" disabled>إيقاف مؤقت</button>
+    <button id="btnResume" class="btn btn-primary" data-i18n="btnResume" disabled>استئناف</button>
+    <button id="btnStop" class="btn btn-danger" data-i18n="btnStop" disabled>إيقاف</button>
+    <button id="btnReset" class="btn btn-ghost btn-reset" title="يرجع كل الإعدادات لقيم المصنع — كلماتك ونتائجك وسجلاتك مش متلمسة" data-i18n="btnResetCfg">إعادة ضبط الإعدادات</button>
   </section>
-  <div class="tools-row">
-    <button id="btnReset" class="btn btn-ghost btn-sm" title="يرجع كل الإعدادات لقيم المصنع — كلماتك ونتائجك وسجلاتك مش متلمسة">🔄 إعادة ضبط الإعدادات</button>
-  </div>
 
   <div id="captchaBanner" class="banner hidden">
     <div class="banner-icon">🧩</div>
@@ -88,7 +85,7 @@
   </section>
 
   <details class="card" open>
-    <summary data-i18n="targetTitle">🎯 الهدف والاستهداف الجغرافي</summary>
+    <summary data-i18n="targetTitle">الهدف والاستهداف الجغرافي</summary>
     <div class="form-grid">
       <label>
         <span data-i18n="lblDomain">دومين الموقع</span>
@@ -115,13 +112,13 @@
 
 
   <details class="card" open>
-    <summary><span data-i18n="kwTitle">🔑 الكلمات المفتاحية</span> <span class="kw-count" id="kwCount" title="عدد الكلمات اللي حطيتها">0</span></summary>
+    <summary><span data-i18n="kwTitle">الكلمات المفتاحية</span> <span class="kw-count" id="kwCount" title="عدد الكلمات اللي حطيتها">0</span></summary>
     <textarea id="kwInput" rows="4" data-i18n-ph="kwPlaceholder" placeholder="الصق الكلمات هنا (سطر لكل كلمة، أو عمود من الشيت)&#10;مثال:&#10;عبايات نسائية&#10;فساتين سهرة الرياض"></textarea>
     <div class="btn-row">
-      <button id="btnAddKw" class="btn btn-primary btn-sm" data-i18n="btnAddKw">＋ إضافة الكلمات</button>
-      <button id="btnImportCsv" class="btn btn-ghost btn-sm" data-i18n="btnImportCsv">📄 استيراد CSV</button>
+      <button id="btnAddKw" class="btn btn-primary btn-sm" data-i18n="btnAddKw">إضافة الكلمات</button>
+      <button id="btnImportCsv" class="btn btn-ghost btn-sm" data-i18n="btnImportCsv">استيراد CSV</button>
       <input type="file" id="csvFile" accept=".csv,.tsv,.txt" class="hidden" />
-      <button id="btnClearKw" class="btn btn-danger btn-sm" data-i18n="btnClearKw">🗑 مسح الكل</button>
+      <button id="btnClearKw" class="btn btn-danger btn-sm" data-i18n="btnClearKw">مسح الكل</button>
     </div>
     <div class="table-wrap">
       <table class="data-table" id="kwTable">
@@ -139,12 +136,12 @@
   </details>
 
   <details class="card" open>
-    <summary data-i18n="resTitle">📊 تصدير النتائج</summary>
+    <summary data-i18n="resTitle">تصدير النتائج</summary>
     <div class="btn-row">
-      <button id="btnMakeXlsx" class="btn btn-primary btn-sm" data-i18n="btnMakeXlsx">📊 اعمل شيت بالترتيب (XLSX)</button>
-      <button id="btnExportCsv" class="btn btn-ghost btn-sm" data-i18n="btnExportCsv">⬇ تصدير CSV</button>
-      <button id="btnCopyTsv" class="btn btn-ghost btn-sm" data-i18n="btnCopyTsv">📋 نسخ للصق في الشيت</button>
-      <button id="btnClearRes" class="btn btn-danger btn-sm" data-i18n="btnClearRes">🗑 مسح النتائج</button>
+      <button id="btnMakeXlsx" class="btn btn-primary btn-sm" data-i18n="btnMakeXlsx">اعمل شيت بالترتيب (XLSX)</button>
+      <button id="btnExportCsv" class="btn btn-ghost btn-sm" data-i18n="btnExportCsv">تصدير CSV</button>
+      <button id="btnCopyTsv" class="btn btn-ghost btn-sm" data-i18n="btnCopyTsv">نسخ للصق في الشيت</button>
+      <button id="btnClearRes" class="btn btn-danger btn-sm" data-i18n="btnClearRes">مسح النتائج</button>
     </div>
     <div class="table-wrap">
       <table class="data-table" id="resTable">
@@ -163,7 +160,7 @@
 
 
   <details class="card">
-    <summary data-i18n="logTitle">🖥 السجل الحي</summary>
+    <summary data-i18n="logTitle">السجل الحي</summary>
     <div id="logConsole" class="log-console"></div>
     <button id="btnClearLogs" class="btn btn-ghost btn-sm" data-i18n="btnClearLogs">مسح السجل</button>
   </details>
@@ -173,14 +170,14 @@
   <!-- ⚙️ تبويبات الأدوات المدمجة: واجهة كل أداة محمّلة في إطار -->
   <div id="paneGsloc" class="tab-pane hidden">
     <div class="tool-pane-head">
-      <h2 data-i18n="tabGsloc">📍 الموقع</h2>
+      <h2 data-i18n="tabGsloc">الموقع</h2>
       <p data-i18n="paneGslocDesc">اختر المدينة واللغة (gl/hl) لنتائج بحث جوجل</p>
     </div>
     <iframe id="frameGsloc" src="../../gsloc/popup.html" class="tool-frame" data-tool="gsloc"></iframe>
   </div>
   <div id="paneBeyondten" class="tab-pane hidden">
     <div class="tool-pane-head">
-      <h2 data-i18n="tabBeyondten">💯 تصدير النتائج</h2>
+      <h2 data-i18n="tabBeyondten">تصدير النتائج</h2>
       <p data-i18n="paneBeyondtenDesc">اختار عدد النتائج في صفحة البحث (10 / 20 / 50 / 100)</p>
     </div>
     <iframe id="frameBeyondten" src="../../beyondten/popup/popup.html" class="tool-frame" data-tool="beyondten"></iframe>
@@ -192,13 +189,13 @@
     <span class="footer-by" dir="ltr"><a class="li-badge" href="https://www.linkedin.com/in/muhammed-yasser-seo-specialist/" target="_blank" rel="noopener" aria-label="LinkedIn profile of Muhammed Yasser">in</a>&nbsp;By: Muhammed Yasser</span>
   </footer>
 
-  <!-- ⚠️ تحذير يظهر عند كل فتحة للوحة في البداية -->
+  <!-- تحذير يظهر عند كل فتحة للوحة في البداية -->
   <div id="warnOverlay" class="modal-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="warnTitle">
     <div class="modal-card">
-      <div class="modal-icon">⚠️</div>
-      <h2 id="warnTitle" data-i18n="warnTitle">تحذير مهم</h2>
-      <p data-i18n="warnText">الإضافة دي بتمسح بيانات المتصفح كاملة (كوكيز، تاريخ، وكاش) قبل كل جولة فحص. فرجاء استخدامها في حساب جيست جديد بدون تسجيل الدخول عشان تحمي حساباتك وبياناتك.</p>
-      <button id="btnWarnOk" class="btn btn-danger" data-i18n="btnWarnOk">فهمت</button>
+      <img id="modalAvatar" class="modal-avatar" src="avatar.jpg" alt="" />
+      <h2 id="warnTitle" data-i18n="warnTitle">تنبيه مهم</h2>
+      <p data-i18n="warnText">الإضافة بتمسح بيانات المتصفح (كوكيز وتاريخ وكاش) قبل كل جولة فحص — استخدمها في بروفايل جيست من غير تسجيل دخول.</p>
+      <button id="btnWarnOk" class="btn btn-primary" data-i18n="btnWarnOk">فهمت</button>
     </div>
   </div>
 

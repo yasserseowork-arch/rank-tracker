@@ -174,8 +174,8 @@ test('اللوحة v1.18.3: عدّاد كلمات حقيقي + اشعار الـ
   assert.ok(!/alert\(t\('kwAddedOk'\)/.test(panel), 'اشعار الإضافة الغلط لسه راجع');
   assert.match(html, /id="restStrip"/, 'مفيش شريط الاستراحة فوق المنحنى');
   assert.match(panel, /renderRestStrip/, 'الشريط مش بيتحدث مع الـsnapshot');
-  assert.match(i18n, /tabBeyondten: '💯 تصدير النتائج'/, 'عنوان التبويب ما اتغيرش');
-  assert.match(html, /💯 تصدير النتائج/, 'الـhtml لسه بالعنوان القديم');
+  assert.match(i18n, /tabBeyondten: 'تصدير النتائج'/, 'عنوان التبويب مش على مقاس 1.21.11');
+  assert.match(html, /data-i18n="tabBeyondten">تصدير النتائج</, 'الـhtml لسه بعنوان قديم/مإيموجي');
 });
 
 /* ---------------- v1.18.4 ---------------- */
@@ -300,9 +300,9 @@ test('v1.18.6: الباستر مابقاش انتظار أصم — 18 ثانية
 test('v1.18.6: التبريداتShort والهدئات اتقلّصت زي ما طلبت + عنوان «تصدير النتائج»', () => {
   assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'التهدئة بعد الحل لسه طويلة');
   assert.match(queue, /const restSec = 8 \+ captchaClears \* 4;/, 'التبريد قبل الإعادة لسه 90 ثانية');
-  assert.match(i18nUi, /resTitle: '📊 تصدير النتائج',/, 'عنوان الجزء لسه «النتائج» في القاموس العربي');
+  assert.match(i18nUi, /resTitle: 'تصدير النتائج',/, 'عنوان الجزء مش على مقاس 1.21.11 في القاموس العربي');
   const html = io_read('src/sidepanel/side-panel.html');
-  assert.match(html, /<summary data-i18n="resTitle">📊 تصدير النتائج<\/summary>/, 'عنوان HTML في اللوحة لسه قديم');
+  assert.match(html, /<summary data-i18n="resTitle">تصدير النتائج<\/summary>/, 'عنوان HTML في اللوحة لسه قديم');
 });
 
 /* ---------------- v1.18.7 — إشعارات اللوحة + المحرك (المسار 1.18.9: باستر مستقلة + آلة 1.18.6) ---------------- */
@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.10');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.10'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.10'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.10\]/m);
+  assert.equal(man.version, '1.21.11');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.11'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.11'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.11\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -977,7 +977,7 @@ test('v1217: بريفلايت وتقدير وقت + ريندر diff خفيف ل�
   assert.match(panel, /if \(sig === lastRenderSig\) \{ return; \}/, 'الحارس مش راجع');
   assert.ok(!/loadPreflight|etaHint|preflightWarn|runReport/.test(panel), 'شرايط الواجهة لسه عايشة — المستخدم قرر حذفها في 1.21.9');
   const pnlHtml = read('src/sidepanel/side-panel.html');
-  assert.match(pnlHtml, /id="btnReview"/, 'الزر مش في الـHTML');
+  assert.ok(!/btnReview/.test(pnlHtml), 'زر المراجعة رجع للـHTML — المستخدم شاله في 1.21.11');
   assert.ok(!/fonts\.googleapis/.test(pnlHtml), 'لينك خط خارجي رجع — CSP بيرميه');
 });
 
@@ -1019,7 +1019,7 @@ test('v1219: الواجهة اتنظفت — مكان الشرايط زرار إ
   const pnlHtml = read('src/sidepanel/side-panel.html');
   assert.ok(!/etaHint|preflightWarn|runReport|eta-hint/.test(pnlHtml), 'شريط من التلاتة رجع للـHTML');
   assert.match(pnlHtml, /id="btnReset"/, 'زر إعادة الضبط مش في الـHTML');
-  assert.match(pnlHtml, /id="btnReview"/, 'زر المراجعة اتشال بالغلط — كان مطلوب إبقاءه');
+  assert.ok(!/btnReview/.test(pnlHtml), 'زر المراجعة لسه في الواجهة — قرار 1.21.11');
   assert.match(panel, /\$\('btnReset'\)/, 'الزر مش موصول بالـlistener');
   assert.match(panel, /C\.MSG\.CONFIG_RESET/, 'الزر مابيبعتش الرسالة');
   assert.match(panel, /confirm\(/, 'ضبط المصنع من غير تأكيد؟ مجزرة');
@@ -1067,4 +1067,54 @@ test('v12110: رفع النافذة اتشال من التركيز الآلي �
   assert.match(pnl, /chrome\.windows\.update\(tab\.windowId, \{ focused: true \}\)/, 'قفزة المستخدم اليدوية اتبوظت');
   // مسار الصبر/الكابتشا مابيحاولش يرفع النافذة من حتة تانية
   assert.ok(!/windows\.update/.test(queue), 'queue.js بيلف على الحظر من باب تاني');
+});
+
+/* -------- v1.21.11 — وداعًا زر المراجعة، تنضيف الطابع، والهوية على البوب‌أب -------- */
+
+test('v12111: مفيش زرار مراجعة — المسح الآلي في المكنة بس، وإعادة الضبط سطر كامل تحت الأزرار', () => {
+  const pnlHtml11 = read('src/sidepanel/side-panel.html');
+  assert.ok(!/btnReview/.test(panel), 'listener الزرار رجع من غير صاحبه');
+  const cs = pnlHtml11.indexOf('<section class="controls">');
+  const ce = pnlHtml11.indexOf('</section>', cs);
+  assert.ok(cs > -1 && ce > cs, 'مش لاقين قسم الأزرار');
+  const ctl = pnlHtml11.slice(cs, ce);
+  assert.ok(ctl.indexOf('id="btnReset"') > ctl.indexOf('id="btnStop"'), 'إعادة الضبط مش آخر سطر تحت أزرار التشغيل');
+  assert.ok(ctl.indexOf('id="btnReset"') > -1 && /btn-reset/.test(ctl), 'الزر مش لابس كلاس السطر الكامل');
+  const css11 = read('src/sidepanel/side-panel.css');
+  assert.match(css11, /\.btn-reset \{ grid-column: 1 \/ -1;/, 'قاعدة السطر الكامل في النص مش موجودة');
+  assert.ok(!/tools-row/.test(pnlHtml11), 'div الشدة القديم رجع');
+  // المسار الآلي والسجلات لسه أحياء
+  assert.match(queue, /async reviewPass\(manual\)/, 'المراجعة الأوتوماتيك اتشالت مع الزرار — لا');
+});
+
+test('v12111: صفر إيموجي زينة في الواجهة والقاموس، والإنجليزي مترجم كامل وزر اللغة AR', () => {
+  const pnlHtml11 = read('src/sidepanel/side-panel.html');
+  assert.ok(!/\uD83D\uDCAF|\uD83C\uDFAF|\uD83D\uDD11|\uD83D\uDD04|\uD83D\uDD01|⚠️|\uD83D\uDCCA|\uD83D\uDDA5|▶|⏸|⏩|⏹|\uD83D\uDCC4|\uD83D\uDDD1|⬇|\uD83D\uDCCB|\uD83D\uDCDD|☢|\uD83C\uDF0D|⟳|＋/.test(pnlHtml11), 'إيموجي رجع للواجهة');
+  const i18n11 = read('src/lib/i18n-ui.js');
+  assert.ok(!/⚠️|\uD83D\uDCAF|\uD83C\uDFAF|▶|☢|⟳|\uD83D\uDD11|\uD83D\uDCCA|\uD83D\uDDA5|\uD83D\uDCDD|\uD83D\uDDD1|⏱|\uD83D\uDCC4/.test(i18n11), 'القاموس لسه لابس قبعة الحفلة');
+  const enAt = i18n11.indexOf('en: {');
+  const enBlock = i18n11.slice(enAt, i18n11.indexOf('}\n  };', enAt));
+  assert.ok(enBlock.length > 2000, 'كتلة الإنجليزية مقصوصة؟');
+  assert.ok(!/[\u0600-\u06FF]/.test(enBlock), 'حروف عربية لسه في القاموس الإنجليزي');
+  assert.match(i18n11, /langBtn: 'AR'/, 'زر اللغة في الوضع الإنجليزي مش AR');
+  assert.match(i18n11, /langBtn: 'EN'/, 'زر اللغة في الوضع العربي مش EN');
+  assert.match(i18n11, /btnResetCfg: 'إعادة ضبط الإعدادات',/, 'مفتاح الزرار الجديد ناقص في العربي');
+  assert.match(i18n11, /btnResetCfg: 'Reset settings',/, 'مفتاح الزرار الجديد ناقص في الإنجليزي');
+  assert.match(panel, /confirm\(t\('confirmConfigReset'\)\)/, 'تأكيد إعادة الضبط مش بيستخدم المفتاح المترجم');
+});
+
+test('v12111: الأفياتار فوق البوب‌أب ويطير بقوس لمكانه في الهيدر — والهوية على الكرت', () => {
+  const pnlHtml11 = read('src/sidepanel/side-panel.html');
+  assert.match(pnlHtml11, /id="modalAvatar" class="modal-avatar"/, 'صورة الأفياتار مش فوق البوب‌أب');
+  assert.match(pnlHtml11, /data-i18n="warnText">[^<]{20,140}</, 'نص التنبيه مش مختصر (20-140 حرف)');
+  assert.ok(fs.existsSync(join(root, 'src/sidepanel/avatar.jpg')), 'ملف الصورة مش في باكدج');
+  assert.match(panel, /warn-fly/, 'الفلاي كلون مش بيتعمل');
+  assert.match(panel, /prefers-reduced-motion/, 'احترار تقليل الحركة مش محترمى');
+  assert.match(panel, /querySelector\('\.brand-avatar'\)/, 'هدف الهيدر مش محدد');
+  assert.match(panel, /slot\.style\.visibility = ''/, 'الهبوط مابيرجّعش الأفياتار الأصلي');
+  assert.match(panel, /setTimeout\(\(\) => \{ try \{ if \(document\.body\.contains\(clone\)\)/, 'حرس الـcleanup لو الحركة اتقطعت مش موجود');
+  const css11 = read('src/sidepanel/side-panel.css');
+  assert.match(css11, /\.modal-avatar \{/, 'ستايل الأفياتار الكبير مش موجود');
+  assert.match(css11, /\.modal-card \{[\s\S]*?--gold-soft/, 'كرت البوب‌أب لسه مالابسش الهوية');
+  assert.ok(!/#b91c1c|#43140a|#fecaca/.test(css11), 'لون التحذير الأحمر القديم رجع');
 });

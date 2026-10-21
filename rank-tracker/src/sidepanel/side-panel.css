@@ -452,27 +452,39 @@ textarea { width: 100%; resize: vertical; min-height: 74px; }
 .modal-card {
   width: 100%;
   max-width: 330px;
-  padding: 18px 16px 16px;
+  padding: 20px 18px 18px;
   text-align: center;
-  background: linear-gradient(160deg, #43140a, #2c0d05);
-  border: 1px solid #b91c1c;
+  background: linear-gradient(165deg, #062a46, var(--bg) 80%);
+  border: 1px solid var(--gold-soft);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .5);
 }
-.modal-icon { font-size: 2.1rem; line-height: 1; }
+/* 🖼 v1.21.11: أفياتار الهيدر بيقعد فوق البوب‌أب أول ما يفتح، ويطير لمكانه لما تدوس «فهمت» */
+.modal-avatar {
+  width: 76px; height: 76px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 5px var(--gold-soft);
+  object-fit: cover;
+  object-position: 50% 22%;
+  display: block;
+  margin: 0 auto 10px;
+}
+.warn-fly { display: block; border-radius: 50%; pointer-events: none; }
 .modal-card h2 {
-  margin: 10px 0 10px;
-  font-size: 1.05rem;
+  margin: 2px 0 8px;
+  font-size: 1.02rem;
   font-weight: 800;
-  color: #fca5a5;
+  color: var(--gold-light);
 }
 .modal-card p {
-  margin: 0 0 16px;
-  font-size: .86rem;
-  line-height: 1.8;
-  color: #fecaca;
+  margin: 0 0 14px;
+  font-size: .85rem;
+  line-height: 1.7;
+  color: #c8dcea;
 }
 .modal-card .btn { width: 100%; }
+@media (prefers-reduced-motion: reduce) { .warn-fly { display: none; } }
 
 /* ✍️ v1.21.9: Cairo من جوه الإضافة — نفس خط جوجل بس محلي: بلا انتظار CDN، بلا رفض CSP، ومتاح أوفلاين.
    وزن متغير 200-1000 يغطي العناوين والعادي بدون ملفات زيادة، والتقسيم يضمن تغطية العربية واللاتينية */
@@ -494,6 +506,9 @@ textarea { width: 100%; resize: vertical; min-height: 74px; }
 
 /* 🧵 صنفرة: حواف ثابتة، أرقام tabular ما بتترقصش مع التغيير، سطر مريح — تفصيل بشري مش قالب */
 html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-.tools-row { display: flex; justify-content: flex-end; gap: 6px; padding: 2px 12px 8px; }
 .btn-sm { font-size: 12px; padding: 4px 12px; border-radius: 8px; }
 .stat-value, .pos-badge, .kw-status { font-variant-numeric: tabular-nums; }
+
+/* 🧷 v1.21.11: زر إعادة الضبط بقى سطر كامل تحت أزرار التشغيل — في النص، هادي ومختصر */
+.btn-reset { grid-column: 1 / -1; font-size: .8rem; padding: 7px 10px; opacity: .9; }
+.btn-reset:hover { opacity: 1; }

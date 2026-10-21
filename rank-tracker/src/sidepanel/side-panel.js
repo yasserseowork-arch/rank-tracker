@@ -546,25 +546,11 @@ async function main() {
   const vt = $('versionTag');
   if (vt) { vt.textContent = 'v' + C.VERSION; }
 
-  // 🔁 v1.21.7: زرار مراجعة الفشلان (بره الرن)
-  const brv = $('btnReview');
-  if (brv) {
-    brv.addEventListener('click', async () => {
-      const res = await send(C.MSG.QUEUE_REVIEW, {});
-      if (res && res.ok === false && res.reason === 'running') {
-        alert('في رن شغال دلوقتي — مسار المراجعة هيعدّي على دول تلقائيًا في آخره');
-        return;
-      }
-      if (res && res.ok && !res.reviewed) { alert('مفيش كلمات متعلّمة ⚠️ مراجعة — كله متحسم'); }
-      await refresh();
-    });
-  }
-
   // 🔄 v1.21.9: إعادة ضبط الإعدادات (بطلب المستخدم بدل الشرايط) — الطابور والنتائج بره الحساب
   const brs = $('btnReset');
   if (brs) {
     brs.addEventListener('click', async () => {
-      const sure = confirm('إعادة ضبط كل الإعدادات لقيم المصنع؟\n\nهترجع: تاريخ الحذف، الموقع، الجداول، الفواصل، والحماية.\nمش هتتمسح: الكلمات، النتائج، السجلات.');
+      const sure = confirm(t('confirmConfigReset'));
       if (!sure) { return; }
       const res = await send(C.MSG.CONFIG_RESET, {});
       if (res && res.ok) { await refresh(); }
@@ -587,8 +573,41 @@ async function main() {
 
   // ⚠️ تحذير يظهر عند كل فتحة للوحة — على طول في البداية
   $('warnOverlay').classList.remove('hidden');
+  // v1.21.11: أول ما يدوس «فهمت» الصورة بتطير من فوق البوب‌أب لمكانها في الهيدر
+  // بمسار مقوّس خفيف — Web Animations API (transforms بس على GPU، مفيش مكتبات ولا layout thrash)
   $('btnWarnOk').addEventListener('click', () => {
-    $('warnOverlay').classList.add('hidden');
+    const overlay = $('warnOverlay');
+    if (overlay.classList.contains('hidden')) { return; }
+    const hide = () => { overlay.classList.add('hidden'); };
+    let reduced = false;
+    try { reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) {}
+    const big = $('modalAvatar');
+    const slot = document.querySelector('.brand-avatar');
+    if (reduced || !big || !slot) { hide(); return; }
+    const from = big.getBoundingClientRect();
+    const to = slot.getBoundingClientRect();
+    if (!from.width || !to.width) { hide(); return; }
+    const clone = big.cloneNode(false);
+    clone.removeAttribute('id');
+    clone.className = 'modal-avatar warn-fly';
+    clone.style.cssText = 'position:fixed;left:' + from.left + 'px;top:' + from.top + 'px;width:' + from.width + 'px;height:' + from.height + 'px;margin:0;z-index:1200;';
+    document.body.appendChild(clone);
+    hide();
+    slot.style.visibility = 'hidden';
+    const dxc = (to.left + to.width / 2) - (from.left + from.width / 2);
+    const dyc = (to.top + to.height / 2) - (from.top + from.height / 2);
+    const anim = clone.animate([
+      { transform: 'translate(0px, 0px) scale(1) rotate(0deg)', offset: 0 },
+      { transform: 'translate(' + (dxc * 0.5 - (dxc >= 0 ? 20 : -20)) + 'px, ' + (dyc * 0.5 - 34) + 'px) scale(1.06) rotate(-9deg)', offset: 0.55 },
+      { transform: 'translate(' + dxc + 'px, ' + dyc + 'px) scale(' + (to.width / from.width) + ') rotate(0deg)', offset: 1 }
+    ], { duration: 560, easing: 'cubic-bezier(.33,.1,.25,1)', fill: 'forwards' });
+    anim.onfinish = () => {
+      clone.remove();
+      slot.style.visibility = '';
+      try { slot.animate([{ transform: 'scale(1.14)' }, { transform: 'scale(1)' }], { duration: 170, easing: 'ease-out' }); } catch (_) {}
+    };
+    // حرس: لو الحركة اتقطعت (تاب وراه/خلفية) الـcleanup يشتغل لوحده بعد ثانية ونص
+    setTimeout(() => { try { if (document.body.contains(clone)) { clone.remove(); slot.style.visibility = ''; } } catch (_) {} }, 1500);
   });
 
   bindConfigForm();
