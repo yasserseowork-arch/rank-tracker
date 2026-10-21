@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.17');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.17'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.17'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.17\]/m);
+  assert.equal(man.version, '1.21.18');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.18'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.18'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.18\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -831,14 +831,13 @@ test('v1212: بعد التبريد — نظرة على الصفحة نفسها �
   assert.ok(!/openFreshTab/.test(gap), 'تاب جديد قبل إعادة الفحص = القفل اتكسر');
 });
 
-test('v1212: «challenge expired» — ريلود لطيف لنفس التاب، والصبر يفضل سايب للكلمة حقها', () => {
+test('v1212 (حدّثها 1.21.18): «challenge expired» = تسليم فوري — الريلودات راحت', () => {
   assert.match(queue, /check the checkbox again/, 'كاشف رسالة الإنجليزية ناقص');
   assert.match(queue, /انتهت صلاحي|انتهت فترة/, 'كاشف الرسالة العربية ناقص');
   assert.match(queue, /chrome\.scripting\.executeScript/, 'المسبار لازم قراءة نقية من الـSW (مفيش مساس بمحرك الحل)');
   const wcc = queue.slice(queue.indexOf('async waitCaptchaCleared'), queue.indexOf('async tabChallengeLooksStale'));
-  assert.match(wcc, /Date\.now\(\) - lastStale > 90000/, 'مفيش معدل بحد أقصى للريلود (90 ث) — reload loop بصمة');
-  assert.match(wcc, /waited > 20 &&/, 'ريلود قبل ما Buster/المستخدم ياخدوا فرصتهم؟');
-  assert.match(wcc, /tabctl\.reload\(tabId\)/, 'الريلود يلزمه لنفس التاب');
+  assert.ok(!/tabctl\.reload\(tabId\)/.test(wcc), '1.21.18: دورة الريلود للبايّت متلغاة — التسليم فوري');
+  assert.ok(!/90000/.test(wcc), 'معدل الريلود 90ث مكانش لازام بقى');
   assert.ok(!/openFreshTab/.test(wcc) && !/recordExhausted/.test(wcc), 'الصبر اتحول هروب — ممنوع (1.20.0)');
   // المحرك المتجمد سايب مكانه
   const cap = read('src/content/captcha.js');
@@ -983,11 +982,10 @@ test('v1217: بريفلايت وتقدير وقت + ريندر diff خفيف ل�
 
 /* -------- v1.21.8 — التحدي البايّت العنيد: نفس وصفة البلوك (مسح + تاب جديد بنفس الكلمة) -------- */
 
-test('v1218: expired بعد ريلودين = تسليم للخطة الاحتياطية، بسقف رحيم للرن', () => {
+test('v1218 (حدّثها 1.21.18): expired = تسليم للخطة الاحتياطية فورًا، بسقف رحيم للرن', () => {
   const wcc = queue.slice(queue.indexOf('async waitCaptchaCleared'), queue.indexOf('async tabChallengeLooksStale'));
-  assert.match(wcc, /let staleReloads = 0;/, 'عداد الريلودات مش موجود');
-  assert.match(wcc, /if \(staleReloads >= 2\) \{/, 'الريلود للأبد من غير تصعيد؟');
-  assert.match(wcc, /return 'stale';/, 'ما بيسلّمش للإشارة الجديدة');
+  assert.ok(!/staleReloads/.test(wcc), '1.21.18: عداد الريلودات لازم يبقى مشيل');
+  assert.equal((wcc.match(/return 'stale';/g) || []).length, 2, 'مفيش تسليم فوري قبل اللوب + مسبار كل تفكرة');
   assert.ok(!/recordExhausted/.test(wcc) && !/openFreshTab/.test(wcc), 'الصبر بقى بيهرب أو بيفتح تابات من جوه نفسه — التسليم للنداء مش له');
   const idx = queue.indexOf("if (cleared === 'stale') {");
   assert.ok(idx > -1, 'نداء الصبر مابيتعاملش مع stale');
@@ -1000,7 +998,7 @@ test('v1218: expired بعد ريلودين = تسليم للخطة الاحتي�
   assert.match(queue, /else if \(clearedL === 'stale'\) \{\n\s+break;/);
   // الثوابت: مفيش windows.create ومفيش توقيتات جديدة لمسار الحل نفسه
   assert.ok(!/chrome\.windows\.create/.test(queue), 'نافذة جديدة — ممنوع');
-  assert.match(queue, /await sleep\(4000, signal\);\n        \}/, 'نوم الصبر الأساسي اتبوظ');
+  assert.match(queue, /await sleep\(4000, signal\);\n        if \(flag === 'clear'\)/, 'نوم الصبر الأساسي اتبوظ');
 });
 
 /* -------- v1.21.9 — قفزة واحدة بدل السكرول، Cairo محلي، زر الضبط، سرعة آمنة -------- */
@@ -1232,7 +1230,7 @@ test('v12115: التسخين قبل البحث — بعد كل مسح وفي أ�
   const fn = queue.slice(at, at + 1800);
   assert.match(fn, /browsingData\.remove[\s\S]*?tabctl\.open\('https:\/\/www\.google\.com\/'/, 'الترتيب مش: مسح ← رئيسية جوجل ← بحث');
   assert.match(fn, /waitForComplete\(nextTab\.id, 15000\)/, 'مفيش انتظار تحميل الرئيسية');
-  assert.match(fn, /sleep\(1000 \+ Math\.floor\(Math\.random\(\) \* 800\)\)/, 'مفيش وقفة آدمية بين التسخين والبحث');
+  assert.match(fn, /sleep\(500 \+ Math\.floor\(Math\.random\(\) \* 400\)\)/, 'مفيش وقفة آدمية بين التسخين والبحث (1.21.18: نصف ثانية كفاية)');
   assert.match(fn, /tabctl\.navigate\(nextTab\.id, url\)/, 'البحث بالكلمة ما اتعملش بعد التسخين');
   const coldAt = queue.indexOf('const coldStart = !!cfg.clearBeforeRun');
   assert.ok(coldAt > -1, 'أول تاب في الرن البارد مش بيتسخن');
@@ -1250,6 +1248,34 @@ test('v12115: الزرار «إعادة ضبط» — نفس السلوك الش�
   assert.match(seg, /reason: 'running'/, 'حرس الرن الشغال اتشال — لأ');
 });
 function rt13b() { return read('src/background/core/router.js'); }
+
+/* -------- v1.21.18 — «expired» = مسح فورًا في ثانية، بلا ريلودات ولا محاولات ---- */
+test('v12118: بوابة expired في handleCaptcha قبل المنسّق، والندائين موصولين', () => {
+  const hc = queue.slice(queue.indexOf('async handleCaptcha'), queue.indexOf('async collectAfterSolve'));
+  const gate = hc.indexOf("return 'stale-expired'");
+  const solve = hc.indexOf('orchestrator.solve');
+  assert.ok(gate > -1 && solve > -1 && gate < solve, 'لازم البوابة تسبق أي محاولة حل');
+  assert.match(queue, /if \(auto === 'stale-expired'\) \{/, 'نداء الحلقة الرئيسية موصّلش');
+  assert.match(queue, /h2 === 'failed' \|\| h2 === 'stale-expired'/, 'جولة الاستشفاء مابقتش تستغل البوابة');
+  assert.match(queue, /this\.staleWipesThisRun \|\| 0\) < 6/, 'سقف الست جولات مفقود من الفرع الجديد');
+});
+
+test('v12118: الصبر بلا ريلودات — كشف فوري قبل اللوب وكل تفكرة', () => {
+  const wcc = queue.slice(queue.indexOf('async waitCaptchaCleared'), queue.indexOf('async tabChallengeLooksStale'));
+  const pre = wcc.indexOf("return 'stale';");
+  assert.ok(pre > -1 && pre < wcc.indexOf('for (;;)'), 'مفيش فحص باياتية قبل أول تفكرة');
+  assert.ok(!/tabctl\.reload/.test(wcc), 'ريلود رجع للصبر — ممنوع بقى');
+});
+
+test('v12118: الاستشفاء فورًا — تبريد الرفض ثانية، ترحيبية المسح نص، وسخونة الأول ساكنة', () => {
+  assert.match(queue, /await sleep\(800 \+ Math\.floor\(Math\.random\(\) \* 700\), signal\)/, 'تبريد الرفض لسه 9-15 ثانية');
+  assert.ok(!/9000 \+ Math\.floor\(Math\.random\(\) \* 6000\)/.test(queue), 'التبريد الطويل رجع');
+  const i0 = queue.indexOf('async openFreshTab');
+  const i1 = queue.indexOf('await sleep(500 + Math.floor(Math.random() * 400));');
+  assert.ok(i1 > i0 && i1 < i0 + 2000, 'تهدئة الترحيبية مش جوه دالة المسح أو لسه طويلة');
+  assert.equal((queue.match(/1000 \+ Math\.floor\(Math\.random\(\) \* 800\)/g) || []).length, 1, 'تسخين أول الرن لازم يفضل زي ما هو (مرة واحدة بس)');
+  assert.match(queue, /if \(clearedX !== 'cleared'\) \{\n            await sleep\(20000, signal\);/, 'رحمة السقف اتنسيت — لوف حار محتمل');
+});
 
 /* -------- v1.21.17 — دقة الملكية: صفر تقارب في الدومين -------- */
 test('v12117: hostMatches صارم — صفر editDistance في المحرك وفي نسخة الحقن', () => {

@@ -553,6 +553,29 @@ export class QueueEngine {
           if (sAfter) { return this.recordResult(kw, sAfter, cfg, 'captcha-auto-solved'); }
         }
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        if (auto === 'stale-expired') {
+          // 🧨 1.21.18: ميتة من أول ثانية — صفر تبريد؛ وصفة المسح الموحدة حالًا بنفس الكلمة
+          if ((this.staleWipesThisRun || 0) < 6) {
+            this.staleWipesThisRun = (this.staleWipesThisRun || 0) + 1;
+            await logger.warn('queue', `🧹 "${kw.keyword}" — تحدي expired: مسح بيانات + تاب جديد بنفس الكلمة حالًا (جولة ${this.staleWipesThisRun}/6)`);
+            const xTab = await this.openFreshTab(kw, cfg, url, tab.id);
+            if (xTab) {
+              tab = xTab;
+              captchaClears = 0;
+              navigatedViaBox = false;
+              continue; // نفس الكلمة من الأول في الجلسة النضيفة
+            }
+          }
+          // سقف الجولات اتحقق أو التاب مافتحش؟ صبر عادي على القديمة — مفيش هروب ومفيش إلغاء
+          const clearedX = await this.waitCaptchaCleared(tab.id, kw, signal);
+          if (clearedX === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+          // من غير «cleared»؟ نفس رحمة السقف عند النداء الأصلي: 20 ثانية بدل لفّ حار على صفحة ميتة
+          if (clearedX !== 'cleared') {
+            await sleep(20000, signal);
+            if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+          }
+          continue;
+        }
         // 🩹v1.20.4: الإنقاذ الليّن بقى بيشوف «الصفحة نفسها» مش «كلام المحلول» —
         // لو المنسّق اتلخبط أو قال فشل (و Buster reload أودى لسيرب سليم، أو المستخدم حلها بإيده)
         // بنسجل اللي على الشاشة قبل أي تصعيد مدمّر كان بيضرب إضافة الـ100 في cooling
@@ -650,7 +673,7 @@ export class QueueEngine {
         this.captchaSeenThisRun = (this.captchaSeenThisRun || 0) + 1; // 📊 للتقرير
         await this.notify('🚫 جوجل رفض الصفحة', `"${kw.keyword}" — الريفرش ملوش لازمة هنا؛ بنمسح البيانات ونعيد في تاب جديد نضيف`);
         await logger.warn('queue', `🚫 صفحة رفض (${(first.payload && first.payload.kind) || 'http-error'}) على "${kw.keyword}" — تبريد ثم مسح بيانات + تاب جديد بنفس الكلمة`);
-        await sleep(9000 + Math.floor(Math.random() * 6000), signal);
+        await sleep(800 + Math.floor(Math.random() * 700), signal); // ⚡ 1.21.18: «فورًا» بدل 9-15 ثانية
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
         const fresh = await this.openFreshTab(kw, cfg, url, tab.id);
         if (!fresh) {
@@ -694,7 +717,7 @@ export class QueueEngine {
               if (h2 === 'solved') {
                 const s2 = await this.collectAfterSolve(tab.id, solveStartedAt2, signal, cfg);
                 if (s2) { return this.recordResult(kw, s2, cfg, 'new-tab-captcha'); }
-              } else if (h2 === 'failed') {
+              } else if (h2 === 'failed' || h2 === 'stale-expired') {
                 // 🧘 جولة الاستشفاء كمان ما تستسلمش للكابتشا: نستنى تتحل ونسحب نفس المكان
                 const clearedL = await this.waitCaptchaCleared(tab.id, kw, signal);
                 if (clearedL === 'cleared') {
@@ -858,6 +881,18 @@ export class QueueEngine {
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
     this.broadcast();
 
+    // 🧨 v1.21.18 (طلب المستخدم الحرفي: «لو في أي مشكلة يعمل مسح بيانات فورًا في ثانية»):
+    // شاشة «Verification challenge expired. Check the checkbox again.» = التوكن ميت من
+    // أصله — الضغط والملخ بطلي attempts تضييع وقت. نتخطى المحلّل كله ونسلّم فورًا
+    // لمسح البيانات الكامل وتاب جديد بنفس الكلمة (الكلمة عمرها ما بتتبوظ — 1.20.0 سارية)
+    if (await this.tabChallengeLooksStale(tabId)) {
+      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+      await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+      this.broadcast();
+      await logger.warn('queue', `⚡ "${kw.keyword}" — الشاشة بايّتة «expired» من أول ثانية: صفر محاولات وصفر ريلود — مسح فوري وتاب جديد`);
+      return 'stale-expired';
+    }
+
     // عدّاد محاولات حي في البانر: نقرأ من المنسّق مباشرة كل 1.2 ثانية
     let lastAttempts = 0;
     const attemptsTicker = setInterval(async () => {
@@ -969,7 +1004,7 @@ export class QueueEngine {
     } catch (_) {}
     if (!nextTab) { return null; }
     try { await tabctl.waitForComplete(nextTab.id, 15000); } catch (_) {}
-    await sleep(1000 + Math.floor(Math.random() * 800));
+    await sleep(500 + Math.floor(Math.random() * 400)); // ⚡ 1.21.18: «فورًا في ثانية» — الترحيبية اتقفلت خلاص
     if (oldTabId) {
       this.ownedTabs.add(nextTab.id);
       await tabctl.close(oldTabId);
@@ -1053,10 +1088,13 @@ export class QueueEngine {
     }
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
     this.broadcast();
+    // 🧨 v1.21.18: داخلين على «expired»؟ مفيش سبب نستنى تفكرة واحدة — تسليم فوري للمسح الموحد
+    if (await this.tabChallengeLooksStale(tabId)) {
+      await logger.warn('queue', `🧹 "${kw.keyword}" — التحدي بايّت؛ تسليم فوري لمسح بيانات + تاب جديد (صفر ريلود)`);
+      return 'stale';
+    }
     let waited = 0;
     let focusOnce = false;
-    let lastStale = 0; // ⏳ v1.21.2: آخر ريلود لـ«التحدي البايّت»
-    let staleReloads = 0; // 🧹 v1.21.8: الريلود ما كفاش مرتين؟ دور على المسح والتاب الجديد
     let flag = 'waiting'; // 'clear' | 'closed'
     const offs = [];
     try {
@@ -1077,22 +1115,13 @@ export class QueueEngine {
         if (u == null || u === '') { return 'tab-closed'; }
         if (!urlkit.isSorry(u)) { break; } // الصفحة بقت نتائج عادية = اتحلت
         waited += 4;
-        // ⏳ v1.21.2: «Verification challenge expired. Check the checkbox again.» = التحدي
-        // مات وهي في إيده — الضغط على الصندوق في الحالة دي ملوش أي جدوى للأبد، والاستنى
-        // بيطول (بلاغ: 476 ثانية وعدادى). ريلود لنفس التاب يولّد تحدي طازة، والصبر يكمل
-        // عادي — مفيش abandoning للكلمة، ومفيش مساس بمحرك الحل نفسه. حدا مرة كل 90 ثانية
-        if (waited > 20 && Date.now() - lastStale > 90000 && (await this.tabChallengeLooksStale(tabId))) {
-          lastStale = Date.now();
-          staleReloads += 1;
-          if (staleReloads >= 2) {
-            // 🧹 v1.21.8 (طلب المستخدم): «expired» بعد ريلودين = الجلسة نفسها ميتة — الريلود
-            // مالوش لازمة، بنسلّم للخطة الاحتياطية الكاملة: مسح بيانات + تاب جديد بنفس الكلمة
-            await logger.warn('queue', `⏳ "${kw.keyword}" — التحدي بايّت ومابيتصلّحش بالريلود؛ بنسلّم لمسح البيانات وتاب جديد بنفس الكلمة زي أي بلوك`);
-            return 'stale';
-          }
-          await logger.info('queue', `⏳ "${kw.keyword}" — التحدي على الصفحة بايّت («expired»)؛ ريلود لنفس التاب عشان كابتشا طازة تكمل المحاولة`);
-          try { await tabctl.reload(tabId); } catch (_) { return 'tab-closed'; }
-          await sleep(4000, signal);
+        // 🧨 v1.21.18 (يستبدل دورة «ريلود×2 كل 90ث» من 1.21.2/1.21.8): «expired» = الجلسة
+        // ميتة والريلود كان بيضيّع دقايق (بلاغ: 476 ثانية). مسبار قراءة رخيص كل تفكرة؛
+        // بايّت؟ تسليم فوري 'stale' للنداء: مسح كامل + تاب جديد بنفس الكلمة — الكلمة عمرها
+        // ما بتتبوظ، ومحرك الحل نفسه ما اتلمسش (الناس اللي لسه عندها فرصة بتستنى عادي)
+        if (await this.tabChallengeLooksStale(tabId)) {
+          await logger.warn('queue', `🧹 "${kw.keyword}" — التحدي بايّت؛ تسليم فوري لمسح بيانات + تاب جديد`);
+          return 'stale';
         }
         if (waited % 48 === 44) {
           await this.notify('🧩 لسه مستنّيين', `"${kw.keyword}" — الكابتشا معلقة؛ بنستنى تتحل (Buster أو يدويًا من التاب نفسه) وهنعيد نفس الكلمة تاني — مفيش إلغاء`);
