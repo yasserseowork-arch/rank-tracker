@@ -466,12 +466,29 @@ async function makeXlsx(silent) {
   const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'srt-ranks-' + new Date().toISOString().slice(0, 10) + '.xlsx';
+  a.download = exportFileName('xlsx'); // v1.21.14: tracking-اسم-تاريخ بدل الاسم الأتوماتيكى
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   if (!silent) { alert(t('makeXlsxOk')); }
+}
+
+// 📛 v1.21.14 (طلب المستخدم): اسم ملف التنزيل بقى tracking-<اسم الموقع بالإنجليزي>-<DD-MM-YYYY>
+// — للـXLSX اليدوي، وللتلقائي آخر الرن (نفس الدالة)، ولملف CSV. لو الاسم الإنجليزي فاضي
+// بنرجع للدومين، ولو الاتنين فاضييين الاسم بييجي tracking-بالتاريخ وبس
+function exportFileName(ext) {
+  const cfg = snapshot.config || {};
+  let store = String(cfg.storeNameEn || cfg.storeDomain || '').trim()
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, '-')
+    .replace(/[-. ]+$/g, '')
+    .slice(0, 40)
+    .replace(/[-. ]+$/g, '');
+  const d = new Date();
+  const p2 = (n) => (n < 10 ? '0' : '') + n;
+  const date = p2(d.getDate()) + '-' + p2(d.getMonth() + 1) + '-' + d.getFullYear();
+  return 'tracking' + (store ? '-' + store : '') + '-' + date + '.' + ext;
 }
 
 async function exportCsv() {
@@ -481,7 +498,7 @@ async function exportCsv() {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'srt-results-' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.download = exportFileName('csv'); // v1.21.14: نفس نمط التسمية للـCSV كمان
   document.body.appendChild(a);
   a.click();
   a.remove();

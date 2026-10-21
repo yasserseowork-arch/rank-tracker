@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.13');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.13'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.13'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.13\]/m);
+  assert.equal(man.version, '1.21.14');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.14'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.14'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.14\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1185,4 +1185,21 @@ test('v12113: العمود في المنتصف بالظبط + الأنيميشن
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none/, 'حرس تقليل الحركة مش مغطي الجديد');
   // الأنيميشن CSS-only: مفيش ولا سطر JS جديد بيحرك فريمات
   assert.ok(!/requestAnimationFrame/.test(panel), 'rAF اتسرب للوحة — ممنوع');
+});
+
+/* -------- v1.21.14 — اسم الملف: tracking-الاسم-اليوم -------- */
+
+test('v12114: تنزيل الملف بيبان باسم tracking + اسم الموقع بالإنجليزي + تاريخ يوم-شهر-سنة', () => {
+  const at = panel.indexOf('function exportFileName');
+  assert.ok(at > -1, 'مفيش مساعد تسمية');
+  const fn = panel.slice(at, panel.indexOf('\n}', at) + 2);
+  assert.match(fn, /'tracking'/, "مفيش بادئة 'tracking'");
+  assert.match(fn, /storeNameEn \|\| cfg\.storeDomain/, 'مفيش ترجيع للدومين لو الاسم الإنجليزي فاضي');
+  assert.match(fn, /slice\(0, 40\)/, 'الاسم الطويل مبيتقصش');
+  assert.match(fn, /p2\(d\.getDate\(\)\) \+ '-' \+ p2\(d\.getMonth\(\) \+ 1\) \+ '-' \+ d\.getFullYear\(\)/, 'التاريخ مش يوم-شهر-سنة بمحليه');
+  assert.match(fn, /\.replace\(\/\\s\+\/g, '-'\)/, 'المسافات ماتتحولتش لشرطة');
+  assert.ok(panel.indexOf("a.download = exportFileName('xlsx')") > panel.indexOf('async function makeXlsx'), 'مسار الـXLSX لسه بالاسم القديم');
+  assert.ok(panel.indexOf("a.download = exportFileName('csv')") > panel.indexOf('async function exportCsv'), 'مسار الـCSV لسه بالاسم القديم');
+  assert.ok(!/srt-ranks-|srt-results-/.test(panel), 'الأسماء القديمة لسه عايشة في حتة');
+  assert.match(panel, /maybeAutoXlsx[\s\S]{0,420}makeXlsx\(true\)/, 'التلقائي آخر الرن مش بيمر على نفس الدالة — لازم نفس التسمية');
 });
