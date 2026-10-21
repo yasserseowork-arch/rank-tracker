@@ -886,11 +886,19 @@ export class QueueEngine {
     // أصله — الضغط والملخ بطلي attempts تضييع وقت. نتخطى المحلّل كله ونسلّم فورًا
     // لمسح البيانات الكامل وتاب جديد بنفس الكلمة (الكلمة عمرها ما بتتبوظ — 1.20.0 سارية)
     if (await this.tabChallengeLooksStale(tabId)) {
-      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
-      await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
-      this.broadcast();
-      await logger.warn('queue', `⚡ "${kw.keyword}" — الشاشة بايّتة «expired» من أول ثانية: صفر محاولات وصفر ريلود — مسح فوري وتاب جديد`);
-      return 'stale-expired';
+      // 🩹 v1.21.21 (إعادة طلب المستخدم للشاشة دي): قبل النسف — فرصة إحياء واحدة في المكان:
+      // ريلود جوه التاب النشيط يولّد تحديًا طازة (الباية غالبًا من تقادم التوكن والتاب مختفي)
+      if (await this.reviveStaleChallenge(tabId, signal)) {
+        await logger.info('queue', `🩹 "${kw.keyword}" — التحدي البايت اتحيّا؛ المحرك هيحاول على التحدي الجديد دلوقتي`);
+        // نسقط على مسار الحل العادي تحت — من غير أي مساس بتوقيتاته
+      } else {
+        if (signal && signal.aborted) { return 'paused'; }
+        await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+        await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+        this.broadcast();
+        await logger.warn('queue', `⚡ "${kw.keyword}" — بايّت والإحياء ما نجحش: مسح فوري وتاب جديد بنفس الكلمة`);
+        return 'stale-expired';
+      }
     }
 
     // عدّاد محاولات حي في البانر: نقرأ من المنسّق مباشرة كل 1.2 ثانية
@@ -1088,10 +1096,14 @@ export class QueueEngine {
     }
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
     this.broadcast();
-    // 🧨 v1.21.18: داخلين على «expired»؟ مفيش سبب نستنى تفكرة واحدة — تسليم فوري للمسح الموحد
+    // 🧨 v1.21.18: داخلين على «expired»؟ مفيش سبب نستنى تفكرة واحدة — إحياء سريع وإلا المسح الموحد
     if (await this.tabChallengeLooksStale(tabId)) {
-      await logger.warn('queue', `🧹 "${kw.keyword}" — التحدي بايّت؛ تسليم فوري لمسح بيانات + تاب جديد (صفر ريلود)`);
-      return 'stale';
+      if (await this.reviveStaleChallenge(tabId, signal)) {
+        await logger.info('queue', `🩹 "${kw.keyword}" — التحدي البايت اتحيّا قبل الصبر: تحدي طازة على التاب النشيط، والصبر يكمل عليه`);
+      } else {
+        await logger.warn('queue', `🧹 "${kw.keyword}" — بايّت والإحياء ما قدرش؛ تسليم فوري لمسح بيانات + تاب جديد`);
+        return 'stale';
+      }
     }
     let waited = 0;
     let focusOnce = false;
@@ -1120,8 +1132,12 @@ export class QueueEngine {
         // بايّت؟ تسليم فوري 'stale' للنداء: مسح كامل + تاب جديد بنفس الكلمة — الكلمة عمرها
         // ما بتتبوظ، ومحرك الحل نفسه ما اتلمسش (الناس اللي لسه عندها فرصة بتستنى عادي)
         if (await this.tabChallengeLooksStale(tabId)) {
-          await logger.warn('queue', `🧹 "${kw.keyword}" — التحدي بايّت؛ تسليم فوري لمسح بيانات + تاب جديد`);
-          return 'stale';
+          if (await this.reviveStaleChallenge(tabId, signal)) {
+            await logger.info('queue', `🩹 "${kw.keyword}" — التحدي بايت منّ نص الصبر؛ اتحيّا بريلود طازة — Buster/إيدك ياخدوا فرصتهم عليه`);
+          } else {
+            await logger.warn('queue', `🧹 "${kw.keyword}" — بايّت والإحياء استنفد؛ تسليم فوري لمسح بيانات + تاب جديد`);
+            return 'stale';
+          }
         }
         if (waited % 48 === 44) {
           await this.notify('🧩 لسه مستنّيين', `"${kw.keyword}" — الكابتشا معلقة؛ بنستنى تتحل (Buster أو يدويًا من التاب نفسه) وهنعيد نفس الكلمة تاني — مفيش إلغاء`);
@@ -1153,6 +1169,23 @@ export class QueueEngine {
         }
       });
       return !!(inj && inj.result);
+    } catch (_) { return false; }
+  }
+
+  /** 🩹 v1.21.21 — إحياء التحدي البايت في مكانه: تنشيط ثم ريلود واحد جوه التاب النشيط،
+   *  والتوكن بيتولد بطابع زمني طازة بدل ما نرمي الجلسة كلها. النجاح = الصفحة بقت تحديًا
+   *  حيًا. سقف 3 إحياءات لكل رن (الميريرات في recordRunReport) — بلا دوّار ريلودات.
+   *  مفيش أي مساس بمحرك الحل ولا توقيتاته: الدالة دي بتجهّز الأرضية وبس. */
+  async reviveStaleChallenge(tabId, signal) {
+    try {
+      if ((this.staleRevivesThisRun || 0) >= 3) { return false; }
+      this.staleRevivesThisRun = (this.staleRevivesThisRun || 0) + 1;
+      await logger.info('queue', `🩹 إحياء ${this.staleRevivesThisRun}/3: ريلود على التاب النشيط لتوليد تحدي بطابع طازة`);
+      try { await tabctl.focus(tabId); } catch (_) {}
+      try { await tabctl.reload(tabId); } catch (_) { return false; }
+      await sleep(3200, signal); // reCAPTCHA بيتولد أسرع بكتير والتاب نشيط
+      if (signal && signal.aborted) { return false; }
+      return !(await this.tabChallengeLooksStale(tabId));
     } catch (_) { return false; }
   }
 
@@ -1333,6 +1366,7 @@ export class QueueEngine {
       await state.appendRunStat(stat);
       this.captchaSeenThisRun = 0;
       this.staleWipesThisRun = 0; // v1.21.8: عدادات الرن بتترمس مع بداية رن جديد
+      this.staleRevivesThisRun = 0; // 🩹 v1.21.21: وعدّاد الإحياءات معاهم
       this.captchaRevealedTab = null; // v1.21.16: و«التاب المعروض» كمان — كل رن يبدأ نضيف
       const perSec = stat.processed ? Math.round((dur / stat.processed) / 100) / 10 : 0;
       await logger.info('queue', `📊 تقرير الرن: ${stat.processed} كلمة في ${(Math.round(dur / 600) / 10)} دقيقة (${perSec}ث/كلمة) — كابتشا: ${stat.captchaSeen} (اتحلّت أوتوماتيك ${stat.captchaSolves}) — مراجعة: ${stat.review}${stat.coverageAvg != null ? ' — متوسط التغطية: ' + stat.coverageAvg + '%' : ''}`);

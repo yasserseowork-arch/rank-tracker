@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.20');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.20'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.20'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.20\]/m);
+  assert.equal(man.version, '1.21.21');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.21'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.21'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.21\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1248,6 +1248,25 @@ test('v12115: الزرار «إعادة ضبط» — نفس السلوك الش�
   assert.match(seg, /reason: 'running'/, 'حرس الرن الشغال اتشال — لأ');
 });
 function rt13b() { return read('src/background/core/router.js'); }
+
+/* -------- v1.21.21 — إحياء الـexpired في مكانه قبل النسف -------- */
+test('v12121: الإحياء بيسبق أي تصعيد، وبمحله في التلات بوابات', () => {
+  const hc = queue.slice(queue.indexOf('async handleCaptcha'), queue.indexOf('async collectAfterSolve'));
+  assert.ok(hc.indexOf('reviveStaleChallenge') > -1 && hc.indexOf('reviveStaleChallenge') < hc.indexOf("return 'stale-expired'"), 'لازم محاولة الإحياء قبل التسليم للنسف');
+  const wcc = queue.slice(queue.indexOf('async waitCaptchaCleared'), queue.indexOf('async tabChallengeLooksStale'));
+  assert.equal((wcc.match(/reviveStaleChallenge/g) || []).length, 2, 'الإحياء مش موصول في الصبر (قبل اللوب + التفكرة)');
+  assert.ok(!/tabctl\.reload/.test(wcc), 'الريلود يفضل بره جسم الصبر — في الدالة المساعدة فقط');
+});
+
+test('v12121: الدالة المساعدة محصّنة — سقف 3، تصفير مع الرن، وصفر مساس بالمحرك', () => {
+  const rv = queue.slice(queue.indexOf('async reviveStaleChallenge'), queue.indexOf('waitManualSolve(tabId, cfg, signal) {'));
+  assert.ok(rv.length > 100 && rv.length < 2000, 'مفيش دالة إحياء مستقلة بذيلها');
+  assert.match(rv, /staleRevivesThisRun \|\| 0\) >= 3/, 'مفيش سقف إحياءات — دوّار ريلودات محتمل');
+  assert.match(rv, /tabctl\.reload\(tabId\)/, 'الإحياء نفسه = ريلود على التاب النشيط');
+  assert.match(rv, /tabctl\.focus\(tabId\)/, 'لازم تنشيط قبل الريلود — دة صلب الفكرة');
+  assert.ok(!/orchestrator|solve\(/.test(rv), 'الدالة بتلمس المحرك — ممنوع؛ بتجهز الأرضية وبس');
+  assert.match(queue, /this\.staleRevivesThisRun = 0;/, 'العداد مش بيتصفّر مع الرن');
+});
 
 /* -------- v1.21.20 — قصّ الوقت الميت: settle/rescan/AI-عام/دفعات أرش -------- */
 test('v12120: الافتراضيات السريعة + ميجريشن سكيما 8 للحارسين القدام', () => {
