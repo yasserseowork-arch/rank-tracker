@@ -548,13 +548,14 @@ async function main() {
   const vt = $('versionTag');
   if (vt) { vt.textContent = 'v' + C.VERSION; }
 
-  // 🔄 v1.21.9: إعادة ضبط الإعدادات (بطلب المستخدم بدل الشرايط) — الطابور والنتائج بره الحساب
+  // 🧹 v1.21.13: تصفير كامل (إعدادات + كلمات + نتائج) — نص التأكيد في القاموس بيوضحها
   const brs = $('btnReset');
   if (brs) {
     brs.addEventListener('click', async () => {
       const sure = confirm(t('confirmConfigReset'));
       if (!sure) { return; }
       const res = await send(C.MSG.CONFIG_RESET, {});
+      if (res && res.ok === false && res.reason === 'running') { alert(t('resetBusy')); return; }
       if (res && res.ok) { await refresh(); }
     });
   }

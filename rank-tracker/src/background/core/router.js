@@ -104,8 +104,17 @@ export function createRouter(engine) {
             return await engine.manualReview();
 
           case C.MSG.CONFIG_RESET: {
-            // 🔄 v1.21.9: رجعة المصنع للإعدادات بس — الطابور والنتائج والسجل ما بتتلمسش
+            // 🛡 v1.21.13: التصفير الشامل ماليفرش تحت رن شغال — نفس حرس المراجعة
+            const runNow = await state.getRun();
+            if (runNow.status === C.STATUS.RUN.RUNNING || runNow.status === C.STATUS.RUN.CAPTCHA) {
+              return { ok: false, reason: 'running' };
+            }
+            // 🧹 v1.21.13 (طلب المستخدم): تصفير كامل — الإعدادات للمصنع + مسح الكلمات
+            // والنتائج كلها، عشان يبدأ متجر جديد من الصفر. السجلات الادائية (runStats)
+            // بس اللي بتفضل: مفيش فيها بيانات متجر، وهي اللي بتدير تقدير الوقت الجاي
             await state.resetConfig();
+            await state.clearKeywords();
+            await state.clearResults();
             engine.broadcast();
             return { ok: true };
           }

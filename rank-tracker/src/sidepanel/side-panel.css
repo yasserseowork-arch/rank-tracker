@@ -41,6 +41,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  /* 🎯 v1.21.13 (طلب المستخدم): العمود في نص اللوحة بالظبط — في البروفايل العريض
+     المحتوى كان حاسس إنه مائل لجه؛ سقف عرض + توسيط هيعالجها في أي عرض */
+  max-width: 780px;
+  margin-inline: auto;
+  width: 100%;
 }
 
 .hidden { display: none !important; }
@@ -512,3 +517,29 @@ html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 /* 🧷 v1.21.11: زر إعادة الضبط بقى سطر كامل تحت أزرار التشغيل — في النص، هادي ومختصر */
 .btn-reset { grid-column: 1 / -1; font-size: .8rem; padding: 7px 10px; opacity: .9; }
 .btn-reset:hover { opacity: 1; }
+
+/* 🎬 v1.21.13: حركة خفيفة زيادة — CSS/GPU بس، صفر JS في الفريم، ومفيش أي layout thrash */
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(.93) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-card { animation: pop-in .26s cubic-bezier(.2, .8, .3, 1); }
+@keyframes pane-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+.tab-pane:not(.hidden) { animation: pane-in .2s ease-out; }
+.banner:not(.hidden) { animation: pop-in .24s ease-out; }
+.kw-count { transition: transform .18s ease; }
+.data-table tbody tr { transition: background .14s ease; }
+.data-table tbody tr:hover { background: rgba(194, 146, 77, .06); }
+.btn:not(:disabled):active { transform: scale(.965); }
+.banner-icon { animation: icon-bob 2.4s ease-in-out infinite; }
+@keyframes icon-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-card, .tab-pane, .banner, .banner-icon { animation: none; }
+  .btn, .data-table tbody tr, .kw-count { transition: none; }
+}

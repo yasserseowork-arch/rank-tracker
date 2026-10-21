@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.12');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.12'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.12'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.12\]/m);
+  assert.equal(man.version, '1.21.13');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.13'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.13'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.13\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1098,8 +1098,8 @@ test('v12111: صفر إيموجي زينة في الواجهة والقاموس�
   assert.ok(!/[\u0600-\u06FF]/.test(enBlock), 'حروف عربية لسه في القاموس الإنجليزي');
   assert.match(i18n11, /langBtn: 'AR'/, 'زر اللغة في الوضع الإنجليزي مش AR');
   assert.match(i18n11, /langBtn: 'EN'/, 'زر اللغة في الوضع العربي مش EN');
-  assert.match(i18n11, /btnResetCfg: 'إعادة ضبط الإعدادات',/, 'مفتاح الزرار الجديد ناقص في العربي');
-  assert.match(i18n11, /btnResetCfg: 'Reset settings',/, 'مفتاح الزرار الجديد ناقص في الإنجليزي');
+  assert.match(i18n11, /btnResetCfg: '/, 'مفتاح الزرار مش في العربي');
+  assert.match(i18n11, /btnResetCfg: 'Full reset: settings \+ keywords \+ results',/, 'مفتاح الزرار مش متجدد في الإنجليزي');
   assert.match(panel, /confirm\(t\('confirmConfigReset'\)\)/, 'تأكيد إعادة الضبط مش بيستخدم المفتاح المترجم');
 });
 
@@ -1143,4 +1143,46 @@ test('v12112: مستمع البث سليم — LOG بيوصل appendLog جوه �
   assert.ok(!/كفاية[^\n]*\} else if/.test(panel), 'التعليق بيلتهم السطر تاني');
   const at = panel.indexOf('} else if (message.type === C.MSG.LOG)');
   assert.ok(at > -1 && panel.slice(at, at + 90).indexOf('appendLog') > -1, 'appendLog مش في فرع LOG');
+});
+
+/* -------- v1.21.13 — تصفير شامل، توسيط العمود، وحركة خفيفة زيادة -------- */
+
+test('v12113: التصفير الكامل — إعدادات وكلمات ونتائج في رسالة واحدة من الراوتر', () => {
+  const at = rt13().indexOf('case C.MSG.CONFIG_RESET');
+  assert.ok(at > -1, 'الحالة نفسها مش في الراوتر');
+  const seg = rt13().slice(at, at + 900);
+  assert.match(seg, /await state\.resetConfig\(\);/, 'الإعدادات مالرجعتش');
+  assert.match(seg, /await state\.clearKeywords\(\);/, 'الكلمات ماتبتمسحش — طلب المستخدم');
+  assert.match(seg, /await state\.clearResults\(\);/, 'النتائج ماتبتمسحش');
+  assert.match(seg, /engine\.broadcast\(\);[\s\S]*?return \{ ok: true \};/, 'البث بعد التصفير مفقود — اللوحة هتفضل عالقة');
+  assert.ok(!/chrome\.windows/.test(seg), 'ولا حاجة غريبة اتسربت للمسار');
+  assert.match(seg, /reason: 'running'/, 'حرس الرن الشغال ناقص — تصفير في النص = سباق بيانات');
+  assert.match(panel, /res\.reason === 'running'\) \{ alert\(t\('resetBusy'\)\)/, 'اللوحة ما بتتعاملش مع الرفض');
+  const i18b = read('src/lib/i18n-ui.js');
+  assert.match(i18b, /resetBusy: 'في رن شغال/, 'رسالة الانشغال ناقصة في العربي');
+  assert.match(i18b, /resetBusy: 'A run is in progress/, 'رسالة الانشغال ناقصة في الإنجليزي');
+  const i18 = read('src/lib/i18n-ui.js');
+  assert.match(i18, /btnResetCfg: 'تصفير كامل: إعدادات \+ كلمات \+ نتائج',/, 'التسمية العربية ما اتحدثتش');
+  assert.match(i18, /btnResetCfg: 'Full reset: settings \+ keywords \+ results',/, 'التسمية الإنجليزية ما اتحدثتش');
+  assert.match(i18, /مش هيرجع|التصفير نهائي/, 'تحذير النهائيّة مش في العربي');
+  assert.match(i18, /cannot be undone/, 'تحذير النهائيّة مش في الإنجليزي');
+  const pnlHtml = read('src/sidepanel/side-panel.html');
+  assert.match(pnlHtml, /تصفير كامل: إعدادات \+ كلمات \+ نتائج<\/button>/, 'الزر في الـHTML لسه بالنص القديم');
+});
+
+function rt13() { return read('src/background/core/router.js'); }
+
+test('v12113: العمود في المنتصف بالظبط + الأنيميشن الخفيف بحرس reduced-motion', () => {
+  const css = read('src/sidepanel/side-panel.css');
+  const bAt = css.indexOf('\nbody {');
+  const bodyRule = css.slice(bAt, css.indexOf('}', bAt));
+  assert.match(bodyRule, /max-width: 780px;/, 'سقف العرض مش محطوط — المحتوى هيمشي شمال في البروفايل العريض');
+  assert.match(bodyRule, /margin-inline: auto;/, 'التوسيط مش موجود');
+  assert.match(css, /@keyframes pop-in \{/, 'pop-in مش معرّف');
+  assert.match(css, /\.modal-card \{ animation: pop-in/, 'الكارت ما بيركبش الحركة');
+  assert.match(css, /\.tab-pane:not\(\.hidden\) \{ animation: pane-in \.2s ease-out; \}/, 'تبديل التبويبات من غير fade');
+  assert.match(css, /\.btn:not\(:disabled\):active \{ transform: scale\(\.965\); \}/, 'ضغط الأزرار محسوسش');
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none/, 'حرس تقليل الحركة مش مغطي الجديد');
+  // الأنيميشن CSS-only: مفيش ولا سطر JS جديد بيحرك فريمات
+  assert.ok(!/requestAnimationFrame/.test(panel), 'rAF اتسرب للوحة — ممنوع');
 });
