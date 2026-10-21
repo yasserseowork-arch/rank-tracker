@@ -161,7 +161,7 @@ test('كابتشا v1.18.3: حلّ؟ مفيش مسح مستعجل — نتحرى
 
 test('الإعدادات v1.18.3: المحاولتين إجباريًا + المسح بقى كل 8 مع الاستراحة', () => {
   assert.match(st, /clearEveryN:\s*8,/, 'ديفولت المسح لسه 10');
-  assert.match(st, /export const SCHEMA_VERSION = 7;/, 'مفيش نسخة ميجريشن جديدة (1.21.16)');
+  assert.match(st, /export const SCHEMA_VERSION = 8;/, 'مفيش نسخة ميجريشن جديدة (1.21.20)');
   assert.match(st, /att > 2\) \{ patchCfg\.captchaMaxAttempts = 2; \}/, 'مفيش إجبار المحاولتين على الإعدادات القديمة');
   assert.match(st, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'المسح القديم (10) مش بيتحوّل للـ8');
 });
@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.19');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.19'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.19'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.19\]/m);
+  assert.equal(man.version, '1.21.20');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.20'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.20'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.20\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -493,7 +493,7 @@ test('v1191: الجلب الخلفي بقى افتراضي وبلا بوابة c
   assert.match(st2, /selfFetchMore: true/, 'selfFetchMore لسه متقفل افتراضياً');
   assert.match(st2, /selfFetchMaxBatches: 9/, 'الدفعات الخلفية لسه 6 — مش كافية لـ100');
   assert.match(st2, /scanHardCapMs: 60000/, 'مفيش السقف في الـ DEFAULTS');
-  assert.match(st2, /batchSettleMs: 6500/, 'ثبات العدّاد لسه 5000 — بيسبق الشبكات البطيئة');
+  assert.match(st2, /batchSettleMs: 2600/, 'ثبات العدّاد لسه على القيمة التقيلة (1.21.20: 2600 + ضهرة selfFetch)');
   assert.match(st2, /'scanHardCapMs'/, 'السقف مش في قائمة التطهير الرقمي');
   assert.match(serp, /selfFetchMore !== false && items\.length < expectedNum/, 'بوابة companion لسه بتقطم الجلب الخلفي');
   assert.ok(!/selfFetchMore !== false && !companionSeen/.test(serp), 'لازم الجلب يشتغل حتى لو companion كان شغال ووقف');
@@ -651,7 +651,7 @@ test('v1201: مفيش توقيتات دقيقة متكررة — المهلة ق
   const sched = read('src/background/core/scheduler.js');
   assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/,
     'المهلة لسه قيمة ثابتة كل كلمة — بصمة');
-  assert.match(serp, /await D\.humanSleep\(900, 450\);/, 'فاصل الجلب الخلفي مش على مقاس 1.21.9');
+  assert.match(serp, /await D\.humanSleep\(550, 300\);/, 'فاصل الجلب الخلفي مش على مقاس 1.21.9');
   assert.ok(!/const ms = 10000;/.test(sched), 'القيمة الثابتة لسه موجودة');
 });
 
@@ -704,7 +704,7 @@ test('v1205: التسريع الآمن متقفل بالأرقام — والا�
   const sched = read('src/background/core/scheduler.js');
   assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'المهلة قبل الكلمة مش على مقاس 1.20.5');
   assert.match(sched, /const cold = !!\(context && context\.cold\);/, 'الفصل بين الوضعين مش في الـscheduler؟');
-  assert.match(serp, /await D\.humanSleep\(900, 450\);/, 'فاصل الدفعات اتسارع تحت الحد الآمن؟');
+  assert.match(serp, /await D\.humanSleep\(550, 300\);/, 'فاصل الدفعات اتسارع تحت الحد الآمن؟');
   assert.match(st, /cooldownMs: 30000,/, 'الافتراضي الجديد مش 30 ثانية');
   assert.match(st, /if \(parseInt\(cfg\.cooldownMs, 10\) === 45000\) \{ patchCfg\.cooldownMs = 30000; \}/, 'مفيش ميجريشن من الـ45000 القديم');
   assert.match(queue, /const extra = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تبريد الحرارة لسه 12–21 ثانية');
@@ -888,7 +888,7 @@ test('v1214: نزول المسح الطويل اتخفّف — من غير لم�
   // المتجمد: تهدئة ما بعد الحل، 3.5 ثانية ما بعد السولف، فاصل الدفعات، وستل-الدفعة الطويل
   assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة بعد الحل اتلمست — ممنوع');
   assert.match(queue, /await sleep\(3500, signal\); \/\/ v1\.20\.5/, 'راحة ما بعد السولف اتلمست — ممنوع');
-  assert.match(serp, /await D\.humanSleep\(900, 450\);/, 'فاصل الدفعات موحد على مقاس 1.21.9 مش أكتر');
+  assert.match(serp, /await D\.humanSleep\(550, 300\);/, 'فاصل الدفعات موحد على مقاس 1.21.9 مش أكتر');
   assert.match(serp, /cfg\.batchSettleMs \|\| 5000/, 'ستل الدفعات اتلمس — ممنوع');
 });
 
@@ -1048,7 +1048,7 @@ test('v1219: السرعة الجديدة مطبقة — والممنوعات Sac
   const sch = read('src/background/core/scheduler.js');
   assert.match(sch, /\?\s*700 \+ Math\.floor\(Math\.random\(\) \* 900\)/, 'البارد 0.7–1.6 مش مطبق');
   assert.match(sch, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'دفء الكابتشا اتلمس — ممنوع');
-  assert.match(serp, /await D\.humanSleep\(900, 450\);/, 'فاصل الدفعات 0.9–1.8 مش مطبق');
+  assert.match(serp, /await D\.humanSleep\(550, 300\);/, 'فاصل الدفعات 0.9–1.8 مش مطبق');
   assert.match(serp, /await D\.humanSleep\(600, 250\);/, 'توسيع AI مش على مقاس 1.21.9');
   assert.match(queue, /await sleep\(4000 \+ Math\.floor\(Math\.random\(\) \* 4000\), signal\);/, 'فاصل المراجعة 4–8 مش مطبق');
   assert.match(serp, /cfg\.settleMs \|\| 1100/, 'سجل التثبيت اتلمس — لأ');
@@ -1217,7 +1217,7 @@ test('v12115: القفل اتلغى — لمس المستخدم بيلغي أي 
 
 test('v12115: المسار البدري بيطير على طول — ميزانية AI قصيرة عند اللقية', () => {
   assert.match(serp, /async function finalizeAi\(aiSnap, budgetMs\)/, 'الميزانية ما اتمررتش للدالة');
-  assert.match(serp, /let budget = budgetMs \|\| 5000;/, 'الدالة مابتستخدميش الميزانية — والـ5000 للـfull لسه الأساس');
+  assert.match(serp, /else \{ budget = budgetMs \|\| 1500; \}/, 'ميزانية اللا-بلوك اتغيرت — والقاعدة العامة لازم تفضل');
   assert.match(serp, /finalizeAi\(early\.ai, 1200\)/, 'خروج أول شاشة لسه بمستنى الـ5 ثانية');
   assert.match(serp, /const aiF = await finalizeAi\(ai, 1200\);/, 'خروج النزول لسه بمستنى الـ5 ثانية');
   // حكم عدم الوجود الكامل ما اتقصّرش
@@ -1248,6 +1248,31 @@ test('v12115: الزرار «إعادة ضبط» — نفس السلوك الش�
   assert.match(seg, /reason: 'running'/, 'حرس الرن الشغال اتشال — لأ');
 });
 function rt13b() { return read('src/background/core/router.js'); }
+
+/* -------- v1.21.20 — قصّ الوقت الميت: settle/rescan/AI-عام/دفعات أرش -------- */
+test('v12120: الافتراضيات السريعة + ميجريشن سكيما 8 للحارسين القدام', () => {
+  assert.match(st, /batchSettleMs: 2600,/, 'batchSettle لسه 6500');
+  assert.match(st, /rescanMs: 800,/, 'rescan لسه 1800');
+  assert.match(st, /settleMs: 1100,/, 'settle لسه 1800');
+  assert.match(st, /if \(version < 8\) \{/, 'مفيش ميجريشن ترقية للقيم التقيلة المحفوظة');
+  assert.match(st, /parseInt\(cfg8\.batchSettleMs, 10\) === 6500/, 'المايجريشن مابتلمسش الافتراضي القديم');
+  assert.match(st, /delayMs: 4000,/, 'ديلاي المستخدم اتغير — ممنوع إلا بطلبه');
+  assert.match(st, /cooldownEvery: 8,/, 'استراحة كل 8 — زي ما اتفقنا');
+});
+
+test('v12120: قاعدة الـAI العامة — مترسم فوري، بوادر كامل، صفر انتظار على اللا-شيء', () => {
+  assert.match(serp, /let budget;\n\s+if \(aiRoot\(\)\) \{ budget = 0; \}/, 'مفيش قراءة فورية للمتوفر');
+  assert.match(serp, /else \{ budget = budgetMs \|\| 1500; \}/, 'مسار الحكم بيفضل يستنى 5 ثواني على صفحة فاضية؟');
+  assert.match(serp, /await finalizeAi\(\{ items: \[\], text: '' \}\);/, 'نداء الحكم اتلمس صيغته — لسه لازم يمر بدون ميزانية (والقاعدة جوه الدالة)');
+});
+
+test('v12120: الدفعات الخلفية والبحث المتبرمج بقوا أرش من غير ما يمسوا الكابتشا', () => {
+  assert.match(serp, /await D\.humanSleep\(900, 400\);\s*\/\//, 'تهيئة صندوق البحث اتغيرت عن 1.21.20؟');
+  assert.match(serp, /await D\.sleep\(1200\);/, 'سكتة إعادة المحاولة لسه 2500');
+  assert.match(serp, /await D\.humanSleep\(550, 250\);/, 'فاصل الدوران الفاضي لسه 900');
+  assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة ما بعد الحل اتغيرت — ممنوع');
+  assert.match(queue, /const restSec = 8 \+ captchaClears \* 4;/, 'تبريد دورات الكابتشا اتلمس — ممنوع');
+});
 
 /* -------- v1.21.19 — بانر «كابتشا طوارئ» طار، والشريط السفلي ملك -------- */
 test('v12119: البانر مشيل من HTML/JS/CSS/i18n — والشريط وبيدج الحالة والمحرك سليمة', () => {
@@ -1335,14 +1360,13 @@ test('v12116: التبويبات بتفتح في الخلفية — والتنش
 });
 
 test('v12116: migration لـ schema 7 — المستخدم القديم بيتحوّل للوضع الهادي', () => {
-  assert.match(st, /export const SCHEMA_VERSION = 7;/, 'رقم السكيما مارتفعش');
+  assert.match(st, /export const SCHEMA_VERSION = 8;/, 'رقم السكيما مارتفعش');
   assert.match(st, /if \(version < 7\) \{/, 'البلوك الجديد مش في الـmigrate');
   assert.match(st, /cfg7\.foregroundTab === true.*setConfig\(\{ foregroundTab: false \}\)/, 'الترقية مش بتتدخّل صح');
 });
 
 test('v12116: بلوك AI مترسّمش بس بوادره باينة؟ الميزانية الكاملة ترجع — دقة قبل سرعة', () => {
-  assert.match(serp, /let budget = budgetMs \|\| 5000;/, 'الميزانية المتغيرة مش معرّفة');
-  assert.match(serp, /if \(budgetMs && !aiRoot\(\) && aiHint\(\)\) \{ budget = 5000; \}/, 'منطق البوادر مش موجود — ممكن نفوّت بلوك بيت رسم');
+  assert.match(serp, /if \(aiRoot\(\)\) \{ budget = 0; \}\n\s+else if \(aiHint\(\)\) \{ budget = 5000; \}/, 'القاعدة العامة (مترسم=فوري/بوادر=كامل/ولا حاجة=قصير) مش موجودة');
   assert.match(serp, /await waitForAiRoot\(budget\)/, 'الدالة مابيتستخدميش الميزانية المحسوبة');
   // دبابيس 1.21.15 لسه محفوظة: الخروج البدري بيطلب ميزانية قصيرة — والتوسيع داخل الدالة
   assert.match(serp, /finalizeAi\(early\.ai, 1200\)/, 'الميزانية البدرية اتشالت من مسار أول شاشة');

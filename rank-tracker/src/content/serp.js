@@ -53,7 +53,7 @@
       live.reloads += 1;
       session.set(RELOAD_KEY, String(live.reloads));
       await D.msg.send(C.MSG.SERP_ERROR, { kind: kind, keyword: keyword, reload: true, attempt: live.reloads });
-      await D.humanSleep(2200, 900);
+      await D.humanSleep(900, 400); // ⚡ 1.21.20: إعادة الرسم بعد الكتابة فورية — التاني كانت ضريبة على هواها
       location.reload();
       return true;
     }
@@ -415,8 +415,10 @@
     // بيتقرا فورًا. مش موجود بس بوادره باينة (aiHint)؟ بنستناه بالميزانية الكاملة
     // زي المسار الطويل — مفيش مقامرة بدقّة الـAI. مفيش بوادر خالص؟ هنا وبس
     // الـ1.2 ثانية كفاية، ومفيش انتظار على هواه
-    let budget = budgetMs || 5000;
-    if (budgetMs && !aiRoot() && aiHint()) { budget = 5000; }
+    let budget;
+    if (aiRoot()) { budget = 0; }
+    else if (aiHint()) { budget = 5000; }
+    else { budget = budgetMs || 1500; }
     const root = await waitForAiRoot(budget);
     if (!root) {
       if (aiHint()) {
@@ -505,7 +507,7 @@
       try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
       if (res.blocked) { attempts++; break; }
       if (res.err) {
-        await D.sleep(2500); // سكتة ثم فرصة تانية لنفس الدفعة — من غير ما نفقد الباقي
+        await D.sleep(1200); // سكتة ثم فرصة تانية لنفس الدفعة — 1.21.20: أقصر، الدفعة التانية جاية كمان ثانية وشوية
         try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
         if (res.err) {
           attempts++;
@@ -523,7 +525,7 @@
         attempts++;
         if (attempts >= 2) { break; } // صفحتين ورا بعض فاضيتين = جوجل قافل الجلب، كفاية أدب
         start += 10;
-        await D.humanSleep(900, 400);
+        await D.humanSleep(550, 250);
         continue;
       }
       attempts = 0;
@@ -534,7 +536,7 @@
         return { items: merged, aiItems: aiItems, early: true, hit: hit, selfFetched: true };
       }
       // v1.21.9: 0.9–1.8 ثانية — لسه فوق سرعة قراءة البشر، بس الرن ما يقعدش على الدفعات
-      await D.humanSleep(900, 450);
+      await D.humanSleep(550, 300); // ⚡ 1.21.20 (طلب السرعة): فاصل دفعات خلفي — الصفحة الحقيقية متقفلش عليه
     }
     if (merged.length > baseItems.length || attempts) {
       D.msg.send(C.MSG.LOG, { level: attempts ? 'warn' : 'info', scope: 'serp',

@@ -5,7 +5,7 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const K = {
   CONFIG: 'srt.config',
@@ -42,12 +42,12 @@ export const DEFAULT_CONFIG = {
   pauseOnCaptchaFail: true,
   autoResumeOnManualSolve: true,
   // قراءة SERP
-  settleMs: 1800,
+  settleMs: 1100,               // ⚡ 1.21.20 (طلب السرعة): الصفحة سيرفر-سايد من 1.21.4 — مفيش مبرر 1.8 ثانية
   scrollStepMs: 320,
   maxWaitResultsMs: 20000,      // قاعدة الـ20 ثانية: تُطبَّق بس لما العدّاد يوقف (مفيش نتائج جديدة)
   scanHardCapMs: 60000,         // السقف المطلق لمسح كلمة واحدة — لسه فيه تقدم؟ كمّل لحد هنا
-  batchSettleMs: 6500,          // ثبات العدّاد هذه المدة = الأداة المساعدة خلّصت (أصبر على الشبكات البطيئة)
-  rescanMs: 1800,               // فترة المسح الدوري (مثل Ctrl+F متكرر)
+  batchSettleMs: 2600,          // ⚡ 1.21.20: كانت 6500 من عصر ما قبل num=100 سيرفر-سايد — الدفعات الخلفية (selfFetchMore) ضهرة أمان، فالثبات اتقصّر
+  rescanMs: 800,                // ⚡ 1.21.20:Ctrl+F دوري خفيف — نفس فولو-باك serp من 1.21.9
   selfFetchMore: true,          // الجلب الخلفي بقى افتراضي: مكمّل الدفعات لحد expectedNum لو السكرول وقف نص الطريق
   selfFetchMaxBatches: 9,       // أقصى دفعات خلفية (كل دفعة 10 نتائج) — تغطي 20→100
   maxChecksPerDay: 150,         // سقف يومي احتراماً لقواعد جوجل (0 = بدون سقف)
@@ -355,6 +355,17 @@ export async function migrate() {
     if (parseInt(cfg.selfFetchMaxBatches, 10) === 6) { patchCfg.selfFetchMaxBatches = 9; }
     if (cfg.selfFetchMore === false) { patchCfg.selfFetchMore = true; }
     if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
+  }
+  if (version < 8) {
+    // ⚡ v1.21.20 (طلب المستخدم: «20 كلمة في نص ساعة بطيء»): الافتراضيات التقيلة القديمة
+    // (settle 6.5ث / rescan 1.8ث / settle 1.8ث) بتتحدّث للقيم السريعة الجديدة — بس لو
+    // المستخدم سابها زي الافتراضي؛ أي قيمة عدّلها بإيده بتفضل محمية
+    const cfg8 = await getConfig();
+    const patch8 = {};
+    if (parseInt(cfg8.batchSettleMs, 10) === 6500) { patch8.batchSettleMs = 2600; }
+    if (parseInt(cfg8.rescanMs, 10) === 1800) { patch8.rescanMs = 800; }
+    if (parseInt(cfg8.settleMs, 10) === 1800) { patch8.settleMs = 1100; }
+    if (Object.keys(patch8).length) { await setConfig(patch8); }
   }
   await local.set(K.SCHEMA, SCHEMA_VERSION);
   return SCHEMA_VERSION;

@@ -168,7 +168,7 @@ test('v1191 DEFAULTS: السقف والجلب الخلفي والقيم الجد
   assert.equal(cfg.scanHardCapMs, 60000);
   assert.equal(cfg.selfFetchMore, true);
   assert.equal(cfg.selfFetchMaxBatches, 9);
-  assert.equal(cfg.batchSettleMs, 6500);
+  assert.equal(cfg.batchSettleMs, 2600);
   const num = await state.setConfig({ scanHardCapMs: '45000' });
   assert.equal(num.scanHardCapMs, 45000);
 });
