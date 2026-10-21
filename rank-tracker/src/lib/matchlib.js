@@ -38,18 +38,15 @@
   }
 
   function hostMatches(urlHost, targetDomain) {
+    // v1.21.17 — صارم زي موديول الخلفية حرفيًا: صفر تسامح أحرف (دومين تاني = متجر تاني)
     const target = normalizeHost(targetDomain);
     const host = normalizeHost(urlHost);
     if (!target || !host) { return false; }
     if (!target.includes('.')) {
-      const label = registrable(host).split('.')[0] || '';
-      return label === target || (label.length >= 6 && editDistance(label, target) <= 2);
+      return (registrable(host).split('.')[0] || '') === target;
     }
     if (host === target || host.endsWith('.' + target)) { return true; }
-    if (registrable(host) === registrable(target)) { return true; }
-    const a = registrable(host).split('.')[0] || '';
-    const b = registrable(target).split('.')[0] || '';
-    return a.length >= 6 && b.length >= 6 && editDistance(a, b) <= 2;
+    return registrable(host) === registrable(target);
   }
 
   /** مسافة Damerau-Levenshtein محدودة */

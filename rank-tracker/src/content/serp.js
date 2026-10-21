@@ -552,7 +552,15 @@
     try { txt = (root.innerText || '').toLowerCase(); } catch (_) { txt = ''; }
     if (!txt) { return false; }
     const d = String(cfg.storeDomain || '').trim().toLowerCase();
-    if (d && txt.includes(d)) { return true; }
+    if (d) {
+      // v1.21.17: حدود مش substring — «myshop.com» جوه «notmyshop.com» مش لقيوة؛
+      // سوبدومين تحت ملكي (نقطة قبلها) مسموح، ولا letter/digit/hyphen قبل ولا بعدها
+      try {
+        const esc = d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const dRe = new RegExp('(^|[^a-z0-9-])' + esc + '($|[^a-z0-9.])');
+        if (dRe.test(txt)) { return true; }
+      } catch (_) { if (txt.includes(d)) { return true; } }
+    }
     // الدومين مضبوط ولسه مش على الشاشة؟ الاسم لوحده ما يفتحش البوابة — نفس سياسة المحرك
     if (d && String(cfg.matchMode || 'both') !== 'name') { return false; }
     const names = (D.match && D.match.storeNames) ? D.match.storeNames(cfg) : [String(cfg.storeName || '').trim()].filter(Boolean);

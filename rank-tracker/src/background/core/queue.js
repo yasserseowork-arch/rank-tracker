@@ -1390,7 +1390,14 @@ export class QueueEngine {
       const hayN = normalizeArabic(serp.aiText);
       const dom = String(cfg.storeDomain || '').trim().toLowerCase();
       const label = dom ? dom.split('.')[0] : '';
-      const domHit = !!(dom && hay.includes(dom)) || !!(label && label.length >= 6 && hay.includes(label));
+      // v1.21.17: حدود كمان هنا — «myshop.com» المكتوبة جوه «notmyshop.com» مش ذكر لينا
+      const bounded = (s) => {
+        if (!s) { return false; }
+        try {
+          return new RegExp('(^|[^a-z0-9-])' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9-])').test(hay);
+        } catch (_) { return hay.includes(s); }
+      };
+      const domHit = bounded(dom) || !!(label && label.length >= 6 && bounded(label));
       const nameHit = [cfg.storeName, cfg.storeNameEn]
         .map((x) => normalizeArabic(x || ''))
         .some((n) => n.length >= 3 && hayN.includes(n));

@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.16');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.16'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.16'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.16\]/m);
+  assert.equal(man.version, '1.21.17');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.17'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.17'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.17\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1250,6 +1250,30 @@ test('v12115: الزرار «إعادة ضبط» — نفس السلوك الش�
   assert.match(seg, /reason: 'running'/, 'حرس الرن الشغال اتشال — لأ');
 });
 function rt13b() { return read('src/background/core/router.js'); }
+
+/* -------- v1.21.17 — دقة الملكية: صفر تقارب في الدومين -------- */
+test('v12117: hostMatches صارم — صفر editDistance في المحرك وفي نسخة الحقن', () => {
+  const mSrc = read('src/background/core/match.js');
+  const libSrc = read('src/lib/matchlib.js');
+  for (const pair of [['match.js', mSrc], ['matchlib.js', libSrc]]) {
+    const name = pair[0], src = pair[1];
+    const i = src.indexOf('function hostMatches');
+    assert.ok(i > -1, name + ': مفيش hostMatches');
+    const end = src.indexOf('\n  }', i);
+    const body = src.slice(i, end > -1 ? end : src.length);
+    assert.ok(!/editDistance/.test(body), name + ': لسه فيه تسامح أحرف جوه مطابقة الدومين!');
+  }
+});
+
+test('v12117: بوابة serp حدودية — substring الغبي مات', () => {
+  assert.match(serp, /const dRe = new RegExp/, 'البوابة لسه substring ساذج');
+  assert.ok(!/if \(d && txt\.includes\(d\)\) \{ return true; \}/.test(serp), 'لازم يختفي السطر القديم');
+});
+
+test('v12117: بوابة الـai-text في queue حدودية كمان', () => {
+  assert.match(queue, /const bounded = \(s\) => \{/, 'مفيش دالة الحدود في recordResult');
+  assert.match(queue, /domHit = bounded\(dom\)/, 'domHit لسه بيستخدم includes');
+});
 
 /* -------- v1.21.16 — وضع هادي بالكامل + AI مضمون -------- */
 

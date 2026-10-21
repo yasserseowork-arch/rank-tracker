@@ -68,22 +68,29 @@ export function domainLabel(host) {
 }
 
 export function hostMatches(urlHost, targetDomain) {
+  return hostMatchesStrict(urlHost, targetDomain);
+}
+
+
+/**
+ * v1.21.17 — الدقة قبل أي تسامح: الترتيب بيتسجّل لمالك الدومين الحصري فقط.
+ * لا مسافة تحرير ولا تقارب حروف: nike.com ≠ mike.com و myshop.com ≠ myshop.co
+ * (دومين تاني = متجر تاني حتى لو الاسم واحد). المسموح: تطابق كامل، سوبدومين
+ * نضيف تحت نفس الدومين (m. / www. / أي.سوب)، والنطاق القابل للتسجيل الكامل
+ * بنفس الـTLD. الغلط الإملائي في إعداداتك إنت اللي بتصلحه — مش على حساب نسب
+ * متجر منافس لموقعك.
+ */
+function hostMatchesStrict(urlHost, targetDomain) {
   const target = normalizeHost(targetDomain);
   if (!target) { return false; }
   const host = normalizeHost(urlHost);
   if (!host) { return false; }
-  // المستخدم يكتب الدومين بدون https وأحياناً بدون TLD كامل: نتسامح
   if (!target.includes('.')) {
-    const label = domainLabel(host);
-    return label === target || (label.length >= 6 && editDistance(label, target) <= 2);
+    return domainLabel(host) === target;
   }
   if (host === target) { return true; }
   if (host.endsWith('.' + target)) { return true; }
   if (registrable(host) === registrable(target)) { return true; }
-  // تسامح مع لخبطة حرف/حرفين في الدومين المكتوب بالإعدادات
-  const a = domainLabel(host);
-  const b = domainLabel(target);
-  if (a.length >= 6 && b.length >= 6 && editDistance(a, b) <= 2) { return true; }
   return false;
 }
 
