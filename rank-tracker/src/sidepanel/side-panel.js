@@ -450,7 +450,7 @@ async function makeXlsx(silent) {
     if (!silent) { alert(t('copyEmpty')); }
     return;
   }
-  const rows = [[t('thKeyword'), t('thPosition'), 'AI', 'محلي', 'URL', t('thTime')]];
+  const rows = [[t('thKeyword'), t('thPosition'), 'AI', t('thLocal'), 'URL', t('thTime')]]; // v1.21.12: «محلي» اتترجمت في الإنجليزي
   entries.forEach((e) => {
     const r = e.result || {};
     rows.push([
@@ -489,14 +489,16 @@ async function exportCsv() {
 }
 
 async function copyTsv() {
-  const entries = exportEntriesInUserOrder();
-  const hasData = entries.some((e) => e.result);
-  if (!entries.length || !hasData) { alert(t('copyEmpty')); return; }
+  // v1.21.12 (طلب المستخدم): النسخ للشيت بياخد الكلمات اللي اتفحصت فعلًا بس —
+  // لسه الرن في الكلمة الـ20 من 40؟ دول العشرين يروحوا، مش 40 سطر منهم 20 «—» فارغة.
+  // «مش موجودة» بعد الفحص لسه بتتنسخ بـ«—» (دي نتيجة محسومة، مش كلمة مستنية)
+  const entries = exportEntriesInUserOrder().filter((e) => e.result);
+  if (!entries.length) { alert(t('copyEmpty')); return; }
   const rows = entries.map((e) => [e.keyword, posCellForExport(e.result)]);
   const tsv = SRT.csv.toTsv(rows);
   try {
     await navigator.clipboard.writeText(tsv);
-    alert(t('copyDone'));
+    alert(t('copyDone').replace('{n}', String(entries.length)));
   } catch (_) {
     // fallback: textarea مؤقت — ولو هو كمان فشل نقول بوضوح بدل ما نكذب «اتنسخ»
     let ok = false;
@@ -508,7 +510,7 @@ async function copyTsv() {
       ok = document.execCommand('copy');
       ta.remove();
     } catch (__) { ok = false; }
-    alert(ok ? t('copyDone') : t('copyFail'));
+    alert(ok ? t('copyDone').replace('{n}', String(entries.length)) : t('copyFail'));
   }
 }
 
@@ -660,7 +662,8 @@ async function main() {
       snapshot = Object.assign({}, snapshot, message);
       maybeAutoXlsx(message.run, snapshot.config);
       renderAll();
-      // 🔄 v1.21.9: شرايط الواجهة اتشالت — التقرير والتقدير في لوج الخادم (LOG) كفاية    } else if (message.type === C.MSG.LOG) {
+      // 🔄 v1.21.9: شرايط الواجهة اتشالت — التقرير والتقدير في لوج الخادم (LOG) كفاية
+    } else if (message.type === C.MSG.LOG) {
       appendLog(message);
     }
   });

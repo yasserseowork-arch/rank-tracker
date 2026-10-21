@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.11');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.11'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.11'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.11\]/m);
+  assert.equal(man.version, '1.21.12');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.12'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.12'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.12\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1117,4 +1117,30 @@ test('v12111: الأفياتار فوق البوب‌أب ويطير بقوس ل
   assert.match(css11, /\.modal-avatar \{/, 'ستايل الأفياتار الكبير مش موجود');
   assert.match(css11, /\.modal-card \{[\s\S]*?--gold-soft/, 'كرت البوب‌أب لسه مالابسش الهوية');
   assert.ok(!/#b91c1c|#43140a|#fecaca/.test(css11), 'لون التحذير الأحمر القديم رجع');
+});
+
+/* -------- v1.21.12 — النسخ للشيت للمفحوص بس + ترميم مستمع البث -------- */
+
+test('v12112: نسخ للشيت بياخد اللي له نتيجة فعلًا — وعداد سطور في الرسالة', () => {
+  const fn = panel.slice(panel.indexOf('async function copyTsv'));
+  const fnBody = fn.slice(0, fn.indexOf('\n}', 200) + 2);
+  assert.match(fnBody, /exportEntriesInUserOrder\(\)\.filter\(\(e\) => e\.result\)/, 'الفيلتر مش موجود — النسخ لسه بيلف كل القائمة');
+  assert.ok(!/hasData/.test(fnBody), 'hasData القديم لسه بياكد على الفراغات');
+  assert.match(fnBody, /t\('copyEmpty'\)/, 'رسالة الفاضي اتشالت');
+  assert.ok((panel.match(/t\('copyDone'\)\.replace\('\{n\}', String\(entries\.length\)\)/g) || []).length === 2, 'عداد السطور مش في المسارين (clipboard + fallback)');
+  const i18 = read('src/lib/i18n-ui.js');
+  assert.match(i18, /copyDone: 'اتنسخ \{n\} سطر/, 'العداد مش في العربي');
+  assert.match(i18, /copyDone: 'Copied \{n\} rows/, 'العداد مش في الإنجليزي');
+  assert.match(i18, /thLocal: 'Local',/, 'عنوان «محلي» لسه عربي متقسّر في الإنجليزي');
+  assert.ok(!/'محلي', 'URL'/.test(panel), 'عنوان الشيت hardcoded تاني');
+  // XLSX والـCSV والتصدير الكامل فضلوا بكل الصفوف المحاذاة — الفيلتر للنسخة اليدوية بس
+  const xlsxAt = panel.indexOf('function resultRowsForExport');
+  assert.ok(xlsxAt === -1 || !/\.filter\(\(e\) => e\.result\)/.test(panel.slice(0, panel.indexOf('async function copyTsv'))), 'الفيلتر تسرّل لدوال التصدير التانية');
+});
+
+test('v12112: مستمع البث سليم — LOG بيوصل appendLog جوه فرع لوحيده', () => {
+  assert.match(panel, /\n    \} else if \(message\.type === C\.MSG\.LOG\) \{/, 'سطر else-if لسه مدفون في تعليق — السجل الحي بيموت');
+  assert.ok(!/كفاية[^\n]*\} else if/.test(panel), 'التعليق بيلتهم السطر تاني');
+  const at = panel.indexOf('} else if (message.type === C.MSG.LOG)');
+  assert.ok(at > -1 && panel.slice(at, at + 90).indexOf('appendLog') > -1, 'appendLog مش في فرع LOG');
 });
