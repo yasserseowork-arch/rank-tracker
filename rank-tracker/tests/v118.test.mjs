@@ -1109,7 +1109,7 @@ test('v12111: الأفياتار فوق البوب‌أب ويطير بقوس ل
   assert.match(pnlHtml11, /data-i18n="warnText">[^<]{20,140}</, 'نص التنبيه مش مختصر (20-140 حرف)');
   assert.ok(fs.existsSync(join(root, 'src/sidepanel/avatar.jpg')), 'ملف الصورة مش في باكدج');
   assert.match(panel, /warn-fly/, 'الفلاي كلون مش بيتعمل');
-  assert.match(panel, /prefers-reduced-motion/, 'احترار تقليل الحركة مش محترمى');
+  assert.match(panel, /prefers-reduced-motion/, 'خيار تقليل الحركة مش محترمى');
   assert.match(panel, /querySelector\('\.brand-avatar'\)/, 'هدف الهيدر مش محدد');
   assert.match(panel, /slot\.style\.visibility = ''/, 'الهبوط مابيرجّعش الأفياتار الأصلي');
   assert.match(panel, /setTimeout\(\(\) => \{ try \{ if \(document\.body\.contains\(clone\)\)/, 'حرس الـcleanup لو الحركة اتقطعت مش موجود');
