@@ -5,7 +5,7 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const K = {
   CONFIG: 'srt.config',
@@ -63,7 +63,7 @@ export const DEFAULT_CONFIG = {
   mapsCheck: true,              // فحص النتائج المحلية (خرائط) لكل كلمة — مثل السيناريو
   autoXlsx: true,               // تنزيل شيت Excel بالترتيب تلقائياً عند انتهاء الجولة
   // التبويبات
-  foregroundTab: true,
+  foregroundTab: false,          // 🕊 v1.21.16 (طلب المستخدم): التبويبات بتفتح في الخلفية بهدوة — النافذة ماتبترفعش نفسها؛ التنشيط بيحصل لحظة ما عينه مطلوبة بس (شاشة التحدي)
   reuseTab: true,               // تبويب واحد دائم + تغيير الكلمة من صندوق البحث
   // متفرقات
   verbose: true,
@@ -339,6 +339,12 @@ export async function migrate() {
     const patchCfg = {};
     if (parseInt(cfg.cooldownMs, 10) === 45000) { patchCfg.cooldownMs = 30000; }
     if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
+  }
+  if (version < 7) {
+    // 🕊 v1.21.16: الوضع الهادي بقى هو_norm — الافتراضي القديم (true) المحفوظ بيتقلب
+    // لـfalse. مفيش حاجة تانية في الإعدادات بتتحرك، والمسار الآلي للسكرول زي ما هو
+    const cfg7 = await getConfig();
+    if (cfg7.foregroundTab === true) { await setConfig({ foregroundTab: false }); }
   }
   if (version < 5) {
     // صبر المراكز الغويط: اللي راضي بقيم 1.19 الافتراضية ياخد القيم الجديدة؛

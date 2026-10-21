@@ -594,7 +594,7 @@ export class QueueEngine {
           }
           if (cleared === 'tab-closed') {
             let re = null;
-            try { re = await tabctl.open(url, Object.assign({}, cfg, { foregroundTab: true })); } catch (_) {}
+            try { re = await tabctl.open(url, cfg); } catch (_) {} // 🕊 1.21.16: هادي — التحدي هيتكشف ويتعرض لوحده
             if (!re) {
               await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — التاب اتقفل ومفيش بديل؛ سُجلت كغير موجود`);
               return this.recordExhausted(kw, cfg);
@@ -849,6 +849,12 @@ export class QueueEngine {
   async handleCaptcha(tabId, kw, cfg, signal, allowPause = false) {
     const since = Date.now();
     await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since } });
+    // 👁 v1.21.16: شاشة التحدي هي اللحظة اللي محتاج فيها الرندر قدام (البستر يضغط
+    // والصوت يشتغل) — بننشّط التاب مرة واحدة لكل تاب في الرن، وبعدين سايبينه في حاله
+    if (this.captchaRevealedTab !== tabId) {
+      this.captchaRevealedTab = tabId;
+      try { await tabctl.focus(tabId); } catch (_) {}
+    }
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
     this.broadcast();
 
@@ -946,8 +952,8 @@ export class QueueEngine {
     return fresh || null;
   }
 
-  /** 🧻v1.20.2: الاستشفاء الموحد — تاب جديد بنفس الكلمة في الفوكس، قفل القديم،
-   *  كنس الفائض، ومسح بيانات كامل. بيتستخدم من: fallback الكابتشا، ومسار 403/429. */
+  /** 🧻v1.20.2 (هدوء 1.21.16): الاستشفاء الموحد — مسح كامل أولًا، تاب جديد بنفس
+   *  الكلمة في الخلفية، قفل القديم، كنس الفائض. بيتستخدم من: fallback الكابتشا، ومسار 403/429. */
   async openFreshTab(kw, cfg, url, oldTabId) {
     // 🕊 v1.21.15 (طلب المستخدم — قلة 403): الترتيب القديم كان «بحث 100 نتيجة
     // على أول طلب بعد مسح الكوكيز خالص» — بصمة بوت صريحة بتستجلب 403 ورا بعضه.
@@ -959,7 +965,7 @@ export class QueueEngine {
     } catch (_) {}
     let nextTab = null;
     try {
-      nextTab = await tabctl.open('https://www.google.com/', Object.assign({}, cfg, { foregroundTab: true }));
+      nextTab = await tabctl.open('https://www.google.com/', cfg); // 🕊 1.21.16: في الخلفية — مفيش سحبة نافذة
     } catch (_) {}
     if (!nextTab) { return null; }
     try { await tabctl.waitForComplete(nextTab.id, 15000); } catch (_) {}
@@ -1040,6 +1046,11 @@ export class QueueEngine {
    */
   async waitCaptchaCleared(tabId, kw, signal) {
     await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since: Date.now() } });
+    // 👁 v1.21.16: تاب جديد طلع في نص الصبر؟ يتعرّض مرة واحدة هو كمان
+    if (this.captchaRevealedTab !== tabId) {
+      this.captchaRevealedTab = tabId;
+      try { await tabctl.focus(tabId); } catch (_) {}
+    }
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
     this.broadcast();
     let waited = 0;
@@ -1201,7 +1212,7 @@ export class QueueEngine {
     try {
       const all = await chrome.tabs.query({});
       tab = all.find((t) => (t.url || '').indexOf('docs.google.com/spreadsheets') !== -1);
-      if (!tab) { tab = await tabctl.open(cfg.sheetUrl, { foregroundTab: true }); }
+      if (!tab) { tab = await tabctl.open(cfg.sheetUrl, cfg); } // 🕊 1.21.16: الكتابة في الشيت مابتسحبش تركيز
     } catch (_) { return { ok: false, reason: 'tab-error' }; }
     await tabctl.waitForComplete(tab.id, C.LIMITS.TAB_LOAD_TIMEOUT_MS);
     await scheduler.wait(4000, 'sheet-settle');
@@ -1293,6 +1304,7 @@ export class QueueEngine {
       await state.appendRunStat(stat);
       this.captchaSeenThisRun = 0;
       this.staleWipesThisRun = 0; // v1.21.8: عدادات الرن بتترمس مع بداية رن جديد
+      this.captchaRevealedTab = null; // v1.21.16: و«التاب المعروض» كمان — كل رن يبدأ نضيف
       const perSec = stat.processed ? Math.round((dur / stat.processed) / 100) / 10 : 0;
       await logger.info('queue', `📊 تقرير الرن: ${stat.processed} كلمة في ${(Math.round(dur / 600) / 10)} دقيقة (${perSec}ث/كلمة) — كابتشا: ${stat.captchaSeen} (اتحلّت أوتوماتيك ${stat.captchaSolves}) — مراجعة: ${stat.review}${stat.coverageAvg != null ? ' — متوسط التغطية: ' + stat.coverageAvg + '%' : ''}`);
     } catch (_) {}

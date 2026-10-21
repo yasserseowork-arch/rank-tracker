@@ -161,7 +161,7 @@ test('كابتشا v1.18.3: حلّ؟ مفيش مسح مستعجل — نتحرى
 
 test('الإعدادات v1.18.3: المحاولتين إجباريًا + المسح بقى كل 8 مع الاستراحة', () => {
   assert.match(st, /clearEveryN:\s*8,/, 'ديفولت المسح لسه 10');
-  assert.match(st, /export const SCHEMA_VERSION = 6;/, 'مفيش نسخة ميجريشن جديدة');
+  assert.match(st, /export const SCHEMA_VERSION = 7;/, 'مفيش نسخة ميجريشن جديدة (1.21.16)');
   assert.match(st, /att > 2\) \{ patchCfg\.captchaMaxAttempts = 2; \}/, 'مفيش إجبار المحاولتين على الإعدادات القديمة');
   assert.match(st, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'المسح القديم (10) مش بيتحوّل للـ8');
 });
@@ -202,7 +202,7 @@ test('تاب واحد مضمون v1.18.4: الأداة بتتبع تبانبها
   // التاب الجديد بعد كابتشا بيتفتح foreground مرة واحدة (الباقي في الخلفية زي ما طلب)
   // 1.20.2: fallback والمحاولة الأخيرة اتحدوا في openFreshTab — بقا فوكس في مكانين بس:
   // الهيلبر نفسه + إعادة فتح التاب في وضع الصبر (مقصود: يمكن الكابتشا محتاجة لمسة إيد)
-  assert.equal((queue.match(/Object\.assign\(\{\}, cfg, \{ foregroundTab: true \}\)/g) || []).length, 2, 'الفوكس متوقع في openFreshTab + الصبر بس');
+  assert.equal((queue.match(/foregroundTab: true/g) || []).length, 0, 'v1.21.16: صفر فرض فوكس في المحرك — العرض بس عند شاشة التحدي');
 });
 
 test('ضد الكابتشا من المنبع v1.18.4: مفيش num=100 ولا pws=0 في رابط البحث', () => {
@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.15');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.15'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.15'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.15\]/m);
+  assert.equal(man.version, '1.21.16');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.16'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.16'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.16\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1219,7 +1219,7 @@ test('v12115: القفل اتلغى — لمس المستخدم بيلغي أي 
 
 test('v12115: المسار البدري بيطير على طول — ميزانية AI قصيرة عند اللقية', () => {
   assert.match(serp, /async function finalizeAi\(aiSnap, budgetMs\)/, 'الميزانية ما اتمررتش للدالة');
-  assert.match(serp, /waitForAiRoot\(budgetMs \|\| 5000\)/, 'الدالة مابتستخدميش الميزانية — والـ5000 للـfull لسه الأساس');
+  assert.match(serp, /let budget = budgetMs \|\| 5000;/, 'الدالة مابتستخدميش الميزانية — والـ5000 للـfull لسه الأساس');
   assert.match(serp, /finalizeAi\(early\.ai, 1200\)/, 'خروج أول شاشة لسه بمستنى الـ5 ثانية');
   assert.match(serp, /const aiF = await finalizeAi\(ai, 1200\);/, 'خروج النزول لسه بمستنى الـ5 ثانية');
   // حكم عدم الوجود الكامل ما اتقصّرش
@@ -1250,3 +1250,30 @@ test('v12115: الزرار «إعادة ضبط» — نفس السلوك الش�
   assert.match(seg, /reason: 'running'/, 'حرس الرن الشغال اتشال — لأ');
 });
 function rt13b() { return read('src/background/core/router.js'); }
+
+/* -------- v1.21.16 — وضع هادي بالكامل + AI مضمون -------- */
+
+test('v12116: التبويبات بتفتح في الخلفية — والتنشيط بس شاشة التحدي، مرة واحدة لكل تاب', () => {
+  assert.match(st, /foregroundTab: false,/, 'الافتراضي الجديد مش متسجل في DEFAULT_CONFIG');
+  assert.ok(!/foregroundTab: true/.test(queue), 'لسه فيه فرض فوكس في المحرك');
+  assert.ok((queue.match(/if \(this\.captchaRevealedTab !== tabId\) \{/g) || []).length === 2, 'حارس العرض مش في handleCaptcha + waitCaptchaCleared');
+  assert.ok((queue.match(/await tabctl\.focus\(tabId\); \} catch \(_\) \{\}/g) || []).length >= 2, 'فيه موضع من الاتنين مالبيضلش التنشيط');
+  assert.match(queue, /this\.captchaRevealedTab = null;/, 'الحارس ما بيتصفرش مع بداية رن جديد — التاب الثاني هيتسحب ولا لأ؟');
+  assert.match(queue, /tabctl\.open\('https:\/\/www\.google\.com\/', cfg\)/, 'تاب التبخين مش بيحترم إعداد الخلفية');
+  assert.match(queue, /tabctl\.open\(cfg\.sheetUrl, cfg\)/, 'تاب الشيت لسه مفروض عليه الفوكس');
+});
+
+test('v12116: migration لـ schema 7 — المستخدم القديم بيتحوّل للوضع الهادي', () => {
+  assert.match(st, /export const SCHEMA_VERSION = 7;/, 'رقم السكيما مارتفعش');
+  assert.match(st, /if \(version < 7\) \{/, 'البلوك الجديد مش في الـmigrate');
+  assert.match(st, /cfg7\.foregroundTab === true.*setConfig\(\{ foregroundTab: false \}\)/, 'الترقية مش بتتدخّل صح');
+});
+
+test('v12116: بلوك AI مترسّمش بس بوادره باينة؟ الميزانية الكاملة ترجع — دقة قبل سرعة', () => {
+  assert.match(serp, /let budget = budgetMs \|\| 5000;/, 'الميزانية المتغيرة مش معرّفة');
+  assert.match(serp, /if \(budgetMs && !aiRoot\(\) && aiHint\(\)\) \{ budget = 5000; \}/, 'منطق البوادر مش موجود — ممكن نفوّت بلوك بيت رسم');
+  assert.match(serp, /await waitForAiRoot\(budget\)/, 'الدالة مابيتستخدميش الميزانية المحسوبة');
+  // دبابيس 1.21.15 لسه محفوظة: الخروج البدري بيطلب ميزانية قصيرة — والتوسيع داخل الدالة
+  assert.match(serp, /finalizeAi\(early\.ai, 1200\)/, 'الميزانية البدرية اتشالت من مسار أول شاشة');
+});
+
