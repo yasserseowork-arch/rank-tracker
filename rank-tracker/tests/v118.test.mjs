@@ -183,15 +183,15 @@ test('اللوحة v1.18.3: عدّاد كلمات حقيقي + اشعار الـ
 const urlkit = read('src/background/core/urlkit.js');
 
 test('ضد الدوامة v1.18.4: تبريد إلزامي قبل إعادة الكابتشا — ومفيش لمس لبيانات غير بعد راحة', () => {
-  assert.match(queue, /const restSec = 8 \+ captchaClears \* 4;/, 'مفيش تبريد قصير متصاعد قبل الإعادة');
-  assert.match(queue, /await sleep\(restSec \* 1000, signal\)/, 'التبريد مش بيتنفذ بsleep قابل للإلغاء');
+  assert.match(queue, /const restMs = 500 \+ captchaClears \* 250;/, 'مفيش نَفَس متصاعد تحت الثانية قبل الإعادة (1.21.23: التبريد الطويل اتلغى بطلب المستخدم)');
+  assert.match(queue, /await sleep\(restMs, signal\)/, 'النَفَس مش بيتنفذ بsleep قابل للإلغاء');
   // v1.20.2: الترتيب اتلمّ في openFreshTab: فتح الجديد ← قفل القديم ← sweep ← المسح
   const fb = queue.slice(queue.indexOf('async openFreshTab'), queue.indexOf('ضمان تاب واحد'));
   assert.ok(fb.indexOf('tabctl.open') < fb.indexOf('tabctl.close'), 'لازم الجديد يفتح قبل ما القديم يتقفل');
   assert.ok(fb.indexOf('browsingData.remove') < fb.indexOf('tabctl.open'), 'v1.21.15: المسح بقى أول حاجة قبل ما أي تاب يتفتح (تسخين على نضافة)');
   // وفرع الكابتشا لسه يبرد الأول قبل أي استشفاء
-  const cap = queue.slice(queue.indexOf('const restSec'), queue.indexOf('continue; // نفس الكلمة من الأول في التبويب الجديد'));
-  assert.ok(cap.indexOf('await sleep(restSec * 1000, signal)') > -1 && cap.indexOf('openFreshTab') > cap.indexOf('await sleep'), 'المسح بقى بيسبق التبريد');
+  const cap = queue.slice(queue.indexOf('const restMs'), queue.indexOf('continue; // نفس الكلمة من الأول في التبويب الجديد'));
+  assert.ok(cap.indexOf('await sleep(restMs, signal);') > -1 && cap.indexOf('openFreshTab') > cap.indexOf('await sleep'), 'المسح بقى بيسبق النَفَس');
 });
 
 test('تاب واحد مضمون v1.18.4: الأداة بتتبع تبانبها وتكنس الفائض (حتى بعد إعادة التشغيل)', () => {
@@ -299,7 +299,7 @@ test('v1.18.6: الباستر مابقاش انتظار أصم — 18 ثانية
 
 test('v1.18.6: التبريداتShort والهدئات اتقلّصت زي ما طلبت + عنوان «تصدير النتائج»', () => {
   assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'التهدئة بعد الحل لسه طويلة');
-  assert.match(queue, /const restSec = 8 \+ captchaClears \* 4;/, 'التبريد قبل الإعادة لسه 90 ثانية');
+  assert.ok(!/const restSec/.test(queue), 'التبريد الطويل رجع — ملغى من 1.21.23 بطلب المستخدم');
   assert.match(i18nUi, /resTitle: 'تصدير النتائج',/, 'عنوان الجزء مش على مقاس 1.21.11 في القاموس العربي');
   const html = io_read('src/sidepanel/side-panel.html');
   assert.match(html, /<summary data-i18n="resTitle">تصدير النتائج<\/summary>/, 'عنوان HTML في اللوحة لسه قديم');
@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.22');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.22'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.22'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.22\]/m);
+  assert.equal(man.version, '1.21.23');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.23'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.23'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.23\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -821,7 +821,7 @@ test('v1211: المكرر في نفس الرن — نسخة ذكية من غير
 /* ---------------- v1.21.2 — لا تاب جديد على سلام + التحدي البايّت ليه ريلود ---- */
 
 test('v1212: بعد التبريد — نظرة على الصفحة نفسها قبل المسح والتاب الجديد', () => {
-  const gap = queue.slice(queue.indexOf('await sleep(restSec * 1000, signal);'), queue.indexOf('const nextTab = await this.openFreshTab'));
+  const gap = queue.slice(queue.indexOf('await sleep(restMs, signal);'), queue.indexOf('const nextTab = await this.openFreshTab'));
   assert.ok(gap.length > 50, 'مفيش فجوة تبريد→تاب جديد؟');
   assert.match(gap, /softRescueAfterCaptcha\(tab\.id, kw, cfg, signal, solveStartedAt\)/,
     'الصفحة ماتتبعتش بعد التبريد قبل ما نضرب المسح — ده بيولد تاب جديد على SERP سليم');
@@ -1249,6 +1249,23 @@ test('v12115: الزرار «إعادة ضبط» — نفس السلوك الش�
 });
 function rt13b() { return read('src/background/core/router.js'); }
 
+/* -------- v1.21.23 — ست ثواني أو المحاولة الأولى: مسح فوري بلا تبريد -------- */
+test('v12123: سباق الـ6 ثواني حوالين المحلّل — وبلا شبح وراه', () => {
+  const hc = queue.slice(queue.indexOf('async handleCaptcha'), queue.indexOf('async collectAfterSolve'));
+  assert.match(hc, /Promise\.race\(\[\s*this\.orchestrator\.solve\(tabId, cfg, ctrl\.signal\),/, 'solve مش في سباق ست ثواني');
+  assert.match(hc, /setTimeout\(\(\) => \{ res\(null\); \}, 6000\)/, 'المهلة مش 6000');
+  assert.match(hc, /try \{ ctrl\.abort\(\); \} catch \(_\) \{\} \/\/ لو إحنا اللي كسبنا/, 'المنسّق ما بيتوقفش نظيف بعد السباق');
+  assert.ok(!/result = await this\.orchestrator\.solve\(tabId, cfg, signal\);/.test(hc), 'الـawait العاري رجع — بينومنا لحد 35 ثانية');
+  assert.match(hc, /return 'stale-expired'; \/\/ نفس إشارة المسح الموحد/, 'خسارة السباق ما بتسلّمش للمسح الموحد');
+});
+
+test('v12123: التبريدات اتلغت والنَفَس تحت الثانية — بس تهدئة ما بعد الحل المقدسة ساكنة', () => {
+  assert.match(queue, /const restMs = 500 \+ captchaClears \* 250;/, 'نَفَس ما بعد الفشل مش على مقاس 1.21.23');
+  assert.ok(!/restSec \* 1000/.test(queue), 'متغير التبريد الطويل لسه عايش في أي حتة');
+  assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة ما بعد الحل اتلمست — «عمرنا ما نرجع فورًا بعد حل» لسه سارية');
+  assert.match(queue, /const cool = 10000 \+ Math\.floor\(Math\.random\(\) \* 8000\);/, 'تهدئة الصبر بعد الـcleared اتلمست هي كمان — ممنوع');
+});
+
 /* -------- v1.21.22 — سقف الركن الرحيم: 5 دقايق ← ⚠️ مراجعة ← الرن يكمل -------- */
 test('v12122: الصبر ليه أرض — park بعد 300 ثانية في اللوب وكل النداءات موصلة', () => {
   const wcc = queue.slice(queue.indexOf('async waitCaptchaCleared'), queue.indexOf('async tabChallengeLooksStale'));
@@ -1304,7 +1321,7 @@ test('v12120: الدفعات الخلفية والبحث المتبرمج بقو
   assert.match(serp, /await D\.sleep\(1200\);/, 'سكتة إعادة المحاولة لسه 2500');
   assert.match(serp, /await D\.humanSleep\(550, 250\);/, 'فاصل الدوران الفاضي لسه 900');
   assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة ما بعد الحل اتغيرت — ممنوع');
-  assert.match(queue, /const restSec = 8 \+ captchaClears \* 4;/, 'تبريد دورات الكابتشا اتلمس — ممنوع');
+  assert.ok(!/const restSec = 8 \+ captchaClears/.test(queue), 'تبريد 12/16/20 رجع — اتلغى بطلب المستخدم في 1.21.23');
 });
 
 /* -------- v1.21.19 — بانر «كابتشا طوارئ» طار، والشريط السفلي ملك -------- */

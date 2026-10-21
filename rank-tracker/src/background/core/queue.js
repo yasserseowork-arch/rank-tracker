@@ -38,7 +38,7 @@ export class QueueEngine {
    * يوقظه alarm ويستأنف الحلقة من currentIndex المحفوظة.
    * v1.21.3: النبض بقى كل 30 ثانية (كان دقيقتين) — مش استئناف أسرع وخلاص:
    * الـ alarm الحي نفسه بيخلي الـWorker صاحي طول الرن، ففترات النوم اللي كانت
-   * بتبلّع 12-20 ثانية تبريد «في اللامعقول» (المستخدم ماسح التاب وقافل اللوحة)
+   * مفيش تبريد خالص من 1.21.23 (المستخدم ماسح التاب وقافل اللوحة)
    * اختفت تقريبًا — وده مصدر إحساس «مش استيبل» الأول.
    */
   armWatchdog() {
@@ -642,12 +642,12 @@ export class QueueEngine {
           continue; // ونعيد نفس الكلمة تاني هنا، مش آخر الجولة
         }
         captchaClears += 1;
-        // 😴 تبريد قصير قبل أي إعادة: صفحة /sorry/ بتحتاج وقت بسيط يهدى فيه العدّاد،
-        // بس من غير ما نطوّلك الاستنى — 12 ثانية ثم 16 ثم 20 (كل دورة أطول شوية بس).
-        const restSec = 8 + captchaClears * 4; // 12 / 16 / 20 ثانية
-        await this.notify('🧩 كابتشا', `تبريد ${restSec} ثانية، وبعدها مسح بيانات وإعادة "${kw.keyword}" في تاب واحد نظيف (${captchaClears}/${maxClears})`);
-        await logger.warn('queue', `🧩 كابتشا — فشل الحل التلقائي: تبريد ${restSec}ث ثم مسح بيانات + تاب جديد (${captchaClears}/${maxClears})`);
-        await sleep(restSec * 1000, signal);
+        // ⚡ v1.21.23 (طلب المستخدم): التبريدات الطويلة اتلغت — التسخين على صفحة جوجل الرئيسية
+        // جوه المسح نفسه (1.21.15) هو الضمان الحقيقي ضد صفعات /sorry/، ففاضل بس نَفَس تحت
+        const restMs = 500 + captchaClears * 250; // 0.75 / 1.0 / 1.25 ثانية — ستقرار إغلاق التاب قبل فتح اللي بعده
+        await this.notify('🧩 كابتشا', `مسح فوري وإعادة "${kw.keyword}" في تاب واحد نظيف (${captchaClears}/${maxClears})`);
+        await logger.warn('queue', `🧩 كابتشا — فشل الحل التلقائي: مسح بيانات + تاب جديد حالًا (${captchaClears}/${maxClears})`);
+        await sleep(restMs, signal);
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
         // 👀 v1.21.2: قبل المسح والتاب الجديد — نظرة تانية على الصفحة نفسها: «الآلة استهلكت
         // محاولاتها» مش معناه إن التحدي لسه موجود. ضغطة الـorange-man ممكن تكون جابت أكلها
@@ -918,12 +918,31 @@ export class QueueEngine {
     }, 1200);
 
     let result;
+    // ⚡ v1.21.23 (طلب المستخدم الحرفي: «لو ماتحلتش في غضون 6 ثواني أو بعد أول محاولة —
+    // مسح بيانات وفورًا نفس الكلمة»): المحلّل لسه بيتشغّل بنفس توقيتاته المقدسة، بس إحنا
+    // مابنستناش دوره التاني ولا سكتاته — مهلة 6 ثواني، وبعدها بنوقفه بأدب (abort موصول
+    // عنده مسارات النظافة) وبنسلّم للمسح الموحد. لو حلّ قبل المهلة؟ مجرى زي الأول بالظبط.
+    const ctrl = new AbortController();
+    const relay = () => { try { ctrl.abort(); } catch (_) {} };
+    if (signal) { if (signal.aborted) { relay(); } else { signal.addEventListener('abort', relay, { once: true }); } }
     try {
-      result = await this.orchestrator.solve(tabId, cfg, signal);
+      result = await Promise.race([
+        this.orchestrator.solve(tabId, cfg, ctrl.signal),
+        new Promise((res) => { setTimeout(() => { res(null); }, 6000); }),
+      ]);
     } finally {
+      if (signal) { try { signal.removeEventListener('abort', relay); } catch (_) {} }
+      try { ctrl.abort(); } catch (_) {} // لو إحنا اللي كسبنا — المنسّق يقفل حاله حالًا، مفيش شبح ورا التاب
       clearInterval(attemptsTicker);
     }
-    if (signal && signal.aborted) { return 'paused'; }
+    if (result === null) {
+      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+      await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+      this.broadcast();
+      await logger.warn('queue', `⚡ "${kw.keyword}" — ست ثواني من غير حلّ: صفر تبريد، مسح بيانات وتاب جديد بنفس الكلمة حالًا`);
+      return 'stale-expired'; // نفس إشارة المسح الموحد (سقف 6 جولات/رن بيراعي الجهاز)
+    }
+    if (result.outcome === 'aborted' || (signal && signal.aborted)) { return 'paused'; }
 
     if (result.outcome === 'solved') {
       const run = await state.getRun();
