@@ -109,6 +109,12 @@ export async function getConfig() {
   return Object.assign({}, DEFAULT_CONFIG, stored || {});
 }
 
+/** 🔄 v1.21.9: رجوع لإعدادات المصنع — الكلمات والنتائج بره الحساب تمامًا */
+export async function resetConfig() {
+  await local.set(K.CONFIG, Object.assign({}, DEFAULT_CONFIG));
+  return DEFAULT_CONFIG;
+}
+
 export async function setConfig(patch) {
   const current = await getConfig();
   const next = Object.assign({}, current, patch || {});

@@ -27,6 +27,7 @@
     QUEUE_STOP: 'srt/queue/stop',
     PREFLIGHT: 'srt/preflight',
     QUEUE_REVIEW: 'srt/queue/review',
+    CONFIG_RESET: 'srt/config/reset',
 
     // الكلمات المفتاحية
     KEYWORDS_SET: 'srt/keywords/set',
@@ -151,7 +152,7 @@
     HEARTBEAT_INTERVAL_MS: 20000
   };
 
-  const VERSION = '1.21.8';
+  const VERSION = '1.21.9';
 
   global.SRT_C = { VERSION, MSG, STATUS, SEL, LIMITS };
 })(globalThis);

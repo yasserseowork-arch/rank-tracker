@@ -28,7 +28,7 @@ export function createRouter(engine) {
       C.MSG.QUEUE_START, C.MSG.QUEUE_PAUSE, C.MSG.QUEUE_RESUME, C.MSG.QUEUE_STOP,
       C.MSG.KEYWORDS_SET, C.MSG.KEYWORDS_ADD, C.MSG.KEYWORDS_REMOVE, C.MSG.KEYWORDS_CLEAR,
       C.MSG.RESULTS_CLEAR, C.MSG.SHEETS_WRITE_NOW,
-      C.MSG.PREFLIGHT, C.MSG.QUEUE_REVIEW
+      C.MSG.PREFLIGHT, C.MSG.QUEUE_REVIEW, C.MSG.CONFIG_RESET
     ];
     if (!handled.includes(type)) { return; }
 
@@ -102,6 +102,13 @@ export function createRouter(engine) {
 
           case C.MSG.QUEUE_REVIEW:
             return await engine.manualReview();
+
+          case C.MSG.CONFIG_RESET: {
+            // 🔄 v1.21.9: رجعة المصنع للإعدادات بس — الطابور والنتائج والسجل ما بتتلمسش
+            await state.resetConfig();
+            engine.broadcast();
+            return { ok: true };
+          }
 
           default:
             return { ok: false };

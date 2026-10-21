@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.8');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.8'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.8'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.8\]/m);
+  assert.equal(man.version, '1.21.9');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.9'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.9'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.9\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -651,7 +651,7 @@ test('v1201: مفيش توقيتات دقيقة متكررة — المهلة ق
   const sched = read('src/background/core/scheduler.js');
   assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/,
     'المهلة لسه قيمة ثابتة كل كلمة — بصمة');
-  assert.match(serp, /await D\.humanSleep\(1500, 900\);/, 'فاصل الجلب الخلفي مش على مقاس 1.20.5');
+  assert.match(serp, /await D\.humanSleep\(900, 450\);/, 'فاصل الجلب الخلفي مش على مقاس 1.21.9');
   assert.ok(!/const ms = 10000;/.test(sched), 'القيمة الثابتة لسه موجودة');
 });
 
@@ -704,7 +704,7 @@ test('v1205: التسريع الآمن متقفل بالأرقام — والا�
   const sched = read('src/background/core/scheduler.js');
   assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'المهلة قبل الكلمة مش على مقاس 1.20.5');
   assert.match(sched, /const cold = !!\(context && context\.cold\);/, 'الفصل بين الوضعين مش في الـscheduler؟');
-  assert.match(serp, /await D\.humanSleep\(1500, 900\);/, 'فاصل الدفعات مش متسارع بأمان');
+  assert.match(serp, /await D\.humanSleep\(900, 450\);/, 'فاصل الدفعات اتسارع تحت الحد الآمن؟');
   assert.match(st, /cooldownMs: 30000,/, 'الافتراضي الجديد مش 30 ثانية');
   assert.match(st, /if \(parseInt\(cfg\.cooldownMs, 10\) === 45000\) \{ patchCfg\.cooldownMs = 30000; \}/, 'مفيش ميجريشن من الـ45000 القديم');
   assert.match(queue, /const extra = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تبريد الحرارة لسه 12–21 ثانية');
@@ -863,7 +863,7 @@ test('v1213: watchdog بنبض 30 ثانية + شفاء الصفوف المعل�
 
 test('v1213: ⚡ وضع بارد بإيقاع يدوي — وبأول كابتشا رجوع كامل للإيقاع الآمن', () => {
   assert.match(sched, /const cold = !!\(context && context\.cold\);/, 'الفصل بين الوضعين مش في الـscheduler؟');
-  assert.match(sched, /cold\s*\?\s*1200 \+ Math\.floor\(Math\.random\(\) \* 1200\)/, 'فاصل الوضع البارد اتغير');
+  assert.match(sched, /cold\s*\n?\s*\?\s*700 \+ Math\.floor\(Math\.random\(\) \* 900\)/, 'فاصل الوضع البارد مش على مقاس 1.21.9');
   assert.match(sched, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'الإيقاع الآمن الدافي اتبوظ — ده ممنوع');
   assert.match(queue, /cold: \(this\.captchaHeat \|\| 0\) === 0/, 'النداء مابيحكيش حالة الحرارة');
   // الحرارة بتبرد كلمة بكلمة (قفل سابق لسه شغال) → الوضع البارد بيرجع لوحده بعد العاصفة
@@ -880,16 +880,16 @@ test('v1214: heat==1 بتطفّى بكلمة نضيفة (كانت أبدية) �
   assert.match(queue, /else if \(this\.captchaHeat === 1\) \{/, 'لسه الحرارة على 1 مش بتنزل — الوضع البارد مستحيل ييجي');
   assert.match(queue, /this\.captchaHeat = 0;/, 'التصفير مش مسجل نفسه');
   assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'الإيقاع الدافي اتبوظ — ممنوع');
-  assert.match(sched, /cold\s*\?\s*1200 \+ Math\.floor\(Math\.random\(\) \* 1200\)/, 'البارد مش على 1.2–2.4');
+  assert.match(sched, /cold\s*\n?\s*\?\s*700 \+ Math\.floor\(Math\.random\(\) \* 900\)/, 'البارد مش على 0.7–1.6 (v1.21.9)');
 });
 
 test('v1214: نزول المسح الطويل اتخفّف — من غير لمس توقيتات الكابتشا المقدسة', () => {
-  assert.match(serp, /cfg\.rescanMs \|\| 1100/, 'ريسكان لسه 1800 على الصف المترسم من أول ثانية');
+  assert.match(serp, /cfg\.rescanMs \|\| 800/, 'ريسكان مش على 800 (v1.21.9)');
   assert.match(serp, /cfg\.settleMs \|\| 1100/, 'سجل التثبيت لسه 1800');
   // المتجمد: تهدئة ما بعد الحل، 3.5 ثانية ما بعد السولف، فاصل الدفعات، وستل-الدفعة الطويل
   assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة بعد الحل اتلمست — ممنوع');
   assert.match(queue, /await sleep\(3500, signal\); \/\/ v1\.20\.5/, 'راحة ما بعد السولف اتلمست — ممنوع');
-  assert.match(serp, /await D\.humanSleep\(1500, 900\);/, 'فاصل الدفعات اتلمس — ممنوع');
+  assert.match(serp, /await D\.humanSleep\(900, 450\);/, 'فاصل الدفعات موحد على مقاس 1.21.9 مش أكتر');
   assert.match(serp, /cfg\.batchSettleMs \|\| 5000/, 'ستل الدفعات اتلمس — ممنوع');
 });
 
@@ -975,8 +975,7 @@ test('v1217: بريفلايت وتقدير وقت + ريندر diff خفيف ل�
   assert.match(queue, /const recent = stats\.slice\(-5\)/, 'التقدير مش بمتوسط آخر 5 رنات');
   assert.match(panel, /let lastRenderSig = '';/, 'البصمة مش معرّفة');
   assert.match(panel, /if \(sig === lastRenderSig\) \{ return; \}/, 'الحارس مش راجع');
-  assert.match(panel, /async function loadPreflight\(\)/, 'الشريط مابيتعبّى');
-  assert.match(panel, /etaHint/, 'سطر التقدير مش في اللوحة');
+  assert.ok(!/loadPreflight|etaHint|preflightWarn|runReport/.test(panel), 'شرايط الواجهة لسه عايشة — المستخدم قرر حذفها في 1.21.9');
   const pnlHtml = read('src/sidepanel/side-panel.html');
   assert.match(pnlHtml, /id="btnReview"/, 'الزر مش في الـHTML');
   assert.ok(!/fonts\.googleapis/.test(pnlHtml), 'لينك خط خارجي رجع — CSP بيرميه');
@@ -1002,4 +1001,57 @@ test('v1218: expired بعد ريلودين = تسليم للخطة الاحتي�
   // الثوابت: مفيش windows.create ومفيش توقيتات جديدة لمسار الحل نفسه
   assert.ok(!/chrome\.windows\.create/.test(queue), 'نافذة جديدة — ممنوع');
   assert.match(queue, /await sleep\(4000, signal\);\n        \}/, 'نوم الصبر الأساسي اتبوظ');
+});
+
+/* -------- v1.21.9 — قفزة واحدة بدل السكرول، Cairo محلي، زر الضبط، سرعة آمنة -------- */
+
+test('v1219: مفيش سكرول متقطع قدام المستخدم — قفزة واحدة وربّتة كل 3 دورات', () => {
+  assert.ok(!/window\.scrollBy/.test(serp), 'scrollBy رجع — المنظر ده المستخدم منعه بنصه');
+  assert.match(serp, /let diveStarted = false;/, 'راية القفزة الأولى مش موجودة');
+  assert.match(serp, /let diveNudges = 0;/, 'عداد الربّتة مش موجود');
+  assert.match(serp, /diveNudges % 3 === 0/, 'الربّتة مش كل 3 دورات — إما دوشة أو تغطية ناقصة');
+  assert.ok((serp.match(/window\.scrollTo\(\{ top: document\.body\.scrollHeight/g) || []).length === 2, 'مفروض قفزتان بالظبط: أولى للآخر + ربّتة شرطية');
+  assert.match(serp, /relock\(\);\n\n    \/\/ 3\) حكم/, 'مفيش relock قبل حكم عدم الوجود — المستخدم هيتلسع بمنظر تحت');
+  assert.match(serp, /cfg\.rescanMs \|\| 800/, 'ريسكان مش على 800');
+});
+
+test('v1219: الواجهة اتنظفت — مكان الشرايط زرار إعادة ضبط، والمراجعة سايبها زي ما هي', () => {
+  const pnlHtml = read('src/sidepanel/side-panel.html');
+  assert.ok(!/etaHint|preflightWarn|runReport|eta-hint/.test(pnlHtml), 'شريط من التلاتة رجع للـHTML');
+  assert.match(pnlHtml, /id="btnReset"/, 'زر إعادة الضبط مش في الـHTML');
+  assert.match(pnlHtml, /id="btnReview"/, 'زر المراجعة اتشال بالغلط — كان مطلوب إبقاءه');
+  assert.match(panel, /\$\('btnReset'\)/, 'الزر مش موصول بالـlistener');
+  assert.match(panel, /C\.MSG\.CONFIG_RESET/, 'الزر مابيبعتش الرسالة');
+  assert.match(panel, /confirm\(/, 'ضبط المصنع من غير تأكيد؟ مجزرة');
+  assert.match(cons, /CONFIG_RESET: 'srt\/config\/reset'/, 'الرسالة مش مسجلة في الثوابت');
+  const brd = read('src/background/core/bridge.js');
+  assert.match(brd, /CONFIG_RESET: 'srt\/config\/reset'/, 'مرآة الـbridge مفقودة');
+  const rtr = read('src/background/core/router.js');
+  assert.match(rtr, /case C\.MSG\.CONFIG_RESET/, 'مفيش handler في الراوتر');
+  assert.match(st, /export async function resetConfig\(\)/, 'state مافيهاش دالة الضبط');
+  assert.match(st, /local\.set\(K\.CONFIG, Object\.assign\(\{\}, DEFAULT_CONFIG\)\)/, 'الضبط ما بيكتبش نسخة من المصنع');
+});
+
+test('v1219: Cairo جوه الإضافة — ملفات حية، @font-face، وصفر لينكات خارجية', () => {
+  const css = read('src/sidepanel/side-panel.css');
+  assert.ok((css.match(/@font-face/g) || []).length === 3, 'مفروض 3 نطاقات unicode: عربي + لاتيني + ممتد');
+  assert.ok(!/url\(https?:|@import/.test(css), 'مصدر خط خارجي رجع للـCSS');
+  const fontsDir = join(root, 'src/sidepanel/fonts');
+  const files = readdirSync(fontsDir).filter((f) => f.endsWith('.woff2'));
+  assert.equal(files.length, 3, 'عدد ملفات الخط مش 3');
+  for (const f of files) {
+    assert.ok(fs.statSync(join(fontsDir, f)).size > 15000, 'ملف خط مهزوز: ' + f);
+  }
+  const pnlHtml2 = read('src/sidepanel/side-panel.html');
+  assert.ok(!/fonts\.(googleapis|gstatic)|rel="preconnect"/.test(pnlHtml2), 'لينك خارجي رجع للوحة');
+});
+
+test('v1219: السرعة الجديدة مطبقة — والممنوعات Sacred زي صخورها', () => {
+  const sch = read('src/background/core/scheduler.js');
+  assert.match(sch, /\?\s*700 \+ Math\.floor\(Math\.random\(\) \* 900\)/, 'البارد 0.7–1.6 مش مطبق');
+  assert.match(sch, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'دفء الكابتشا اتلمس — ممنوع');
+  assert.match(serp, /await D\.humanSleep\(900, 450\);/, 'فاصل الدفعات 0.9–1.8 مش مطبق');
+  assert.match(serp, /await D\.humanSleep\(600, 250\);/, 'توسيع AI مش على مقاس 1.21.9');
+  assert.match(queue, /await sleep\(4000 \+ Math\.floor\(Math\.random\(\) \* 4000\), signal\);/, 'فاصل المراجعة 4–8 مش مطبق');
+  assert.match(serp, /cfg\.settleMs \|\| 1100/, 'سجل التثبيت اتلمس — لأ');
 });

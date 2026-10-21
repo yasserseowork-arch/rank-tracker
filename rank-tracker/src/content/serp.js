@@ -391,7 +391,7 @@
       const btn = expandBtn(root);
       if (!btn) { break; }
       D.click(btn, 'ai-expand');
-      await D.humanSleep(1100, 400);
+      await D.humanSleep(600, 250); // v1.21.9: إعادة الرسم فورية عمليًا — الطويل كان هدية
     }
   }
 
@@ -526,8 +526,8 @@
         live.early = true;
         return { items: merged, aiItems: aiItems, early: true, hit: hit, selfFetched: true };
       }
-      // v1.20.5: توازن السرعة/الأمان — 1.5–2.4 ثانية (لسه ماشي مع قراءة صفحة، بس أسرع)
-      await D.humanSleep(1500, 900);
+      // v1.21.9: 0.9–1.8 ثانية — لسه فوق سرعة قراءة البشر، بس الرن ما يقعدش على الدفعات
+      await D.humanSleep(900, 450);
     }
     if (merged.length > baseItems.length || attempts) {
       D.msg.send(C.MSG.LOG, { level: attempts ? 'warn' : 'info', scope: 'serp',
@@ -625,7 +625,7 @@
     const batchSettle = cfg.batchSettleMs || 5000;
     // v1.21.4: الرقم دول بيتلمسوا بس في كلمة «المتجر مش على أول شاشة» — الصف بيبقى
     // مترسم فعلًا من أول ثانية (num=100 سيرفر-سايد)، فالسكتة الطويلة كانت ضريبة على هواها
-    const rescan = cfg.rescanMs || 1100;
+    const rescan = cfg.rescanMs || 800; // v1.21.9: القراءات ما محتاجةش سكتة أطول من كده
     const settleMs = cfg.settleMs || 1100;
 
     let early = null;
@@ -667,6 +667,8 @@
     let gaveCompanionExtra = false;
     let companionSeen = false;
     let aiText = '';
+    let diveStarted = false; // 👁 v1.21.9: قفزة واحدة للآخر بدل المقافزة المتقطعة
+    let diveNudges = 0;
 
     function companionActive() {
       return /Loaded \d+|Scroll for more|Show 100 results|Done \d+ results/i.test(bodySample());
@@ -717,15 +719,24 @@
       if (now - started >= Math.max(cfg.scanHardCapMs || 60000, maxWait)) { break; }
 
       releaseScroll();
-      const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 400;
-      if (!nearBottom) {
-        window.scrollBy({ top: 600 + Math.round(Math.random() * 500), behavior: 'auto' });
-        window.dispatchEvent(new Event('scroll'));
-      } else {
-        window.dispatchEvent(new Event('scroll'));
+      // 👁 v1.21.9 (طلب المستخدم): مفيش «بيعدّ على الـ100 قدام عينك» —
+      // قفزة واحدة للآخر تفعّل التحميل الكسول، وبعدين قراءة صامتة؛ ربّتة خفيفة
+      // كل 3 دورات بس لو الصفحة فضلت تولّد، وفي الحكم الأخير relock بيرجعلك لفوق
+      diveNudges += 1;
+      if (!diveStarted) {
+        diveStarted = true;
+        try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' }); } catch (_) {}
+      } else if (diveNudges % 3 === 0) {
+        const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 400;
+        if (!nearBottom) { try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' }); } catch (_) {} }
       }
-      await D.sleep(rescan + Math.round(Math.random() * 500));
+      window.dispatchEvent(new Event('scroll'));
+      await D.sleep(rescan + Math.round(Math.random() * 300));
     }
+
+    // 👁 v1.21.9: نرجّع أول السيرة قبل أي حكم — النزول المتقطع اللي كان باين قدام
+    // المستخدم اتقفل نهائيًا؛ باقي الشغل (دفعات خلفية) مابيبينش حركة أصلًا
+    relock();
 
     // 3) حكم عدم الوجود: دلوقتي بس — نستنى البلوك يترسم لو بطيء، نوسّع، ونفحص آخر مرة
     let items = collect().items;

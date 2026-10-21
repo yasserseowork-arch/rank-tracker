@@ -1231,7 +1231,7 @@ export class QueueEngine {
     await logger.info('queue', `🔁 مسار المراجعة${manual ? ' (بطلبك من اللوحة)' : ''}: ${pend.length} كلمة محتاجة إعادة فحص — هتعدّي دلوقتي والجو أهدى`);
     for (const kw of pend) {
       if (signal && signal.aborted) { break; }
-      await sleep(6000 + Math.floor(Math.random() * 5000), signal);
+      await sleep(4000 + Math.floor(Math.random() * 4000), signal); // v1.21.9: المراجعة كمان بقت أرشق
       if (signal && signal.aborted) { break; }
       try {
         await this.runKeyword(kw);

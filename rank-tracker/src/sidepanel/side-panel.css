@@ -188,10 +188,7 @@ body {
 .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-deep)); color: #04140a; }
 .btn-warn { background: linear-gradient(135deg, #fbbf24, #d97706); color: #1a1204; }
 .btn-danger { background: linear-gradient(135deg, #f87171, #dc2626); color: #1c0505; }
-/* 📊 v1.21.7: أشرطة الجاهزية والتقدير وتقرير آخر رن */
-.eta-hint { font-size: 12px; opacity: .8; margin: 2px 12px 6px; text-align: center; }
-.preflight-warn { color: #e8b339; opacity: 1; font-weight: 600; }
-.run-report { color: #7fd69a; opacity: 1; }
+/* v1.21.9: أشرطة الجاهزية/التقدير/التقرير اتشالت من الواجهة بطلب من المستخدم — البيانات لسه بتتسجل في اللوج */
 .kw-status.review { color: #e8b339; margin-inline-start: 4px; cursor: help; }
 
 .btn-ghost {
@@ -476,3 +473,27 @@ textarea { width: 100%; resize: vertical; min-height: 74px; }
   color: #fecaca;
 }
 .modal-card .btn { width: 100%; }
+
+/* ✍️ v1.21.9: Cairo من جوه الإضافة — نفس خط جوجل بس محلي: بلا انتظار CDN، بلا رفض CSP، ومتاح أوفلاين.
+   وزن متغير 200-1000 يغطي العناوين والعادي بدون ملفات زيادة، والتقسيم يضمن تغطية العربية واللاتينية */
+@font-face {
+  font-family: 'Cairo'; font-style: normal; font-weight: 200 1000; font-display: swap;
+  src: url(fonts/cairo-arabic-wght-normal.woff2) format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+@font-face {
+  font-family: 'Cairo'; font-style: normal; font-weight: 200 1000; font-display: swap;
+  src: url(fonts/cairo-latin-wght-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0150-0152, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF;
+}
+@font-face {
+  font-family: 'Cairo'; font-style: normal; font-weight: 200 1000; font-display: swap;
+  src: url(fonts/cairo-latin-ext-wght-normal.woff2) format('woff2');
+  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* 🧵 صنفرة: حواف ثابتة، أرقام tabular ما بتترقصش مع التغيير، سطر مريح — تفصيل بشري مش قالب */
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+.tools-row { display: flex; justify-content: flex-end; gap: 6px; padding: 2px 12px 8px; }
+.btn-sm { font-size: 12px; padding: 4px 12px; border-radius: 8px; }
+.stat-value, .pos-badge, .kw-status { font-variant-numeric: tabular-nums; }
