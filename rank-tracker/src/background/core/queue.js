@@ -365,6 +365,17 @@ export class QueueEngine {
           // مشروط بـ>=2 بس) — كلمة نضيفة واحدة كفاية تطفّي آخر شرارة وترجعنا لسرعة اليدوي
           this.captchaHeat = 0;
         }
+        // 🧊 v1.21.25 (طلب المستخدم: شغال اتنين بروفيلات على نفس الـIP في نفس الوقت):
+        // 4 كابتشات ورا بعض = جوجل بيستجوب العنوان من الناحيتين مع بعض — تهنّيّة
+        // دقيقة ونص بتكسر الدورة أحسن ألف مرة من لُفّ المسح العلاني في الاتنين.
+        if ((this.captchaStreak || 0) >= 4) {
+          const chill = 90000 + Math.floor(Math.random() * 30000);
+          await logger.warn('queue', `🧊 ${this.captchaStreak} كابتشات ورا بعض — بردية ${Math.round(chill / 1000)} ثانية قبل ما نكمّل (خصوصًا لو بروفيل تاني شغال على نفس الـIP)`);
+          await state.setRun({ breakUntil: Date.now() + chill, breakTotalMs: chill }); // الشريط السفلي يعدّيها قدامك
+          await sleep(chill, this.signal());
+          await state.setRun({ breakUntil: null, breakTotalMs: null });
+          this.captchaStreak = 2; // مفيش تصفير كامل — لسه سخينة؟ الكاسحة ترجع تشتغل تاني عندها
+        }
         await scheduler.cooldownIfNeeded(cfg, processed, this.signal(), async (ms) => {
           // عدّاد حي في اللوحة: وقت بداية الاستراحة ومداها — الشريط يظهر بس وإنت في واحدة بجد
           await state.setRun({ breakUntil: Date.now() + ms, breakTotalMs: ms });
@@ -545,6 +556,7 @@ export class QueueEngine {
       if (first.type === 'captcha') {
         this.captchaHeat = (this.captchaHeat || 0) + 1; // 🌡 عدّاد الحرارة: يبرّد الاستراحة الجاية
         this.captchaSeenThisRun = (this.captchaSeenThisRun || 0) + 1; // 📊 للتقرير
+        this.captchaStreak = (this.captchaStreak || 0) + 1; // 🧊 1.21.25: سلسلة حية للكاسحة
         const solveStartedAt = Date.now();
         const auto = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
         if (auto === 'solved') {
@@ -676,6 +688,7 @@ export class QueueEngine {
         // تبريد قصير → مسح بيانات كامل → تاب جديد بنفس الكلمة — من غير ما نسجلها «غير موجود»
         this.captchaHeat = (this.captchaHeat || 0) + 1; // النطاق اتحرق شوية — برّد الاستراحة الجاية
         this.captchaSeenThisRun = (this.captchaSeenThisRun || 0) + 1; // 📊 للتقرير
+        this.captchaStreak = (this.captchaStreak || 0) + 1; // 🧊 1.21.25: سلسلة حية للكاسحة
         await this.notify('🚫 جوجل رفض الصفحة', `"${kw.keyword}" — الريفرش ملوش لازمة هنا؛ بنمسح البيانات ونعيد في تاب جديد نضيف`);
         await logger.warn('queue', `🚫 صفحة رفض (${(first.payload && first.payload.kind) || 'http-error'}) على "${kw.keyword}" — تبريد ثم مسح بيانات + تاب جديد بنفس الكلمة`);
         await sleep(800 + Math.floor(Math.random() * 700), signal); // ⚡ 1.21.18: «فورًا» بدل 9-15 ثانية
@@ -918,31 +931,37 @@ export class QueueEngine {
     }, 1200);
 
     let result;
-    // ⚡ v1.21.23 (طلب المستخدم) · المدة بقت 15 ثانية بطلب 1.21.24 —: «لو ماتحلتش في غضون 15 ثانية —
-    // مسح بيانات وفورًا نفس الكلمة»): المحلّل لسه بيتشغّل بنفس توقيتاته المقدسة، بس إحنا
-    // مابنستناش دوره التاني ولا سكتاته — مهلة 15 ثانية، وبعدها بنوقفه بأدب (abort موصول
-    // عنده مسارات النظافة) وبنسلّم للمسح الموحد. لو حلّ قبل المهلة؟ مجرى زي الأول بالظبط.
-    const ctrl = new AbortController();
-    const relay = () => { try { ctrl.abort(); } catch (_) {} };
-    if (signal) { if (signal.aborted) { relay(); } else { signal.addEventListener('abort', relay, { once: true }); } }
+    // 🕰 v1.21.25 (تصحيح المستخدم — «مش بتلحق تحل»): سباق 1.21.24 كان بيقطع نفس
+    // المحاولة الأولى قبل ما Buster يخلص صورة تقيلة. النظام الجديد بالحرف اللي طلبه:
+    // المحاولة الأولى تتنفذ كاملة بتوقيتات المنسّق (محاولة واحدة، لاهنية ولا ثانية
+    // تانية ولا تبريد 12/16/20)، وبعدين **15 ثانية تأكيد** — لو التحدي اتحل متأخر
+    // بتُحتسب حلّ عادي بتهدئة ما بعد الحل المقدسة؛ ماحلش؟ تسليم فوري للمسح الموحد.
+    const soloCfg = Object.assign({}, cfg, { captchaMaxAttempts: 1 });
     try {
-      result = await Promise.race([
-        this.orchestrator.solve(tabId, cfg, ctrl.signal),
-        new Promise((res) => { setTimeout(() => { res(null); }, 15000); }),
-      ]);
+      result = await this.orchestrator.solve(tabId, soloCfg, signal);
     } finally {
-      if (signal) { try { signal.removeEventListener('abort', relay); } catch (_) {} }
-      try { ctrl.abort(); } catch (_) {} // لو إحنا اللي كسبنا — المنسّق يقفل حاله حالًا، مفيش شبح ورا التاب
       clearInterval(attemptsTicker);
     }
-    if (result === null) {
-      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
-      await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
-      this.broadcast();
-      await logger.warn('queue', `⚡ "${kw.keyword}" — خمس عشرة ثانية من غير حلّ: صفر تبريد، مسح بيانات وتاب جديد بنفس الكلمة حالًا`);
-      return 'stale-expired'; // نفس إشارة المسح الموحد (سقف 6 جولات/رن بيراعي الجهاز)
+    if (signal && signal.aborted) { return 'paused'; }
+    if (!result || result.outcome !== 'solved') {
+      const grace = await this.captchaClearGrace(tabId, 15000, signal);
+      if (grace === 'clear') {
+        await logger.info('queue', `🕰 "${kw.keyword}" — التحدي اتحل في نافذة التأكيد بعد المحاولة: بنعتبرها حل كامل`);
+        result = { outcome: 'solved', attempts: (result && result.attempts) || 1 };
+      } else if (grace === 'aborted') {
+        return 'paused';
+      } else if (grace === 'closed') {
+        // التاب اتقفل وقت التأكيد — مفيش حاجة تتأكد: النتيجة تنزل زي ما هي للمسار
+        // التلقائي القديم تحت (استرجاع «شغال» فورًا + تسليم 'failed') — علة البانر العالق.
+        await logger.warn('queue', `🔒 "${kw.keyword}" — التاب اتقفل وقت نافذة التأكيد: بننزل للمسار التلقائي`);
+      } else {
+        await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+        await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+        this.broadcast();
+        await logger.warn('queue', `⚡ "${kw.keyword}" — المحاولة الأولى + 15 ثانية تأكيد ومافيش حل: مسح بيانات وتاب جديد بنفس الكلمة حالًا`);
+        return 'stale-expired'; // نفس إشارة المسح الموحد — صفر تبريد وصفر صبر
+      }
     }
-    if (result.outcome === 'aborted' || (signal && signal.aborted)) { return 'paused'; }
 
     if (result.outcome === 'solved') {
       const run = await state.getRun();
@@ -1205,6 +1224,38 @@ export class QueueEngine {
     } catch (_) { return false; }
   }
 
+  /** ⏳ v1.21.25 — نافذة تأكيد بعد انتهاء محاولة الحل: لو الكابتشا بتتحل حالها (إيفنت
+   *  CAPTCHA_CHECKED من سكربت التحدي، أو الرابط بقى نتائج سليمة ومفيش iframe بتاع
+   *  reCAPTCHA في الصفحة) نرجع 'clear'. خلصت المهلة؟ 'stuck'. قراءة بحتة — مفيش دوسة
+   *  ولا ريلود ولا مساس بمحرك الحل. */
+  async captchaClearGrace(tabId, ms, signal) {
+    const t0 = Date.now();
+    let clearedFlag = false;
+    const off = bus.on(C.MSG.CAPTCHA_CHECKED, (m) => { if (m.tabId === tabId) { clearedFlag = true; } });
+    const probe = async () => {
+      try {
+        const [inj] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => !!document.querySelector('iframe[src*="recaptcha" i], iframe[src*="sorry" i], form.action[action*="captcha" i]')
+        });
+        return !!(inj && inj.result);
+      } catch (_) { return false; }
+    };
+    try {
+      for (;;) {
+        if (signal && signal.aborted) { return 'aborted'; }
+        if (clearedFlag) { return 'clear'; }
+        let u = null;
+        try { u = await tabctl.getUrl(tabId); } catch (_) { return 'closed'; }
+        if (u && !urlkit.isSorry(u) && !(await probe())) { return 'clear'; }
+        if (Date.now() - t0 >= ms) { return 'stuck'; }
+        await sleep(1500, signal);
+      }
+    } finally {
+      try { if (off) off(); } catch (_) {}
+    }
+  }
+
   /** 🩹 v1.21.21 — إحياء التحدي البايت في مكانه: تنشيط ثم ريلود واحد جوه التاب النشيط،
    *  والتوكن بيتولد بطابع زمني طازة بدل ما نرمي الجلسة كلها. النجاح = الصفحة بقت تحديًا
    *  حيًا. سقف 3 إحياءات لكل رن (الميريرات في recordRunReport) — بلا دوّار ريلودات.
@@ -1401,6 +1452,7 @@ export class QueueEngine {
       this.staleWipesThisRun = 0; // v1.21.8: عدادات الرن بتترمس مع بداية رن جديد
       this.staleRevivesThisRun = 0; // 🩹 v1.21.21: وعدّاد الإحياءات معاهم
       this.captchaRevealedTab = null; // v1.21.16: و«التاب المعروض» كمان — كل رن يبدأ نضيف
+      this.captchaStreak = 0; // 🧊 v1.21.25: والسلسلة برضه من الصفر
       const perSec = stat.processed ? Math.round((dur / stat.processed) / 100) / 10 : 0;
       await logger.info('queue', `📊 تقرير الرن: ${stat.processed} كلمة في ${(Math.round(dur / 600) / 10)} دقيقة (${perSec}ث/كلمة) — كابتشا: ${stat.captchaSeen} (اتحلّت أوتوماتيك ${stat.captchaSolves}) — مراجعة: ${stat.review}${stat.coverageAvg != null ? ' — متوسط التغطية: ' + stat.coverageAvg + '%' : ''}`);
     } catch (_) {}
@@ -1462,6 +1514,7 @@ export class QueueEngine {
   }
 
   async recordResult(kw, serp, cfg, via) {
+    this.captchaStreak = 0; // 🧊 1.21.25: كلمة اتسجلت نضيفة = السلسلة اتكسرت
     const match = matchResults(serp.items || [], cfg);
     // الترتيب الرسمي: الرقم الأخضر بتاع Serp Counter جنب النتيجة إن موجود
     if (match.found && match.matched && match.matched.counterPos) {

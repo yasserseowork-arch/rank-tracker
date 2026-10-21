@@ -108,17 +108,22 @@ test('addKeywords v1.21.1: إضافة نفس الكلمة تاني = صف جدي
   assert.equal(list[1].status, 'pending'); // والجديد في الطابور
 });
 
-test('handleCaptcha: فشل تلقائي بدون إيقاف مؤقت يرجع الحالة «شغال» فوراً (علة البانر العالق)', async () => {
+test('handleCaptcha v1.21.25: فشل المحاولة + 15 ث تأكيد بلا حل = استرجاع «شغال» وتسليم للمسح الموحد (علة البانر العالق)', async () => {
   const engine = new QueueEngine();
   engine.orchestrator.solve = async () => ({ outcome: 'failed', attempts: 1 });
   await state.setRun({ status: 'captcha', captcha: { tabId: 999, attempts: 0 } });
+  const t0 = Date.now();
   const r = await engine.handleCaptcha(
     999, { id: 'k1', keyword: 'اختبار' },
     { pauseOnCaptchaFail: true },
     new AbortController().signal,
     false // allowPause = false (الوضع التلقائي)
   );
-  assert.equal(r, 'failed');
+  const waited = Date.now() - t0;
+  // النافذة 15 ثانية فعلًا — مش تسليم لحظي زي السباقات القديمة
+  assert.ok(waited >= 14000, 'نافذة التأكيد ما اتستناش: ' + waited + 'ms');
+  assert.ok(!engine.orchestrator.solve.toString().includes('Promise'), 'المحلل الوهمي لازم يفضل بسيط');
+  assert.equal(r, 'stale-expired'); // بعد التأكيد الفاشل: نفس إشارة المسح الموحد — مفيش abandon
   const run = await state.getRun();
   assert.equal(run.status, 'running');
   assert.equal(run.captcha, null);

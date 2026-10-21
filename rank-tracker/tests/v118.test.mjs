@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.24');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.24'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.24'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.24\]/m);
+  assert.equal(man.version, '1.21.25');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.25'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.25'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.25\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1266,23 +1266,50 @@ test('v12124: no-alerts محقون MAIN/document_start وآخر الـarray — 
   assert.ok(matches.some((m) => m.includes('search')) && matches.some((m) => m.includes('sorry')), 'مش مغطي البحث وصفحة التحدي');
 });
 
-test('v12124: المهلة 15 ثانية في الكود والرسايل — وباقي سياسة 1.21.23 حرفيًا زي ما هي', () => {
+test('v12124: لا سباق عاري ولا نافذة منبثقة — وباقي سياسة 1.21.23 حرفيًا زي ما هي', () => {
   const hc = queue.slice(queue.indexOf('async handleCaptcha'), queue.indexOf('async collectAfterSolve'));
-  assert.ok(!hc.includes('res(null); }, 6000'), 'لسه فيه سباق الـ6000 في handleCaptcha');
-  assert.match(hc, /خمس عشرة ثانية من غير حلّ/, 'اللوج ما اتحدّثش');
+  assert.ok(!hc.includes('res(null)'), 'أي res(null) رجع — السباقات ممنوعة من 1.21.25');
   // التبريدات ملغية، والتهدئة بعد الحل مقدسة — زي 1.21.23 حرفيًا
   assert.match(queue, /const restMs = 500 \+ captchaClears \* 250;/, 'نَفَس ما بعد الفشل اتغير');
   assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة ما بعد الحل اتلمست — ممنوع');
 });
 
-/* -------- v1.21.23 — ست ثواني أو المحاولة الأولى: مسح فوري بلا تبريد -------- */
-test('v12123: سباق الـ6 ثواني حوالين المحلّل — وبلا شبح وراه', () => {
+/* -------- v1.21.25 — المحاولة الأولى ما تتقطعش: كاملها، وبعدين 15 ثانية تأكيد -------- */
+test('v12125: المحاولة الأولى تتنفذ كاملة (MaxAttempts=1 خارجي) — مفيش سباق يقطعها', () => {
   const hc = queue.slice(queue.indexOf('async handleCaptcha'), queue.indexOf('async collectAfterSolve'));
-  assert.match(hc, /Promise\.race\(\[\s*this\.orchestrator\.solve\(tabId, cfg, ctrl\.signal\),/, 'solve مش في سباق ست ثواني');
-  assert.match(hc, /setTimeout\(\(\) => \{ res\(null\); \}, 15000\)/, 'المهلة مش 15000 (بطلب 1.21.24)');
-  assert.match(hc, /try \{ ctrl\.abort\(\); \} catch \(_\) \{\} \/\/ لو إحنا اللي كسبنا/, 'المنسّق ما بيتوقفش نظيف بعد السباق');
-  assert.ok(!/result = await this\.orchestrator\.solve\(tabId, cfg, signal\);/.test(hc), 'الـawait العاري رجع — بينومنا لحد 35 ثانية');
-  assert.match(hc, /return 'stale-expired'; \/\/ نفس إشارة المسح الموحد/, 'خسارة السباق ما بتسلّمش للمسح الموحد');
+  assert.match(hc, /const soloCfg = Object\.assign\(\{\}, cfg, \{ captchaMaxAttempts: 1 \}\);/, 'السقف الخارجي بمحاولة واحدة مش موجود');
+  assert.match(hc, /this\.orchestrator\.solve\(tabId, soloCfg, signal\)/, 'المحاولة مش ماشية بالإشارة الأصلية للرن (بلا ctrl/relay)');
+  assert.ok(!/Promise\.race/.test(hc), 'سباق نقطع بيه المحاولة رجع — ممنوع بطلب المستخدم');
+  assert.ok(!hc.includes('ctrl'), 'مفاتيح AbortController الخاصة بالسباق لسه عايشة');
+  assert.match(hc, /return 'stale-expired'; \/\/ نفس إشارة المسح الموحد/, 'النفي بعد التأكيد ما بيرمّيش للمسح الموحد');
+  const orch = read('src/background/core/captcha-orchestrator.js');
+  assert.ok(!orch.includes('1.21.25') && !orch.includes('soloCfg'), 'محرك الحل نفسه اتلمس — السقف علىنده من برا وبس');
+  const st = read('src/background/core/state.js');
+  assert.match(st, /captchaMaxAttempts: 2/, 'الافتراضي في الـconfig لازم يفضل 2 زي ما هو');
+});
+
+test('v12125: نافذة الـ15 ثانية تأكيد بعد المحاولة — قراءة بحتة بلا دوسة ولا ريلود', () => {
+  const hc = queue.slice(queue.indexOf('async handleCaptcha'), queue.indexOf('async collectAfterSolve'));
+  assert.match(hc, /this\.captchaClearGrace\(tabId, 15000, signal\)/, 'مفيش نافذة تأكيد 15 ثانية بعد المحاولة');
+  assert.match(hc, /التحدي اتحل في نافذة التأكيد/, 'لوج العدّ كحلّ متأخر ناقص');
+  const g = queue.slice(queue.indexOf('async captchaClearGrace'), queue.indexOf('async reviveStaleChallenge'));
+  assert.ok(g.length > 200, 'مفيش جسم للدالة captchaClearGrace');
+  assert.match(g, /bus\.on\(C\.MSG\.CAPTCHA_CHECKED/, 'النافذة ما بتسمعش إيفنت الحسم من سكربت التحدي');
+  assert.match(g, /iframe\[src\*="recaptcha"/, 'النافذة ما بتعملش probe على iframe التحدي (صفحة البحث مش /sorry/)');
+  assert.match(g, /sleep\(1500, signal\)/, 'النافذة ما بتنامش على 1.5 ثانية قابلة للإلغاء');
+  assert.ok(!/reload|tabs\.update|click/i.test(g), 'النافذة المفروض قراءة بحتة — أي ريلود/كليك ممنوع');
+  assert.match(g, /return 'aborted';/, 'مفيش تسليم نظيف عند الإيقاف');
+});
+
+test('v12125: كاسحة البروفيلات المتوازية — 4 ورا بعض = بردية 90–120 ثانية بشريط', () => {
+  const n = queue.split('this.captchaStreak = (this.captchaStreak || 0) + 1;').length - 1;
+  assert.equal(n, 2, 'العدّ مش في موضعَي captchaSeenThisRun الاتنين');
+  assert.match(queue, /if \(\(this\.captchaStreak \|\| 0\) >= 4\) \{/, 'الكاسحة مش على 4 متتالية');
+  assert.match(queue, /const chill = 90000 \+ Math\.floor\(Math\.random\(\) \* 30000\);/, 'البردية مش 90–120 ثانية');
+  assert.match(queue, /breakUntil: Date\.now\(\) \+ chill, breakTotalMs: chill/, 'الشريط السفلي ما بيعدّيهاش');
+  assert.match(queue, /this\.captchaStreak = 2; \/\/ مفيش تصفير كامل/, 'الكاسحة لازم ترجع تشتغل لو الحرارة استمرت');
+  assert.match(queue, /this\.captchaStreak = 0; \/\/ 🧊 1\.21\.25: كلمة اتسجلت نضيفة = السلسلة اتكسرت/, 'تصفير السلسلة عند كل كلمة نضيفة مش موجود');
+  assert.match(queue, /بروفيل تاني شغال على نفس الـIP/, 'لوج الكاسحة ما بيوصفش السبب');
 });
 
 test('v12123: التبريدات اتلغت والنَفَس تحت الثانية — بس تهدئة ما بعد الحل المقدسة ساكنة', () => {
