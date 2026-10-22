@@ -202,6 +202,21 @@ export class QueueEngine {
   /* الإشعارات جوه اللوحة نفسها (مكان شريط الاستراحة) — مش نوتيفيكيشن عام في الجهاز.
    *  أي شاشة/أي حساب — الرسالة تبقى في الأداة، بسيطة وواضحة، واللوحة بتختفي لوحدها. */
   async notify(title, message) {
+    // 🗣 v1.21.26 (طلب المستخدم: «حوارات كتير أوي أوي»): كل نداءات notify بتعدي من
+    // البوابة دي — الحرج («الأداة وقفت» / «بعد كل المحاولات» / مشاكل الشيت) بيمر دايمًا
+    // وبيقطع. الروتيني (إعادة محاولة/كابتشا/استشفاء/مسح دوري): نفس الرسالة بالظبط جوه
+    // أربعين ثانية = تتجاهل (اللوچ بيحكيها كاملة)، وغير المكرر له نفسها 12 ثانية —
+    // عاصمة الأخطاء بتهدى من غير ما أي مسار منطق يتغير: ديه قطع إشهاري بحت.
+    const now = Date.now();
+    const sig = String(title) + ' ' + String(message);
+    const crit = /وقفت|بعد كل المحاولات|الشيت/.test(sig);
+    if (crit) {
+      this._notifyAnyTs = now; this._notifyLastSig = sig; this._notifyLastTs = now;
+    } else {
+      if (sig === this._notifyLastSig && now - (this._notifyLastTs || 0) < 40000) { return; }
+      if (now - (this._notifyAnyTs || 0) < 12000) { return; }
+      this._notifyLastSig = sig; this._notifyLastTs = now; this._notifyAnyTs = now;
+    }
     try {
       await state.setRun({ notice: { title: title, text: message, ts: Date.now() } });
       this.broadcast();
@@ -939,6 +954,16 @@ export class QueueEngine {
     const soloCfg = Object.assign({}, cfg, { captchaMaxAttempts: 1 });
     try {
       result = await this.orchestrator.solve(tabId, soloCfg, signal);
+      // 🐢 v1.21.26 (طلب المستخدم: «مش راضي يدوس أصلًا على الكابتشا»): المنسّق بيستنى
+      // التحدي يفتح عشرين ثانية جواه — على جهاز تقيل/بروفيلين متوازيين التحدي أحيانًا
+      // مالحقش يظهر فيرجع بصفر دوسة. صفر دوسة دي مش «محاولة فشلت» — دي محاولة ما
+      // اتعملتش، فالعدل نديها نافذة كاملة تانية في نفس المكان قبل أي مسح: من غير قطع
+      // (المحاولة الأولى خلصت لحالها أصلًا) ومن غير لمس للتوقيتات. فتحت التانية؟ الآلة
+      // الذاتية هتدوس وتحل زي ما هي متعودة.
+      if (result && result.outcome === 'no-buster' && result.detail === 'challenge-not-open') {
+        await logger.warn('queue', `🐢 "${kw.keyword}" — التحدي لسه مفتحش في الصفحة: نافذة تانية لحد ما يظهر، والمسح لأ`);
+        result = await this.orchestrator.solve(tabId, soloCfg, signal);
+      }
     } finally {
       clearInterval(attemptsTicker);
     }

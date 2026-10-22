@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.25');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.25'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.25'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.25\]/m);
+  assert.equal(man.version, '1.21.26');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.26'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.26'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.26\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1475,3 +1475,37 @@ test('v12116: بلوك AI مترسّمش بس بوادره باينة؟ المي
   assert.match(serp, /finalizeAi\(early\.ai, 1200\)/, 'الميزانية البدرية اتشالت من مسار أول شاشة');
 });
 
+
+/* -------- v1.21.26 — صفر دوسة ليه نافذة كاملة + عاصمة الحوارات -------- */
+test('v12126: التحدي اللي مفتحش خالص = نافذة تانية كاملة في المكان — بلا قطع وبلا مسح', () => {
+  const hc = queue.slice(queue.indexOf('async handleCaptcha'), queue.indexOf('async collectAfterSolve'));
+  assert.match(hc, /result\.outcome === 'no-buster' && result\.detail === 'challenge-not-open'/, 'حالة صفر دوسة ما لهاش معاملة خاصة');
+  const calls = hc.split('this.orchestrator.solve(tabId, soloCfg, signal)').length - 1;
+  assert.equal(calls, 2, 'الإعادة الوحيدة لسه مبقاش عنها محل');
+  assert.match(hc, /التحدي لسه مفتحش في الصفحة/, 'لوج السلحفاة ناقص');
+  assert.ok(!/Promise\.race/.test(hc), 'رجع السباق تاني؟!');
+  assert.ok(hc.indexOf('clearInterval(attemptsTicker)') > hc.lastIndexOf('this.orchestrator.solve'), 'الـticker المفروض يتقفل في الـfinally بعد المحاولة التانية');
+});
+
+test('v12126: بوابة notify — الحرج وعد دايمًا، الروتيني ليه إيقاع، واللوج بيحكي كله', () => {
+  const at = queue.indexOf('async notify(title, message)');
+  assert.ok(at > -1, 'notify اختفت من QUEUEEngine');
+  const gate = queue.slice(at, queue.indexOf('clearNotice()'));
+  assert.match(gate, /40000/, 'مفيش نافذة تكرار 40 ثانية');
+  assert.match(gate, /12000/, 'مفيش إيقاع 12 ثانية بين الروتيني');
+  assert.match(gate, /وقفت\|بعد كل المحاولات\|الشيت/, 'قائمة الحرجة مش التلاتة المتفق عليهم');
+  assert.equal(gate.split('state.setRun({ notice:').length - 1, 1, 'لازم يكون فيه كاتب واحد للـnotice');
+  assert.ok(!/stale-expired|handleCaptcha|orchestrator/.test(gate), 'البوابة عرض بحت — ما بتدخلش في أي منطق');
+});
+
+test('v12126: تكميم الـalert بقى بيغطي google.com.eg — والفهرس الساكن ما اتبوظش', () => {
+  const man = JSON.parse(read('manifest.json'));
+  const cs = man.content_scripts;
+  assert.equal(cs[0].js[cs[0].js.length - 1], 'src/content/serp.js', 'اتزلزلت الفهرس [0]');
+  assert.equal(cs[1].run_at, 'document_end', 'اتزلزلت فهرسة الكابتشا [1]');
+  const na = cs[cs.length - 1];
+  assert.deepEqual(na.js, ['src/content/no-alerts.js'], 'الآخر مش no-alerts');
+  assert.ok(na.matches.includes('https://www.google.com.eg/search*'), 'مفيش .eg search');
+  assert.ok(na.matches.includes('https://www.google.com.eg/sorry/*'), 'مفيش .eg sorry');
+  assert.ok(na.matches.includes('https://www.google.com/search*'), 'الدومينات القديمة اتشالت غلط');
+});

@@ -177,3 +177,18 @@ test('v1191 DEFAULTS: السقف والجلب الخلفي والقيم الجد
   const num = await state.setConfig({ scanHardCapMs: '45000' });
   assert.equal(num.scanHardCapMs, 45000);
 });
+
+test('notify v1.21.26: مكرر فوري جوه 40 ثانية بيتتجاهل — والحرج بيقطع الإيقاع دايمًا', async () => {
+  const engine = new QueueEngine();
+  await state.setRun({ notice: null });
+  await engine.notify('🔄 إعادة محاولة', 'نص تجربة أ');
+  const n1 = (await state.getRun()).notice;
+  assert.ok(n1 && n1.title === '🔄 إعادة محاولة', 'الأولى لازم تظهر');
+  await engine.notify('🔄 إعادة محاولة', 'نص تجربة أ');
+  assert.equal((await state.getRun()).notice.ts, n1.ts, 'المكرر الفوري ما بيقطعش العرض');
+  await engine.notify('⚠️ الأداة وقفت', 'حرج فوري');
+  assert.equal((await state.getRun()).notice.title, '⚠️ الأداة وقفت', 'الحرج بيمر مهما كان الإيقاع');
+  await engine.notify('🧩 كابتشا', 'روتيني يستنى دوره');
+  assert.equal((await state.getRun()).notice.title, '⚠️ الأداة وقفت', 'الروتيني ورا الحرج بيستنى الـ12 ثانية');
+  await state.setRun({ notice: null });
+});

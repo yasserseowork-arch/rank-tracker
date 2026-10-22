@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "short_name": "__MSG_appShortName__",
-  "version": "1.21.25",
+  "version": "1.21.26",
   "default_locale": "ar",
   "description": "__MSG_appDesc__",
   "minimum_chrome_version": "123",
@@ -394,7 +394,11 @@
         "https://www.google.sa/sorry/*",
         "https://google.sa/sorry/*",
         "https://www.google.com.sa/sorry/*",
-        "https://google.com.sa/sorry/*"
+        "https://google.com.sa/sorry/*",
+        "https://www.google.com.eg/search*",
+        "https://www.google.com.eg/sorry/*",
+        "https://google.com.eg/search*",
+        "https://google.com.eg/sorry/*"
       ],
       "js": [
         "src/content/no-alerts.js"
