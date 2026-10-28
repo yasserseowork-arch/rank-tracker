@@ -205,12 +205,9 @@ test('تاب واحد مضمون v1.18.4: الأداة بتتبع تبانبها
   assert.equal((queue.match(/foregroundTab: true/g) || []).length, 0, 'v1.21.16: صفر فرض فوكس في المحرك — العرض بس عند شاشة التحدي');
 });
 
-test('ضد الكابتشا من المنبع v1.18.4→v1.21.31: صفحة 100 سيرفر-سايد بطلب المستخدم — وpws=0 لسه ممنوعة', () => {
+test('ضد الكابتشا من المنبع v1.18.4→v1.21.33: مفيش num=100 ولا pws=0 في رابط البحث — عقيدة راجعة بحرفيتها', () => {
   const fn = urlkit.slice(urlkit.indexOf('buildSearchUrl'), urlkit.indexOf('queryOf'));
-  // عقيدة «ادّي جوجل 10 وبس» اتراجعت بطلب المستخدم الصريح والمرتب: التغطية الكاملة
-  // أهم، وهي نفس سلوك إعدادات BeyondTen اللي بيستخدمه جوجل نفسه للمستخدمين
-  assert.match(fn, /config\.page100 !== false/, 'بوابة page100 اتشالت — المستخدم عايز 100');
-  assert.match(fn, /set\('num', '100'\)/, 'num=100 مش راجع للرابط');
+  assert.ok(!/searchParams\.set\('num'/.test(fn), 'num=100 لسه في الرابط — بصمة بوت');
   assert.ok(!/searchParams\.set\('pws'/.test(fn), 'pws=0 لسه بيتحط في الرابط — بصمة بوت');
   assert.match(fn, /'gl'/, 'gl اتلغط بالغلط');
   assert.match(fn, /'hl'/, 'hl اتلغط بالغلط');
@@ -477,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.32');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.32'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.32'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.32\]/m);
+  assert.equal(man.version, '1.21.33');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.33'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.33'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.33\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -582,7 +579,7 @@ test('v1197: مسمّى الوضع اتحدّث في اللوحة والمعاج
 /* ---------------- v1.19.8 — المراكز من 11 لـ100 ما تضيعش بصمت ---------------- */
 
 test('v1198: الجلب الخلفي اتقوّى — إعادة محاولة، num=20، فك تحويلات، وتوقيت ذاتي-التصحيح', () => {
-  assert.match(serp, /u\.searchParams\.set\('num', '100'\)/, 'صفحة الجلب الخلفي لسه صغيرة — v1.21.31 بتلمّ المتبقي في طلب واحد');
+  assert.match(serp, /u\.searchParams\.set\('num', '20'\)/, 'صفحة الجلب الخلفي لسه بلا num=20');
   assert.match(serp, /uu\.searchParams\.get\('q'\) \|\| uu\.searchParams\.get\('url'\)/, 'روابط /url?q= لسه بتسقط النتيجة بدل ما تتفك');
   assert.ok(serp.includes('سكتة ثم فرصة تانية'), 'الدفعة الفاشلة لسه بتتمحو من غير إعادة محاولة');
   assert.match(serp, /start = Math\.ceil\(merged\.length \/ 10\) \* 10; \/\/ تصحيح ذاتي/, 'التوقيت لسه +=10 أعمى');
@@ -1627,17 +1624,7 @@ test('v12130: زرار ↻ — الأولوية بعد الكلمة الشغال
   assert.ok(i18n.slice(arAt, enAt).includes('btnRecheck') && i18n.slice(enAt).includes('btnRecheck'), 'مفتاح الزرار ناقص في لغة');
 });
 
-/* -------- v1.21.31 — 100 نتيجة من المنبع (الكارت والخريطة اتشالوا في 1.21.32) -------- */
-test('v12131: صفحة الـ100 بقت قرار سيرفر-سايد — والدفعات الخلفية فول-باك محسّن', () => {
-  const st2 = read('src/background/core/state.js');
-  assert.match(st2, /page100: true,/, 'الـ100 مش ديفالتر');
-  assert.match(st2, /'autoXlsx', 'page100'\]/, 'الفلاغ مش في whitelist البولينز — هيترمرم من الإعدادات');
-  const uk = read('src/background/core/urlkit.js');
-  assert.ok(uk.indexOf("set('num', '100')") < uk.indexOf("set('ie'"), 'الـnum لازم يتحط قبل التوقيع النهائي للـURL');
-  // الجلب الخلفي لسه حي كخطة بديلة (لو جوجل رجّع 10 على أي حال)
-  assert.match(read('src/content/serp.js'), /cfg\.selfFetchMore !== false && items\.length < expectedNum/, 'الفول-باك اتقطع');
-});
-
+/* -------- v1.21.31 — صفحة الـ100 في الرابط: اتراجع عنها في 1.21.33 بأمر المستخدم — التوسيع للإكستنشن المدمج وبس -------- */
 /* -------- v1.21.32 — الخريطة اتشالت خالص بطلب المستخدم: اللوحة رجعت خفيفة، والـ100 ساكنة -------- */
 test('v12132: مفيش خريطة ولا leaflet ولا كارت — تبويب الموقع=fريم Gsloc بس، ومفيش أي أثر بايت', () => {
   const html = read('src/sidepanel/side-panel.html');
@@ -1660,10 +1647,36 @@ test('v12132: مفيش خريطة ولا leaflet ولا كارت — تبويب 
   // وفي اللوحة نفسها مفيش أي صدى للجغرافيا القديمة
   assert.ok(!/geoSearch|geoMap|initGeo|Nominatim/i.test(js), 'ال JS أثر خريطة لسه قايم');
 });
-test('v12132: شيل الخريطة ما لمستش صفحة الـ100 — urlkit وstate وserp زي ما هي بالضبط', () => {
+test('v12133: الـnum اتمسح من جذوره — مفيش page100 في أي ملف، والدفعات الخلفية راجعة لـ20', () => {
   const uk = read('src/background/core/urlkit.js');
-  assert.match(uk, /config\.page100 !== false/, 'بوابة page100 لمست');
-  assert.ok(uk.includes("set('num', '100')") && !uk.includes("set('pws'"), 'اتزان num/pws اتبوظ');
-  assert.match(read('src/background/core/state.js'), /page100: true,/);
-  assert.match(read('src/content/serp.js'), /set\('num', '100'\)/);
+  assert.ok(!uk.includes("set('num'"), 'لسه في num في الرابط — مش متشال لآخره');
+  assert.ok(!uk.includes('page100'), 'بوابة page100 لسه قايمه في urlkit');
+  const st2 = read('src/background/core/state.js');
+  assert.ok(!st2.includes('page100'), 'page100 لسه في الإعدادات');
+  assert.match(st2, /'mapsCheck', 'autoXlsx'\];/, 'whitelist البولينز ما رجعتش لحالتها');
+  assert.match(read('src/content/serp.js'), /set\('num', '20'\)/, 'الدفعات الخلفية ما رجعتش لـ num=20');
+});
+
+test('v12133: جذر العلة متلمّ — حقن BeyondTen بيوصل google.com.sa، وكل مواسيره في مكانها', () => {
+  const man = JSON.parse(read('manifest.json'));
+  const bt = man.content_scripts.find((c) => (c.js || []).includes('beyondten/content/params.js'));
+  assert.ok(bt, 'بلوك حقن beyondten اتفقّد من المانيفست');
+  // دي العلة نفسها: من 1.21.28 والدومين السعودي .com.sa — والحقن كان قاصر عنّه
+  for (const h of ['https://*.google.com/search*', 'https://*.google.sa/search*', 'https://*.google.com.sa/search*']) {
+    assert.ok(bt.matches.includes(h), 'دومين ناقص في matches بتاع beyondten: ' + h);
+  }
+  for (const f of ['beyondten/content/params.js', 'beyondten/content/state.js', 'beyondten/content/fetch.js',
+                   'beyondten/content/parser.js', 'beyondten/content/purge.js', 'beyondten/content/renderer.js',
+                   'beyondten/content/index.js']) {
+    assert.ok(bt.js.includes(f), 'سكريبت حقن ناقص: ' + f);
+    assert.ok(existsSync(join(root, f)), 'ملف بايت مفقود: ' + f);
+  }
+  assert.equal(bt.run_at, 'document_idle', 'توقيت الحقن اتبوظ');
+  const idx = read('beyondten/content/index.js');
+  assert.ok(idx.includes("chrome.storage.sync.get(['resultsCount', 'extensionEnabled', 'autoLoad', 'pureMode']"), 'بوت الإكستنشن نفسه اتلمس');
+  assert.ok(idx.includes('renumberAll') && idx.includes('mountUI') && idx.includes('startLoading'), 'مجرى العرض والتحميل اتبوظ');
+  const prm = read('beyondten/content/params.js');
+  assert.ok(!prm.includes('"num"'), 'KEEP بتاع beyondten اتلمس — num ما ينفعش يدخله أبدًا');
+  // وتاب الأداة المدمج في اللوحة رابض
+  assert.ok(read('src/sidepanel/side-panel.html').includes('../../beyondten/popup/popup.html'), 'تاب الأداة اتشال من اللوحة');
 });

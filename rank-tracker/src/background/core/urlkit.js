@@ -29,12 +29,9 @@ export function buildSearchUrl(keyword, cfg) {
   u.searchParams.set('q', String(keyword || '').trim());
   u.searchParams.set('gl', gl);
   u.searchParams.set('hl', config.hl || 'ar');
-  // 📄 v1.21.31 (طلب المستخدم بالحرف، والمرة التانية: «عايز أول 100»): عقيدة «مفيش num
-  // والدفعات الخلفية compensate» كانت بتسيب 10 بس لما الجلب الخلفي يتقفل/يتبلوك.
-  // بقى جوجل نفسه بيرجع صفحة 100 كاملة في نفس الطلب — سلوك BeyondTen الحرفي اللي
-  // المستخدم بتاعه. pws=0 لسه ممنوع (البصمة الحقيقية)، والدفعات الخلفية لسه فول-باك.
-  if (config.page100 !== false) { u.searchParams.set('num', '100'); }
-  // pws=0 لسه ممنوع — دي البصمة الحقيقية؛ الـnum ده سلوك إعدادات جوجل نفسه.
+  // 🚫 v1.21.33 (طلب المستخدم: «مليش دعوه إنك بتعمل كده num=100»): مفيش num=100 ولا
+  // pws=0 في الرابط — دول بصمة بوت بتستدعي الكابتشا عند جوجل. التوسيع لـ100 بياوله
+  // «Show 100 Results» المدمج (beyondten/content) — وكل حاجة بحركة طبيعية.
   u.searchParams.set('ie', 'utf-8');
   return u.toString();
 }
