@@ -260,7 +260,9 @@ export class QueueEngine {
     }
 
 
-    this.index = keywords.findIndex((k) => k.status === C.STATUS.KW.PENDING);
+    // 🎯 v1.21.30: زرار «إعادة الفحص» اتضغط والرن واقع؟ أول ما يدور بتاخد العينة الأول
+    this.index = keywords.findIndex((k) => k && k.status === C.STATUS.KW.PENDING && k.priority);
+    if (this.index === -1) { this.index = keywords.findIndex((k) => k.status === C.STATUS.KW.PENDING); }
     if (this.index === -1) {
       // إعادة تعيين الحالات المستهلكة لبدء دورة جديدة
       await state.setKeywords(keywords.map((k) => Object.assign({}, k, { status: C.STATUS.KW.PENDING })));
@@ -363,8 +365,18 @@ export class QueueEngine {
       for (;;) {
         const run = await state.getRun();
         if (run.status !== C.STATUS.RUN.RUNNING) { brokeForPause = true; break; }
-        const keywords = await state.getKeywords();
+        let keywords = await state.getKeywords();
         if (this.index >= keywords.length) { break; }
+        // 🎯 v1.21.30: زرار إعادة الفحص — بنسحب الكلمة المعلّمة لأول الطابور بمبادلة
+        // مواقع فعلية (العدادات بتفضل مضبوطة)، والكلمة الشغالة ما بتسرقش أبدًا.
+        const prio = keywords.findIndex((k, i) => i >= this.index && k && k.priority);
+        if (prio > this.index) {
+          const arr = keywords.slice();
+          const tmp = arr[this.index]; arr[this.index] = arr[prio]; arr[prio] = tmp;
+          await state.setKeywords(arr);
+          await logger.info('queue', `🎯 "${arr[this.index].keyword}" — اتسحبت لقدام الطابور: دورها حالًا`);
+          keywords = arr;
+        }
         const kw = keywords[this.index];
         await state.setRun({ currentIndex: this.index });
         this.armWatchdog();
@@ -456,6 +468,8 @@ export class QueueEngine {
     const cfg = await state.getConfig();
     const signal = this.signal();
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING, needsReview: false }); // v1.21.7: الراية بتتمسح مع أول إعادة فحص
+    if (kw.priority) { await state.updateKeyword(kw.id, { priority: false }); } // 🎯 v1.21.30: الأولوية اتصرّفت ===
+
     await logger.info('queue', `🔎 فحص الكلمة: "${kw.keyword}"`);
     this.broadcast();
 
@@ -544,6 +558,7 @@ export class QueueEngine {
     const maxRetries = cfg.keywordRetries == null ? 2 : cfg.keywordRetries;
     const maxClears = cfg.captchaClearRetries == null ? 2 : cfg.captchaClearRetries;
     let captchaClears = 0;
+    let capRestarts = 0; // 🚦 v1.21.30: سقفة إعادة الانطلاق بعد الركن — مرتين وبس لكل كلمة
 
     // 3) لفة المحاولة: أي مشكلة = ريفرش + نفس الكلمة (وآخر فرصة تاب جديد)
     for (let attempt = 0; ; attempt++) {
@@ -605,14 +620,20 @@ export class QueueEngine {
               continue; // نفس الكلمة من الأول في الجلسة النضيفة
             }
           }
-          // سقف الجولات اتحقق أو التاب مافتحش؟ صبر عادي على القديمة — مفيش هروب ومفيش إلغاء
+          // 🚦 v1.21.30 (طلب المستخدم: «لما الموضوع ده يظهر اتعامل بقى وابدأ بنفس
+          // الكلمة من تاني»): لا استنانة يدوية ولا تجميد — دقيقة رحمة جوه الصبر، وبعدها
+          // إعادة انطلاق من الصفر في تاب جديد لحد مرتين. علقت تاني؟ ⚠️ مراجعة والرن
+          // يعدّي لغيرها — وآخر الرن هيعيدها في جو أهدى (1.20.0 سارية: مفيش إهدار).
           const clearedX = await this.waitCaptchaCleared(tab.id, kw, signal);
           if (clearedX === 'aborted') { return this.abortKeyword(kw, 'paused'); }
-          if (clearedX === 'park') { return this.recordExhausted(kw, cfg); }
-          // من غير «cleared»؟ نفس رحمة السقف عند النداء الأصلي: 20 ثانية بدل لفّ حار على صفحة ميتة
           if (clearedX !== 'cleared') {
-            await sleep(20000, signal);
-            if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+            const rT = await this.restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts);
+            if (rT === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+            if (rT && rT.id) {
+              capRestarts += 1; tab = rT; captchaClears = 0; navigatedViaBox = false;
+              continue; // الكلمة من الأول — المرة دي محدش بيستنى فيها حد
+            }
+            return this.recordExhausted(kw, cfg);
           }
           continue;
         }
@@ -634,8 +655,14 @@ export class QueueEngine {
           const cleared = await this.waitCaptchaCleared(tab.id, kw, signal);
           if (cleared === 'aborted') { return this.abortKeyword(kw, 'paused'); }
           if (cleared === 'park') {
-            // 🅿️ 1.21.22: الركن بمراجعة (مش «غير موجود») — لفة المراجعة آخر الرن هتجريها من جديد
-            return this.recordExhausted(kw, cfg);
+            // 🚦 v1.21.30: الركن ما بقاش قعدة تنتظار آخر الرن — إعادة انطلاق حالًا (سقف 2)
+            const rP = await this.restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts);
+            if (rP === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+            if (rP && rP.id) {
+              capRestarts += 1; tab = rP; captchaClears = 0; navigatedViaBox = false;
+              continue;
+            }
+            return this.recordExhausted(kw, cfg); // هنا وبس: ⚠️ بتاخده لرحلة آخر الرن
           }
           if (cleared === 'stale') {
             // 🧹 v1.21.8: التحدي البايّت عنيد — نفس وصفة البلوك: مسح بيانات + تاب جديد
@@ -797,6 +824,44 @@ export class QueueEngine {
     state.updateKeyword(kw.id, { status: C.STATUS.KW.PENDING });
     void reason;
     return 'paused';
+  }
+
+  /** 🚦 v1.21.30 (طلب المستخدم الحرفي: «لما الركن يظهر — اتعامل وابدأ بنفس الكلمة من
+   *  تاني»): الركن بقى فعل، مش انتظار. تبريد قصير 15–25 ثانية (الصفحة لسه محروقة +
+   *  مفيش لفّ حار على الجهاز)، وبعدين تاب جديد بنفس الكلمة — المسح الكبير متروك عمدًا
+   *  لمسار السقف اللي فوق (6 مسحات/رن) عشان ما تقيلش على جهاز المستخدم. التاب فشل؟
+   *  بترجع 'noop' والندّاه يركّن الكلمة بدل ما يدور في فراغ. */
+  async restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts) {
+    if (capRestarts >= 2) { return null; }
+    const cool = 15000 + Math.floor(Math.random() * 10000);
+    await logger.warn('queue', `🔄 "${kw.keyword}" — الكابتشا ركنّت: بنبدأ بيها من الصفر (المحاولة ${capRestarts + 1}/2) بعد استقرار ${Math.round(cool / 1000)} ثانية — لا استنانة يدوية ولا إيقاف للرن`);
+    await sleep(cool, signal);
+    if (signal && signal.aborted) { return 'aborted'; }
+    const rTab = await this.openFreshTab(kw, cfg, url, tab && tab.id);
+    return rTab ? rTab : 'noop';
+  }
+
+  /** 🎯 v1.21.30 — «إعادة الفحص» من اللوحة: مفيش سرقة الكلمة الشغالة أبدًا؛ الكلمة
+   *  المعلّم بتاعها بتتسطب أول الطابور (مبادلة مواقع فعلية) فتيجي أول ما الحالية تخلص،
+   *  ولو الرن واقع بتستنى أول startIndex عند التشغيل. */
+  async bumpPriority(keywordId) {
+    const keywords = await state.getKeywords();
+    const k = keywords.find((x) => x && x.id === keywordId);
+    if (!k) { return { ok: false, reason: 'not-found' }; }
+    if (k.status === C.STATUS.KW.RUNNING || k.status === C.STATUS.KW.CAPTCHA) {
+      return { ok: false, reason: 'running' };
+    }
+    await state.updateKeyword(k.id, { status: C.STATUS.KW.PENDING, needsReview: false, priority: true, recheckAt: Date.now() });
+    for (const other of keywords) {
+      if (other && other.id !== k.id && other.priority) { await state.updateKeyword(other.id, { priority: false }); }
+    }
+    const run = await state.getRun();
+    const live = run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA;
+    await logger.info('queue', live
+      ? `🎯 "${k.keyword}" — إعادة فحص بأولوية: هتتنقل لها أول ما الكلمة الحالية تخلص`
+      : `🎯 "${k.keyword}" — اتحطّت في أول الطابور — الرن الجاي هيديها العينة الأول`);
+    this.broadcast();
+    return { ok: true, live: !!live };
   }
 
   /** مسح بيانات التصفح تلقائياً كل N كلمة مفحوصة (0 = معطّل) */
@@ -1234,11 +1299,11 @@ export class QueueEngine {
         if (u == null || u === '') { return 'tab-closed'; }
         if (!urlkit.isSorry(u)) { break; } // الصفحة بقت نتائج عادية = اتحلت
         waited += 4;
-        // 🅿️ v1.21.22 (طلب المستخدم «معلّق ليه عند الكابتشا»): الاستنى للأبد كان تعليمات
-        // 1.20.0، بس فلسفة 1.21.7 بقى أدق: ⚠️ مراجعة بره الرن أحسن من تجميد الرن كله.
-        // 5 دقايق من غير حلّ؟ نركّن الكلمة بكل احترام وهتتعاد آخر الرن في جلسة أهدى.
-        if (waited >= 300) {
-          await logger.warn('queue', `🅿️ "${kw.keyword}" — خمس دقايق صبر من غير حلّ: بتتركن بعلامة ⚠️ مراجعة وهتتعاد آخر الرن تلقائيًا`);
+        // 🅿️ v1.21.22 + v1.21.30 (طلب المستخدم: «لما الركن يظهر اتعامل بقى وابدأ من
+        // الأول»): الرحمة اتقصّت من 5 دقايق لدقيقة — والركن نفسه بقى ما يستناش آخر
+        // الرن: الندّاه بيشدّ الكلمة لإعادة انطلاق فورية في تاب جديد (سقف 2)، وبعدين ⚠️.
+        if (waited >= 60) {
+          await logger.warn('queue', `🅿️ "${kw.keyword}" — دقيقة صبر من غير حلّ: بتتركن بعلامة ⚠️ مراجعة والرن بيعدّي عليها حالًا`);
           return 'park';
         }
         // 🧨 v1.21.18 (يستبدل دورة «ريلود×2 كل 90ث» من 1.21.2/1.21.8): «expired» = الجلسة
@@ -1716,7 +1781,9 @@ export class QueueEngine {
     let bestKept = false;
     if (!match.found && !aiMatch.found && (kw.lastFound || kw.lastAiFound) && kw.lastCheckedAt) {
       const runB = await state.getRun();
-      if (runB && runB.startedAt && kw.lastCheckedAt >= runB.startedAt) { bestKept = true; }
+      // v1.21.30: إلا لو المستخدم ضغط «إعادة فحص» في الرن ده — هو عايز الحقيقة الحية،
+      // والحارس ما يخلّيش الكلمة القديمة تحمى نفسها من حكم طلبه هو.
+      if (runB && runB.startedAt && kw.lastCheckedAt >= runB.startedAt && !(kw.recheckAt && kw.recheckAt >= runB.startedAt)) { bestKept = true; }
     }
     await state.addResult(row);
     await state.bumpDailyCount();

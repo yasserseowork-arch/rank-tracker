@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.29');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.29'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.29'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.29\]/m);
+  assert.equal(man.version, '1.21.30');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.30'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.30'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.30\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1320,14 +1320,15 @@ test('v12123: التبريدات اتلغت والنَفَس تحت الثاني
 });
 
 /* -------- v1.21.22 — سقف الركن الرحيم: 5 دقايق ← ⚠️ مراجعة ← الرن يكمل -------- */
-test('v12122: الصبر ليه أرض — park بعد 300 ثانية في اللوب وكل النداءات موصلة', () => {
+test('v12122: الصبر ليه أرض — park بعد دقيقة في اللوب وكل النداءات موصلة', () => {
   const wcc = queue.slice(queue.indexOf('async waitCaptchaCleared'), queue.indexOf('async tabChallengeLooksStale'));
-  assert.match(wcc, /if \(waited >= 300\) \{[\s\S]{0,260}return 'park';/, 'مفيش سقف ركن رحيم جوه اللوب');
+  assert.match(wcc, /if \(waited >= 60\) \{[\s\S]{0,260}return 'park';/, 'مفيش سقف ركن رحيم جوه اللوب (60 ثانية من 1.21.30)');
+  assert.ok(!/if \(waited >= 300\)/.test(wcc), 'الـ5 دقايق لسه رابضة — الركن بقى بعد دقيقة');
   // السقف ما بيمنعش الإشارات التانية: cleared/stale/tab-closed لسه شغالين
   assert.match(wcc, /return 'cleared';/, 'مسار الحل اتبوظ');
   assert.equal((wcc.match(/return 'stale';/g) || []).length, 2, 'درب البياتة اتلمس');
-  assert.match(queue, /if \(cleared === 'park'\) \{\n\s+\/\/ 🅿️[\s\S]{0,140}return this\.recordExhausted\(kw, cfg\);/, 'نداء main مابيركّنش');
-  assert.match(queue, /if \(clearedX === 'park'\) \{ return this\.recordExhausted\(kw, cfg\); \}/, 'فرع ما بعد سقف المسحات موصّلش');
+  assert.match(queue, /if \(cleared === 'park'\) \{\n\s+\/\/ 🚦[\s\S]{0,600}return this\.recordExhausted\(kw, cfg\);/, 'نداء main ما بيركّنش بعد إعادة الانطلاق');
+  assert.match(queue, /if \(clearedX !== 'cleared'\) \{[\s\S]{0,520}return this\.recordExhausted\(kw, cfg\);/, 'فرع ما بعد سقف المسحات موصّلش');
   assert.match(queue, /else if \(clearedL === 'stale' \|\| clearedL === 'park'\)/, 'جولة الاستشفاء التانية مابتركنش');
   // فلسفة «مفيش إلغاء» محفوظة: الركن بمراجعة مش حكم بـ«غير موجود»
   assert.match(queue, /بتتركن بعلامة ⚠️ مراجعة/, 'الرسالة لازم تقول إنها مراجعة مش غياب');
@@ -1423,7 +1424,7 @@ test('v12118: الاستشفاء فورًا — تبريد الرفض ثانية
   const i1 = queue.indexOf('await sleep(500 + Math.floor(Math.random() * 400));');
   assert.ok(i1 > i0 && i1 < i0 + 2000, 'تهدئة الترحيبية مش جوه دالة المسح أو لسه طويلة');
   assert.equal((queue.match(/1000 \+ Math\.floor\(Math\.random\(\) \* 800\)/g) || []).length, 1, 'تسخين أول الرن لازم يفضل زي ما هو (مرة واحدة بس)');
-  assert.match(queue, /if \(clearedX !== 'cleared'\) \{\n            await sleep\(20000, signal\);/, 'رحمة السقف اتنسيت — لوف حار محتمل');
+  assert.match(queue, /if \(clearedX !== 'cleared'\) \{\n            const rT = await this\.restartAfterCaptchaPark\(/, 'رحمة السقف ما اتحولتش لإعادة انطلاق فورية');
 });
 
 /* -------- v1.21.17 — دقة الملكية: صفر تقارب في الدومين -------- */
@@ -1613,4 +1614,46 @@ test('v12129: الكتابة في storage.sync مباشرة — نفس المف�
   assert.ok(!/hits\.innerHTML = (?!'')/.test(js), 'innerHTML بيحقن غير نص؟');
   const css = read('src/sidepanel/side-panel.css');
   assert.match(css, /\.geo-map \{ width: 100%; height: 290px;/, 'ستايل المعاينة ناقص');
+});
+
+/* -------- v1.21.30 — الركن بقى إعادة انطلاق + ↻ أولوية لكل كلمة -------- */
+test('v12130: ركن الكابتشا ما بقاش قعدة انتظار — دقيقة رحمة وإعادة من الصفر في تاب جديد (سقف 2)', () => {
+  assert.match(queue, /if \(waited >= 60\) \{/, 'الصبر لسه 5 دقايق');
+  assert.match(queue, /بنبدأ بيها من الصفر \(المحاولة \$\{capRestarts \+ 1\}\/2\)/, 'لوج إعادة الانطلاق ناقص');
+  const helper = queue.slice(queue.indexOf('async restartAfterCaptchaPark'), queue.indexOf('async bumpPriority'));
+  assert.ok(helper.length > 100, 'مفيش دالة إعادة الانطلاق');
+  assert.match(helper, /if \(capRestarts >= 2\) \{ return null; \}/, 'مفيش سقف مرتين للكلمة الواحدة');
+  assert.match(helper, /const cool = 15000 \+ Math\.floor\(Math\.random\(\) \* 10000\);/, 'التبريد مش 15–25 ثانية');
+  assert.ok(!/browsingData\.remove|clearBrowser/.test(helper), 'الإعادة تنسف البيانات نفسها؟ لأ — المسح الكبير فضّل لسقف الـ6');
+  const n = queue.split('this.restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts)').length - 1;
+  assert.equal(n, 2, 'مسار الركن التاني (بعد استنفاد المسحات) موصّلش');
+  // الحزام الأخير ساكن: بعد السقف ⚠️ مراجعة والرن يعدّي (مش وقف ولا إلغاء)
+  assert.match(queue, /return this\.recordExhausted\(kw, cfg\); \//, 'الحزام الأخير (⚠️ وتكملة الرن) اتشال');
+  // «مفيش كلمة بتتبوظ» — لفة المراجعة آخر الرن لسه بتلم الشقف
+  assert.match(queue, /await this\.reviewPass\(\);/, 'لفة المراجعة آخر الرن اتقطعت');
+});
+
+test('v12130: زرار ↻ — الأولوية بعد الكلمة الشغالة، مفيش سرقة نص فحص، وإعادة يدوية ما تنحارسش', () => {
+  const bp = queue.slice(queue.indexOf('async bumpPriority(keywordId)'));
+  const body = bp.slice(0, 1800);
+  assert.match(body, /reason: 'running'/, 'الكلمة الشغالة ما بتتنلسقش — سرقة محتملة');
+  assert.match(body, /status: C\.STATUS\.KW\.PENDING, needsReview: false, priority: true, recheckAt: Date\.now\(\)/, 'تعليم الأولوية ناقص');
+  assert.match(queue, /const prio = keywords\.findIndex\(\(k, i\) => i >= this\.index && k && k\.priority\)/, 'مفيش سحب لأول الطابور');
+  assert.match(queue, /arr\[this\.index\] = arr\[prio\]; arr\[prio\] = tmp;/, 'المبادلة مش مواقع فعلية — العدّاد هيتلخبط');
+  assert.match(queue, /if \(kw\.priority\) \{ await state\.updateKeyword\(kw\.id, \{ priority: false \}\); \}/, 'العلم ما بيتسحبتش عند بداية الكلمة');
+  assert.match(queue, /k\.status === C\.STATUS\.KW\.PENDING && k\.priority/, 'start() ما بيعترفش بالأولوية والرن واقع');
+  // الاستثناء من حارس الأفضل-يفوز: إعادة الفحص اليدوية بتكتب الحقيقة الحية
+  assert.match(queue, /&& !\(kw\.recheckAt && kw\.recheckAt >= runB\.startedAt\)/, 'إعادة الفحص اليدوية لسه تحت الحراسة الغلط');
+  const br = read('src/background/core/bridge.js');
+  assert.match(br, /QUEUE_RECHECK: 'srt\/queue\/recheck'/, 'الرسالة مش في الـbridge');
+  const rt = read('src/background/core/router.js');
+  assert.match(rt, /case C\.MSG\.QUEUE_RECHECK:/, 'الراوتر موصّلش');
+  assert.ok(rt.includes('C.MSG.QUEUE_RECHECK, C.MSG.CONFIG_RESET') || rt.includes('C.MSG.QUEUE_RECHECK'), 'الرسالة مش في الـallowlist');
+  const pnl = read('src/sidepanel/side-panel.js');
+  assert.match(pnl, /className = 'icon-btn kw-recheck'/, 'مفيش زرار في الجدول');
+  assert.match(pnl, /tdStatus\.appendChild\(recheck\)/, 'الزرار مش تحت شارة الحالة زي ما طلب');
+  assert.match(pnl, /send\(C\.MSG\.QUEUE_RECHECK, \{ id: kw\.id \}\)/, 'مفيش بعت للـbackground');
+  const i18n = read('src/lib/i18n-ui.js');
+  const arAt = i18n.indexOf('ar: {'); const enAt = i18n.indexOf('en: {');
+  assert.ok(i18n.slice(arAt, enAt).includes('btnRecheck') && i18n.slice(enAt).includes('btnRecheck'), 'مفتاح الزرار ناقص في لغة');
 });

@@ -189,6 +189,22 @@ function renderKeywords() {
       tdStatus.appendChild(rv);
     }
 
+    // 🎯 v1.21.30 (طلب المستخدم): زرار ↻ تحت شارة الحالة — يدوس، الكلمة الشغالة
+    // تخلص براحتها، وبعدين اللي اتعلّمت أولوية تتنفذ الأول، والرن يكمل عادي.
+    const recheck = document.createElement('button');
+    recheck.type = 'button';
+    recheck.className = 'icon-btn kw-recheck';
+    recheck.textContent = '\u21BB';
+    recheck.title = t('btnRecheck');
+    recheck.addEventListener('click', async () => {
+      const r = await send(C.MSG.QUEUE_RECHECK, { id: kw.id });
+      if (r && r.ok === false && r.reason === 'running') {
+        recheck.title = 'هي دي اللي شغالة دلوقتي — استناها تخلص وبعدين دوسها';
+      }
+      await refresh();
+    });
+    tdStatus.appendChild(recheck);
+
     const tdPos = document.createElement('td');
     const pos = document.createElement('span');
     const kwAi = kw.lastPosition == null && kw.lastAiPosition != null;
