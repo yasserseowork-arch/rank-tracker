@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.33');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.33'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.33'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.33\]/m);
+  assert.equal(man.version, '1.21.34');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.34'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.34'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.34\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -862,7 +862,7 @@ test('v1213: watchdog بنبض 30 ثانية + شفاء الصفوف المعل�
 
 test('v1213: ⚡ وضع بارد بإيقاع يدوي — وبأول كابتشا رجوع كامل للإيقاع الآمن', () => {
   assert.match(sched, /const cold = !!\(context && context\.cold\);/, 'الفصل بين الوضعين مش في الـscheduler؟');
-  assert.match(sched, /cold\s*\n?\s*\?\s*700 \+ Math\.floor\(Math\.random\(\) \* 900\)/, 'فاصل الوضع البارد مش على مقاس 1.21.9');
+  assert.match(sched, /cold\s*\n?\s*\?\s*550 \+ Math\.floor\(Math\.random\(\) \* 750\)/, 'فاصل الوضع البارد مش على مقاس 1.21.9');
   assert.match(sched, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'الإيقاع الآمن الدافي اتبوظ — ده ممنوع');
   assert.match(queue, /cold: \(this\.captchaHeat \|\| 0\) === 0/, 'النداء مابيحكيش حالة الحرارة');
   // الحرارة بتبرد كلمة بكلمة (قفل سابق لسه شغال) → الوضع البارد بيرجع لوحده بعد العاصفة
@@ -879,7 +879,7 @@ test('v1214: heat==1 بتطفّى بكلمة نضيفة (كانت أبدية) �
   assert.match(queue, /else if \(this\.captchaHeat === 1\) \{/, 'لسه الحرارة على 1 مش بتنزل — الوضع البارد مستحيل ييجي');
   assert.match(queue, /this\.captchaHeat = 0;/, 'التصفير مش مسجل نفسه');
   assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'الإيقاع الدافي اتبوظ — ممنوع');
-  assert.match(sched, /cold\s*\n?\s*\?\s*700 \+ Math\.floor\(Math\.random\(\) \* 900\)/, 'البارد مش على 0.7–1.6 (v1.21.9)');
+  assert.match(sched, /cold\s*\n?\s*\?\s*550 \+ Math\.floor\(Math\.random\(\) \* 750\)/, 'البارد مش على 0.7–1.6 (v1.21.9)');
 });
 
 test('v1214: نزول المسح الطويل اتخفّف — من غير لمس توقيتات الكابتشا المقدسة', () => {
@@ -1046,7 +1046,7 @@ test('v1219: Cairo جوه الإضافة — ملفات حية، @font-face، و
 
 test('v1219: السرعة الجديدة مطبقة — والممنوعات Sacred زي صخورها', () => {
   const sch = read('src/background/core/scheduler.js');
-  assert.match(sch, /\?\s*700 \+ Math\.floor\(Math\.random\(\) \* 900\)/, 'البارد 0.7–1.6 مش مطبق');
+  assert.match(sch, /\?\s*550 \+ Math\.floor\(Math\.random\(\) \* 750\)/, 'البارد 0.55–1.3 مش مطبق');
   assert.match(sch, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'دفء الكابتشا اتلمس — ممنوع');
   assert.match(serp, /await D\.humanSleep\(550, 300\);/, 'فاصل الدفعات 0.9–1.8 مش مطبق');
   assert.match(serp, /await D\.humanSleep\(600, 250\);/, 'توسيع AI مش على مقاس 1.21.9');
@@ -1679,4 +1679,42 @@ test('v12133: جذر العلة متلمّ — حقن BeyondTen بيوصل googl
   assert.ok(!prm.includes('"num"'), 'KEEP بتاع beyondten اتلمس — num ما ينفعش يدخله أبدًا');
   // وتاب الأداة المدمج في اللوحة رابض
   assert.ok(read('src/sidepanel/side-panel.html').includes('../../beyondten/popup/popup.html'), 'تاب الأداة اتشال من اللوحة');
+});
+
+/* -------- v1.21.34 — صفر عيوب: تنظيف اللينت + ذاكرة مقفولة + رتم أرق -------- */
+test('v12134: عيوب الكود الحقيقية اتمسحت — مفيش مفاتيح مكررة ولا imports ميتة ولا finally قاتل', () => {
+  const sp = read('src/content/serp.js');
+  const pay = sp.slice(sp.indexOf('const payload = {'), sp.indexOf('const payload = {') + 900);
+  assert.equal((pay.match(/keyword: keyword,/g) || []).length, 1, 'مفتاح keyword مكرر في الـpayload');
+  const q = read('src/background/core/queue.js');
+  assert.ok(!q.includes('nameMatches'), 'import ميت لسه في queue.js');
+  assert.ok(!q.includes('const forward ='), 'helper ميت لسه في wireBus');
+  assert.ok(!q.includes('this.loop();\n        return;'), 'return جوّه finally لسه بياكل الأخطاء');
+  const finAt = q.indexOf('if (this.pendingRestart) {');
+  assert.ok(finAt > -1, 'كتلة الإعادة مش لاقيها');
+  const fin = q.slice(finAt, finAt + 500);
+  assert.ok(fin.includes('Promise.resolve(this.loop()).catch'), 'إعادة الحلقة بلا حارس rejection');
+  for (const f of ['gsloc/js/background.js', 'gsloc/js/options.js']) {
+    assert.equal((read(f).match(/\u00a0/g) || []).length, 0, f + ': NBSP لسه مخبي في الكود');
+  }
+});
+
+test('v12134: خفيف على الجهاز — كاش التحليلات مسقوف وبيتطهر آخر الرن، والنبضة بتنام في الخفاء', () => {
+  const q = read('src/background/core/queue.js');
+  assert.match(q, /while \(this\.lastSerp\.size > 24\)/, 'سقف الكاش مش مركّب');
+  assert.match(q, /this\.lastSerp\.clear\(\)/, 'تنظيف آخر الرن مش موجود');
+  const pnl = read('src/sidepanel/side-panel.js');
+  assert.match(pnl, /document\.hidden/);
+  assert.match(pnl, /tickBeat\+\+ % 4/, 'النبضة لسه بتخبط كل 500ms على الفاضي');
+});
+
+test('v12134: أرشق بأمان — المسبار 800ms والفاصل البارد 0.55–1.3ث، وكل المقدسات الساخنة ساكنة', () => {
+  const q = read('src/background/core/queue.js');
+  assert.ok(q.includes('}, 800);'), 'المسبار ما اتسرّعش');
+  assert.ok(q.includes('}, 1200);'), 'تايمر الكابتشا اتلمس — ممنوع');
+  const sch = read('src/background/core/scheduler.js');
+  assert.match(sch, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'الفاصل الدافي ده مقدس — ليه تتلمس؟');
+  assert.match(read('src/background/core/state.js'), /delayMs: 4000,/);
+  assert.ok(q.includes('await sleep(20000, signal)'), 'سكن الـ20 ثانية اتبوظ');
+  assert.match(read('src/content/serp.js'), /finalizeAi\(early\.ai, 1200\)/);
 });

@@ -14,7 +14,7 @@ import * as tabctl from './tabctl.js';
 import * as scheduler from './scheduler.js';
 import * as urlkit from './urlkit.js';
 import { localCheck } from './localcheck.js';
-import { matchResults, nameMatches, normalizeArabic } from './match.js';
+import { matchResults, normalizeArabic } from './match.js';
 import * as csvkit from './csvkit.js';
 import { CaptchaOrchestrator } from './captcha-orchestrator.js';
 import { sleep } from './rand.js';
@@ -86,10 +86,6 @@ export class QueueEngine {
 
   /** ربط رسائل الـ content scripts بالناقل الداخلي مع tabId */
   wireBus() {
-    const forward = (type) => (message, sender) => {
-      const payload = Object.assign({}, message, { tabId: sender && sender.tab ? sender.tab.id : null });
-      bus.emit(type, payload);
-    };
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!message) { return; }
       // خدمة النسخ باسمها الأصلي (بروتوكول 1.18.6) — الآن ترد عليها خلفية أداتنا بمحركها الخاص
@@ -165,7 +161,11 @@ export class QueueEngine {
     // تخزين آخر تحليل لكل تبويب — يعالج سباق «الحل جه والتحليل وصل قبل ما نستمع»
     this.lastSerp = this.lastSerp || new Map();
     bus.on(C.MSG.SERP_PARSED, (p) => {
-      if (p && p.tabId) { this.lastSerp.set(p.tabId, { payload: p, ts: Date.now() }); }
+      if (p && p.tabId) {
+        this.lastSerp.set(p.tabId, { payload: p, ts: Date.now() });
+        // 🪶 1.21.34: سقف الكاش — أي تاب قديم بيطير الأول (100 نتيجة × تبويب = ميجايات)
+        while (this.lastSerp.size > 24) { this.lastSerp.delete(this.lastSerp.keys().next().value); }
+      }
     });
     bus.on(C.MSG.CAPTCHA_ATTEMPT, (m) => {
       logger.info('captcha', `محاولة حل من الآلة الذاتية (${m.stage || '?'}) — tab:${m.tabId}`);
@@ -446,15 +446,18 @@ export class QueueEngine {
       await this.notify('⚠️ الأداة وقفت', 'حصل خطأ غير متوقع — الواتش دوج هيحاول استئنافها لوحده خلال دقيقتين. لو مكملتش، دوس استئناف من اللوحة.');
     } finally {
       this.looping = false;
+      if (this.lastSerp) { this.lastSerp.clear(); } // 🪶 1.21.34: كاش التحليلات بيتمسح مع نهاية الرن — ذاكرة نظيفة لكل جولة
       if (this.pendingRestart) {
         this.pendingRestart = false;
         this.broadcast();
-        this.loop();
-        return;
+        Promise.resolve(this.loop()).catch(async (e) => {
+          await logger.error('queue', 'إعادة الحلقة تعثرت: ' + (e && e.stack ? e.stack : e));
+        });
+      } else {
+        const run = await state.getRun();
+        if (run.status !== C.STATUS.RUN.RUNNING) { this.disarmWatchdog(); }
+        this.broadcast();
       }
-      const run = await state.getRun();
-      if (run.status !== C.STATUS.RUN.RUNNING) { this.disarmWatchdog(); }
-      this.broadcast();
     }
   }
 
@@ -980,7 +983,7 @@ export class QueueEngine {
             finish({ type: 'serp', payload: st.lastPayload });
           }
         } catch (_) {}
-      }, 1200);
+      }, 800); // ⚡ 1.21.34: المسبار بقى 800ms — استرجاع أسرع للحدث اللي فاتنا (الـticker بتاع الكابتشا ساكن على 1200 زي ما هو)
     });
   }
 

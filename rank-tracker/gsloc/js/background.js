@@ -47,7 +47,7 @@ chrome.runtime.onStartup.addListener(function() {
 });
 
 function genUULE() {
-  var lat = Math.floor(settings.latitude*1e7) || 525109360;
+  var lat = Math.floor(settings.latitude*1e7) || 525109360;
   var lng = Math.floor(settings.longitude*1e7) || 134104990;
   // v1.21.6: قطر قابل للضبط — «السعودية كلها» بيذرعه ديفولت الأدوات المدمجة بـ1000كم،
   // وأي مدينة يختارها المستخدم من Places بتفضل على الـ65كم التاريخي بتاع الجهاز

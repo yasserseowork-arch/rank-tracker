@@ -73,7 +73,7 @@ export async function preKeywordDelay(cfg, context, signal) {
   // أول ما كابتشا تظهر بنبقى 5.5–9 ثانية على طول، والحرارة بتنزل بكلمة نضيفة (v1.21.4)
   const cold = !!(context && context.cold);
   const ms = cold
-    ? 700 + Math.floor(Math.random() * 900)
+    ? 550 + Math.floor(Math.random() * 750) // ⚡ 1.21.34 (طلب المستخدم: «الرتم أسرع»): الرن البارد الصافي 0.55–1.3 ثانية — لسه عشوائي فوق أي بوت منتظم
     : 5500 + Math.floor(Math.random() * 3500); // v1.20.5: تسريع — 5.5–9 ثواني عشوائية لسه فوق متوسط اليدوي وأدنى متوسط بوت
   await logger.info('scheduler', `${cold ? '⚡ ' : ''}مهلة قبل الكلمة #${(context && context.index || 0) + 1}: ${(ms / 1000).toFixed(1)}ث`);
   return wait(ms, 'predelay', signal);

@@ -118,7 +118,16 @@ function renderNotice() {
 function bindRestStrip() {
   renderRestStrip();
   renderNotice();
-  const tick = () => { renderRestStrip(); renderNotice(); };
+  let tickBeat = 0;
+  const tick = () => {
+    if (typeof document !== 'undefined' && document.hidden) { return; } // 🪶 اللوحة مخفية — مفيش رسم خالص
+    const run = (snapshot && snapshot.run) || {};
+    const live = (run.breakUntil && Date.now() < run.breakUntil + 1500)
+      || (run.notice && (Date.now() - (run.notice.ts || 0) < 46000));
+    if (!live && (tickBeat++ % 4)) { return; } // ⚡ في الهدوء: فحص كل ثانيتين بدل كل نص — نفس الشكل بربع اللمس
+    renderRestStrip();
+    renderNotice();
+  };
   setInterval(tick, 500);
   const btn = $('noticeClose');
   if (btn) {

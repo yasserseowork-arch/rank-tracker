@@ -122,7 +122,6 @@
   }));
 
   /* --------------- القارئ المقاوم لتغييرات جوجل (درس Serp Counter) --------------- */
-  const BAD_HREF = /google\.com\/(search|url|maps|imgres)|googleads\.g\.doubleclick\.net|\/aclk\?|\/services\//;
 
   function extractFrom(root, isLive) {
     const scope = root || document;
@@ -822,7 +821,6 @@
 
     const wait = await waitForResults(cfg);
     const payload = {
-      keyword: keyword,
       keyword: keyword,
       serpUrl: href,
       expectedNum: expectedNum,

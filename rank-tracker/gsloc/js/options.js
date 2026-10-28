@@ -91,7 +91,7 @@ function getOptions() {
     });
 
     $('#button-consent').on('click', function() {
-      result['options']['consent'] = $('#input-consent').val() || '';
+      result['options']['consent'] = $('#input-consent').val() || '';
       chrome.storage.sync.set(result);
       background.options.consent = result['options']['consent'];
     });
