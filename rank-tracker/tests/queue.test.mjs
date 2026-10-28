@@ -192,3 +192,19 @@ test('notify v1.21.26: مكرر فوري جوه 40 ثانية بيتتجاهل �
   assert.equal((await state.getRun()).notice.title, '⚠️ الأداة وقفت', 'الروتيني ورا الحرج بيستنى الـ12 ثانية');
   await state.setRun({ notice: null });
 });
+
+test('regionFromFooter v1.21.28: بتلمح اسم الدولة من رجل صفحة جوجل وتطابق بالمطلوب', () => {
+  const engine = new QueueEngine();
+  const okSa = engine.regionFromFooter('المملكة العربية السعودية    ٢٠٢٦', 'sa');
+  assert.equal(okSa.known, true, 'لازم تتعرف على السعودية');
+  assert.equal(okSa.gl, 'sa');
+  assert.equal(okSa.matched, true, 'sa مطلوب = تطابق');
+  const wrong = engine.regionFromFooter('Egypt', 'sa');
+  assert.equal(wrong.gl, 'eg');
+  assert.equal(wrong.matched, false, 'مصر مش السعودية — اختلاف');
+  const empty = engine.regionFromFooter('', 'sa');
+  assert.equal(empty.known, false, 'مفيش فوتر = مفيش حكم');
+  assert.equal(empty.matched, true, 'والمجهول ما يتحسبش غلط');
+  const unknown = engine.regionFromFooter('Settings Help Privacy', 'sa');
+  assert.equal(unknown.known, false, 'فوتر بلا دولة = سكوت');
+});

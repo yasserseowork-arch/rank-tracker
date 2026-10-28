@@ -238,6 +238,11 @@ export class QueueEngine {
     if (!keywords.length) { return { ok: false, reason: 'no-keywords' }; }
     const cfg = await state.getConfig();
     if (!cfg.storeDomain && !cfg.storeName && !cfg.storeNameEn) { return { ok: false, reason: 'no-target' }; }
+    // 🌍 v1.21.28: الشفافية قبل البدء — المستخدم يعرف الأداة بتبحث منين وبالظبط إزاي
+    try {
+      const u0 = new URL(urlkit.buildSearchUrl('اختبار', cfg));
+      await logger.info('queue', `🌍 البحث ده الرن: ${u0.host} بمنطق «${String(cfg.gl || 'sa').toLowerCase()}» بلغة ${cfg.hl || 'ar'} — لو في مدن بالاسم استخدم GsLoc Places على نفس البروفيل، ومفيش أي كروم تاني بيتفتح: نفس بروفيل الإضافة بتاعك`);
+    } catch (_) {}
     const daily = await state.getDailyCount();
     if (cfg.maxChecksPerDay > 0 && daily.count >= cfg.maxChecksPerDay) {
       await logger.warn('queue', `تم بلوغ السقف اليومي (${cfg.maxChecksPerDay} فحصاً) — ارفعه من الإعدادات المتقدمة أو انتظر الغد`);
@@ -501,8 +506,15 @@ export class QueueEngine {
     if (cfg.reuseTab !== false) {
       tab = await this.aliveWorkerTab();
       if (tab) {
-        const resp = await this.sendSearchCmd(tab.id, kw.keyword);
-        if (resp && resp.ok) { navigatedViaBox = true; }
+        // 🌍 v1.21.28: التنقل بالصندوق بيقعدنا على الدومين اللي التاب عليه أصلًا — لو
+        // المنطقة بتستهدف google.com.sa والصندوق على google.com، النتيجة هتفضل دولية.
+        // مطابقة الدومين شرط للدخول بالصندوق؛ المختلف يتنقل بالرابط كامل.
+        let boxOk = true;
+        try { boxOk = !tab.url || new URL(tab.url).host === new URL(url).host; } catch (_) { boxOk = false; }
+        if (boxOk) {
+          const resp = await this.sendSearchCmd(tab.id, kw.keyword);
+          if (resp && resp.ok) { navigatedViaBox = true; }
+        }
       }
     }
     if (!tab) {
@@ -1514,6 +1526,7 @@ export class QueueEngine {
       this.staleRevivesThisRun = 0; // 🩹 v1.21.21: وعدّاد الإحياءات معاهم
       this.captchaRevealedTab = null; // v1.21.16: و«التاب المعروض» كمان — كل رن يبدأ نضيف
       this.captchaStreak = 0; // 🧊 v1.21.25: والسلسلة برضه من الصفر
+      this._regionWarned = false; // 🌍 v1.21.28: راية تحذير المنطقة بتولّد مع كل رن
       const perSec = stat.processed ? Math.round((dur / stat.processed) / 100) / 10 : 0;
       await logger.info('queue', `📊 تقرير الرن: ${stat.processed} كلمة في ${(Math.round(dur / 600) / 10)} دقيقة (${perSec}ث/كلمة) — كابتشا: ${stat.captchaSeen} (اتحلّت أوتوماتيك ${stat.captchaSolves}) — مراجعة: ${stat.review}${stat.coverageAvg != null ? ' — متوسط التغطية: ' + stat.coverageAvg + '%' : ''}`);
     } catch (_) {}
@@ -1572,6 +1585,33 @@ export class QueueEngine {
       this.broadcast();
     }
     return { ok: true, reviewed: n };
+  }
+
+  /** 🌍 v1.21.28 — جوجل نفسه بيكتب منطقة تقديم النتايج في فوتر صفحة البحث.
+   *  نقرأ ونطابق مع المطلوب: «مش موجودة» حقيقية أحسن بألف مرة من «مش موجودة»
+   *  سببها إن البحث اتعمل من بلد تانية.رجع {known, gl, matched} — مجهول = ما نحكمش. */
+  regionFromFooter(text, gl) {
+    const LABELS = {
+      sa: 'السعودية|Saudi Arabia', ae: 'الإمارات|United Arab', eg: 'مصر|Egypt',
+      kw: 'الكويت|Kuwait', qa: 'قطر|Qatar', bh: 'البحرين|Bahrain', om: 'عمان|Oman',
+      jo: 'الأردن|Jordan', lb: 'لبنان|Lebanon', ma: 'المغرب|Morocco', tn: 'تونس|Tunisia',
+      dz: 'الجزائر|Algeria', iq: 'العراق|Iraq', ye: 'اليمن|Yemen', tr: 'تركيا|Turkey',
+      us: 'United States|الولايات', gb: 'United Kingdom', de: 'Germany|ألمانيا',
+      fr: 'France|فرنسا', es: 'Spain|إسبانيا', it: 'Italy|إيطاليا', nl: 'Netherlands',
+      ru: 'Russia|روسيا', br: 'Brazil|البرازيل', in: 'India|الهند', pk: 'Pakistan'
+    };
+    const t = String(text || '');
+    if (!t) { return { known: false, gl: '', matched: true }; }
+    const want = String(gl || 'sa').toLowerCase();
+    const keys = Object.keys(LABELS);
+    for (let i = 0; i < keys.length; i++) {
+      const g = keys[i];
+      const parts = LABELS[g].split('|');
+      let hit = false;
+      for (let j = 0; j < parts.length; j++) { if (t.indexOf(parts[j]) !== -1) { hit = true; break; } }
+      if (hit) { return { known: true, gl: g, matched: g === want }; }
+    }
+    return { known: false, gl: '', matched: true };
   }
 
   async recordResult(kw, serp, cfg, via) {
@@ -1638,12 +1678,25 @@ export class QueueEngine {
       aiTotal: (serp.aiItems || []).length,
       adsCount: serp.adsCount || 0,
       noResults: !!serp.noResults,
+      regionGl: null, regionMismatch: false,
       topHosts: (serp.items || []).slice(0, 6).map((i) => i.host),
       via: via,
       serpUrl: serp.serpUrl || '',
       expectedNum: serp.expectedNum || 0, // 📊 v1.21.7: للتغطية في التقرير
       checkedAt: Date.now()
     };
+    // 🌍 v1.21.28 — بصمة المنطقة من فوتر جوجل نفسه: تطابق يسكت، اختلاف يصرخ مرة
+    // واحدة في الرن (وشارة في الصف للتصدير) — مش بنغيّر النتيجة، بنكشف السبب بس.
+    if (serp.regionText) {
+      const rchk = this.regionFromFooter(serp.regionText, cfg.gl || 'sa');
+      row.regionGl = rchk.known ? rchk.gl : null;
+      row.regionMismatch = !!(rchk.known && !rchk.matched);
+      if (row.regionMismatch && !this._regionWarned) {
+        this._regionWarned = true;
+        await logger.warn('queue', `🌍 جوجل قدّم النتايج من منطقة «${rchk.gl}» المطلوبة «${String(cfg.gl || 'sa').toLowerCase()}» — لو بحثك اليدوي مختلف دي هي الفروق: شغّل GsLoc Places على نفس البروفيل ده أو ظابط الإعداد`);
+        await this.notify('🌍 بصمة المنطقة', 'في كلمات اتحسبت من منطقة غير المطلوبة — اللوج فيه التفاصيل');
+      }
+    }
     // فحص النتائج المحلية (خرائط) اختياري — مثل خطوة السيناريو اليدوي
     if (cfg.mapsCheck) {
       const loc = await localCheck(kw.keyword, cfg);

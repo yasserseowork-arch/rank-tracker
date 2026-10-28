@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.27');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.27'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.27'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.27\]/m);
+  assert.equal(man.version, '1.21.28');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.28'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.28'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.28\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1546,4 +1546,37 @@ test('v12127: قاعدة الأفضل يفوز — نتيجة موجودة ما 
   assert.match(re, /ما تحتاجش مراجعة: السطر يفضل زي ما هو/, 'exhausted ما بيعترفش بالحارس');
   // التصدير الكامل: الـrow الجديدة بتتنضاف دايمًا قبل الحارس
   assert.ok(rr.indexOf('state.addResult(row)') < rr.indexOf('const kpatch'), 'الصف الإضافي لازم يتسجل حتى مع الحراسة');
+});
+
+/* -------- v1.21.28 — دومين على مقاس المنطقة + بصمة فوتر جوجل -------- */
+test('v12128: السعودية بتتبحث على google.com.sa — وغير ده يفضل google.com بلا كسر حقن', () => {
+  const uk = read('src/background/core/urlkit.js');
+  assert.match(uk, /const host = \(gl === 'sa'\) \? \(config\.googleHost \|\| 'www\.google\.com\.sa'\)/, 'دومين .sa للسعودية مش متطبّق');
+  assert.match(uk, /: \(config\.googleHost \|\| 'www\.google\.com'\)/, 'باقي المناطق لازم تفضل على الدومين المحقون عنه google.com');
+  assert.match(uk, /new URL\('https:\/\/' \+ host \+ '\/search'\)/, 'الرابط ما بيتبناش على الدومين المختار');
+  // مسار الصندوق مش بيفرض الدومين الغلط
+  const q = read('src/background/core/queue.js');
+  assert.match(q, /new URL\(tab\.url\)\.host === new URL\(url\)\.host/, 'صندوق البحث ما بيتحاجزش بمطابقة الدومين');
+});
+
+test('v12128: بصمة المنطقة من فوتر جوجل — بتتسجل، وبتصرخ مرة واحدة بس في الرن', () => {
+  const q = read('src/background/core/queue.js');
+  const at = q.indexOf('regionFromFooter(text, gl)');
+  assert.ok(at > -1, 'مفيش دالة فحص المنطقة');
+  const rf = q.slice(at, at + 1800);
+  assert.match(rf, /sa: 'السعودية\|Saudi Arabia'/, 'قائمة اسم السعودية ناقصة');
+  assert.match(rf, /eg: 'مصر\|Egypt'/, 'مصر مش في القائمة');
+  const rr = q.slice(q.indexOf('async recordResult'), q.indexOf('async recordResult') + 10000);
+  assert.match(rr, /row\.regionGl = rchk\.known \? rchk\.gl : null;/, 'الصف ما بيركّش المنطقة');
+  assert.match(rr, /regionGl: null, regionMismatch: false,/, 'حقول المنطقة مش في قوالب الـrow');
+  assert.match(rr, /row\.regionMismatch && !this\._regionWarned/, 'التحذير مش لمرة واحدة في الرن');
+  assert.match(rr, /جوجل قدّم النتايج من منطقة/, 'لوج المخالفة ناقص');
+  assert.match(q, /this\._regionWarned = false; \/\/ 🌍 v1\.21\.28/, 'الراية ما بتتصفرش مع كل رن');
+  // اللوج الافتتاحي: المستخدم يعرف الأداة بتبحث منين
+  const st = q.slice(q.indexOf('async start()'), q.indexOf('async start()') + 2600);
+  assert.match(st, /مفيش أي كروم تاني بيتفتح/, 'لوج بدء الرن ما بيوضحش الدومين والمنطقة');
+  // الفوتر بيتقري في المحتوى
+  const sp = read('src/content/serp.js');
+  assert.match(sp, /#fbar.*#botbar|D\.qs\('#fbar'\)/s, 'الفوتر مش بيتقري');
+  assert.match(sp, /regionText/, 'الـpayload ما بيحملش النص');
 });

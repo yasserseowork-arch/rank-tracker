@@ -839,6 +839,14 @@
       timedOut: !!wait.timedOut,
       settled: !!wait.settled,
       hasNext: !!D.qs('a#pnnext'),
+      // 🌍 v1.21.28 — بصمة منطقة التقديم من فوتر جوجل نفسه (نص صريح «المملكة العربية
+      // السعودية» أو «Egypt»): الباكجراوند بيطابق مع المطلوب ويصرخ لو في اختلاف.
+      regionText: (function () {
+        try {
+          var fb = D.qs('#fbar') || D.qs('#botbar') || D.qs('.tbos');
+          return fb ? String(fb.textContent || '').replace(/\s+/g, ' ').slice(0, 240) : '';
+        } catch (_) { return ''; }
+      })(),
       parsedAt: Date.now()
     };
     live.parsedSent = true;

@@ -18,9 +18,16 @@ export function isSearch(url) {
 
 export function buildSearchUrl(keyword, cfg) {
   const config = cfg || {};
-  const u = new URL('https://www.google.com/search');
+  const gl = String(config.gl || 'sa').toLowerCase();
+  // 🌍 v1.21.28 (طلب المستخدم: «حاسس إنه بيستهدف منطقة تانية»): بحث بـgl=sa على
+  // www.google.com بيدي سيرب «دولي بالمقاطعة» — قريب من سيرب google.com.sa بس مش هو:
+  // البلوك المحلي والترتيب بيتفارقوا، فالتحقق اليدوي للمستخدم بيبان مختلف. نطابق الدومين
+  // مع المنطقة — بس في حدود اللي السكربتات محقونة فيه فعلًا (com.sa و .sa)؛ أي منطقة
+  // تانية تفضل على google.com عشان الحقن ما يقعش. cfg.googleHost override يدوي للأذكياء.
+  const host = (gl === 'sa') ? (config.googleHost || 'www.google.com.sa') : (config.googleHost || 'www.google.com');
+  const u = new URL('https://' + host + '/search');
   u.searchParams.set('q', String(keyword || '').trim());
-  u.searchParams.set('gl', config.gl || 'sa');
+  u.searchParams.set('gl', gl);
   u.searchParams.set('hl', config.hl || 'ar');
   // مفيش num=100 ولا pws=0 في الرابط: دول بصمة بوت بتستدعي الكابتشا عند جوجل.
   // التوسيع لـ100 بياوله «Show 100 Results» المدمج + الجلب الخلفي — كل ده بحركة طبيعية.
