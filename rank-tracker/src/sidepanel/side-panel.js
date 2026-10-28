@@ -667,3 +667,111 @@ async function main() {
 }
 
 main().catch((err) => console.error('[SRT][panel]', err));
+
+/* ---------------- v1.21.29 — كارت الخريطة الحيّة لمنطقة التتبع ----------------
+ * بيكتب في chrome.storage.sync.settings (نفس المكان اللي الـbackground بيسمع عليه
+ * via onChanged → checkEnabled → updateSessionRules): تغيير لحظي بلا ريستارت. */
+const GEO_SPAN_BY_RADIUS = { 5000: 0.02, 15000: 0.06, 35000: 0.12, 65000: 0.2, 150000: 0.55, 1000000: 9 };
+initGeoMap().catch(() => {});
+async function initGeoMap() {
+  const search = $('geoSearch');
+  if (!search) { return; }
+  const hits = $('geoHits'); const now = $('geoNow'); const selChip = $('geoSel');
+  const preview = $('geoPreview'); const radiusSel = $('geoRadius');
+  const btnApply = $('geoBtnApply'); const btnAll = $('geoBtnAll'); const btnMy = $('geoBtnMy');
+  const note = $('geoNote');
+  const NOTE_DEFAULT = note ? note.textContent : '';
+  let sel = null; let deb = null; let noteTimer = null;
+  const fmt5 = (n) => Number(n).toFixed(5);
+  const syncGet = () => new Promise((res) => { try { chrome.storage.sync.get('settings', (r) => res((r && r.settings) || null)); } catch (_) { res(null); } });
+  const syncSet = (patch) => new Promise((res) => {
+    try {
+      chrome.storage.sync.get('settings', (r) => {
+        const base = Object.assign({ hl: 'ar', gl: 'SA', enabled: true }, (r && r.settings) || {}, patch, { timestamp: Date.now() });
+        chrome.storage.sync.set({ settings: base }, () => res());
+      });
+    } catch (_) { res(); }
+  });
+  const flash = (msg) => { if (!note) { return; } note.textContent = msg; clearTimeout(noteTimer); noteTimer = setTimeout(() => { note.textContent = NOTE_DEFAULT; }, 5000); };
+  const setPreview = (lat, lon, span) => {
+    const w = span || 0.06;
+    const bbox = [lon - w, lat - w * 0.62, lon + w, lat + w * 0.62].map((v) => v.toFixed(5)).join(',');
+    preview.src = 'https://www.openstreetmap.org/export/embed.html?bbox=' + encodeURIComponent(bbox) + '&layer=mapnik&marker=' + lat.toFixed(5) + ',' + lon.toFixed(5);
+  };
+  const renderNow = (s) => {
+    if (!s || s.enabled === false || s.latitude == null) { now.textContent = 'حاليًا: مفيش نقطة — سيرب جوجل الافتراضي (IP + gl)'; selChip.classList.add('hidden'); return; }
+    const rad = Math.round((Number(s.radius) || 65000) / 1000);
+    now.textContent = 'حاليًا: ' + (s.location || s.name || (fmt5(s.latitude) + ',' + fmt5(s.longitude))) + ' · نطاق ' + rad + ' كم' + (s.enabled !== false ? ' ✅' : '');
+  };
+  search.addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(doSearch, 450); });
+  async function doSearch() {
+    const q = String(search.value || '').trim();
+    hits.innerHTML = ''; hits.classList.add('hidden');
+    if (q.length < 2) { return; }
+    try {
+      const resp = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=ar,en&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } });
+      if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
+      const arr = await resp.json();
+      if (!Array.isArray(arr) || !arr.length) { hits.textContent = 'ملقى حاجة بالاسم ده — جرّب الاسم الإنجليزي'; hits.classList.remove('hidden'); return; }
+      arr.forEach((p) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'geo-hit';
+        b.textContent = String(p.display_name || '');
+        b.addEventListener('click', () => {
+          const ad = p.address || {};
+          sel = { lat: Number(p.lat), lon: Number(p.lon), label: String(p.display_name || '').split(',').slice(0, 2).join(',').trim(), cc: String(ad.country_code || '').toUpperCase() };
+          hits.classList.add('hidden'); hits.innerHTML = ''; search.value = '';
+          const span = GEO_SPAN_BY_RADIUS[parseInt(radiusSel.value, 10)] || 0.12;
+          setPreview(sel.lat, sel.lon, span);
+          selChip.textContent = 'مختار: ' + sel.label; selChip.classList.remove('hidden');
+        });
+        hits.appendChild(b);
+      });
+      hits.classList.remove('hidden');
+    } catch (_) {
+      hits.textContent = 'البحث فشل — الإنترنت ولا سيرفر Nominatim ردّش؛ عوّد بعد شوية';
+      hits.classList.remove('hidden');
+    }
+  }
+  btnApply.addEventListener('click', async () => {
+    if (!sel) { flash('دوّر واختار مكان الأول، وبعدين طبّق'); return; }
+    await syncSet({ latitude: sel.lat, longitude: sel.lon, location: sel.label, name: sel.label.split(',')[0], placeId: 'SRT-MAP', radius: parseInt(radiusSel.value, 10) || 65000, enabled: true });
+    if (sel.cc) {
+      const glLow = sel.cc.toLowerCase();
+      const cur = (snapshot && snapshot.config && snapshot.config.gl) || '';
+      if (glLow !== String(cur).toLowerCase()) { try { await send(C.MSG.SET_CONFIG, { patch: { gl: glLow } }); } catch (_) {} }
+    }
+    renderNow(await syncGet());
+    try { const fr = $('frameGsloc'); if (fr && fr.contentWindow) { fr.contentWindow.location.reload(); } } catch (_) {}
+    flash('اتطبق — المسح اللي بعد كده هيتعمل من النقطة دي؛ والرن الشايل بيسمعها من الكلمة اللي بعدها');
+  });
+  btnAll.addEventListener('click', async () => {
+    await syncSet({ latitude: 24.0, longitude: 45.0, location: 'Saudi Arabia', name: 'Saudi Arabia', placeId: 'KSA-COUNTRY', radius: 1000000, hl: 'ar', gl: 'SA', enabled: true, regions: 'Saudi Arabia - Arabic' });
+    sel = null; selChip.classList.add('hidden');
+    setPreview(24.0, 45.0, 9);
+    renderNow(await syncGet());
+    try { const fr = $('frameGsloc'); if (fr && fr.contentWindow) { fr.contentWindow.location.reload(); } } catch (_) {}
+    flash('رجعت لديفولت الأداة: السعودية كلها');
+  });
+  btnMy.addEventListener('click', () => {
+    if (!navigator.geolocation) { flash('المتصفح مابيوفرش تحديد موقع'); return; }
+    flash('بجرب أحدد موقع جهازك…');
+    try {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        sel = { lat: pos.coords.latitude, lon: pos.coords.longitude, label: 'موقع جهازك (' + fmt5(pos.coords.latitude) + ',' + fmt5(pos.coords.longitude) + ')', cc: '' };
+        setPreview(sel.lat, sel.lon, GEO_SPAN_BY_RADIUS[parseInt(radiusSel.value, 10)] || 0.12);
+        selChip.textContent = 'مختار: ' + sel.label; selChip.classList.remove('hidden');
+        flash('اتحدد — دوس «تطبيق حالًا» لو عايز تثبّته');
+      }, () => { flash('المتصفح ماعطاش صلاحية الموقع ولا حددش حاجة'); }, { timeout: 8000 });
+    } catch (_) { flash('تحديد الموقع متاحش في البيئة دي'); }
+  });
+  const cur = await syncGet();
+  renderNow(cur);
+  if (cur && Number(cur.latitude) && Number(cur.longitude)) {
+    setPreview(Number(cur.latitude), Number(cur.longitude), GEO_SPAN_BY_RADIUS[parseInt(cur.radius, 10)] || 0.2);
+  }
+  radiusSel.addEventListener('change', () => {
+    const src = sel || (cur && cur.latitude ? { lat: Number(cur.latitude), lon: Number(cur.longitude) } : null);
+    if (src) { setPreview(src.lat, src.lon, GEO_SPAN_BY_RADIUS[parseInt(radiusSel.value, 10)] || 0.12); }
+  });
+}

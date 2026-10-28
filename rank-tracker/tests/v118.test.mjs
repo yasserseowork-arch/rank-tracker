@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.28');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.28'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.28'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.28\]/m);
+  assert.equal(man.version, '1.21.29');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.29'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.29'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.29\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1579,4 +1579,38 @@ test('v12128: بصمة المنطقة من فوتر جوجل — بتتسجل، 
   const sp = read('src/content/serp.js');
   assert.match(sp, /#fbar.*#botbar|D\.qs\('#fbar'\)/s, 'الفوتر مش بيتقري');
   assert.match(sp, /regionText/, 'الـpayload ما بيحملش النص');
+});
+
+/* -------- v1.21.29 — خريطة تفاعلية لمنطقة التتبع: اختار، دوس تطبيق — اتطبق حالًا -------- */
+test('v12129: كارت الخريطة محطوط فوق فريم Gsloc بنفس الواجهة القديمة ساكنة', () => {
+  const html = read('src/sidepanel/side-panel.html');
+  const at = html.indexOf('id="paneGsloc"');
+  assert.ok(at > -1, 'مفيش تبويب الموقع');
+  const seg = html.slice(at, html.indexOf('id="frameGsloc"', at));
+  assert.match(seg, /geo-card/, 'مفيش كارت الخريطة');
+  assert.match(seg, /id="geoSearch"/, 'مفيش صندوق بحث الأماكن');
+  assert.match(seg, /id="geoRadius"/, 'مفيش محدد النطاق');
+  assert.match(seg, /id="geoBtnApply"/, 'مفيش زرار تطبيق حالًا');
+  assert.match(seg, /id="geoBtnAll"/, 'مفيش زرجاع السعودية كلها');
+  assert.match(seg, /id="geoPreview"/, 'مفيش iframe معاينة');
+  // الفريم القديم لسه موجود وراه مباشرة — واجهة Gsloc ما اتشالتش
+  assert.ok(html.indexOf('id="frameGsloc"', at) > html.indexOf('geoPreview', at), 'فريم Gsloc اتنقل أو اتشال');
+  assert.ok(html.includes('../../gsloc/popup.html'), 'فريم Gsloc اتبوظ');
+});
+
+test('v12129: الكتابة في storage.sync مباشرة — نفس المفتاح اللي الـbackground بيسمع عليه', () => {
+  const js = read('src/sidepanel/side-panel.js');
+  assert.match(js, /initGeoMap\(\)/, 'مفيش تهيئة للكارت');
+  assert.match(js, /nominatim\.openstreetmap\.org\/search\?format=jsonv2&limit=6&accept-language=ar,en&q=/, 'مفيش بحث أماكن متعدد اللغات');
+  assert.match(js, /chrome\.storage\.sync\.set\(\{ settings: base \}/, 'مافيش كتابة على مفتاح settings المشترك');
+  assert.match(js, /placeId: 'SRT-MAP'/, 'مفيش بصمة مصدر الاختيار');
+  assert.match(js, /placeId: 'KSA-COUNTRY'/, 'زر «كل السعودية» ما بيرجعش لنفس.placeId بتاع embedded');
+  assert.match(js, /C\.MSG\.SET_CONFIG, \{ patch: \{ gl: glLow \} \}/, 'مفيش مزامنة gl مع بلد الاختيار');
+  assert.match(js, /contentWindow\.location\.reload\(\)/, 'فريم Gsloc ما بيتعملوش تحديث بعد التطبيق');
+  assert.match(js, /openstreetmap\.org\/export\/embed\.html\?bbox=/, 'مفيش معاينة خريطة حية');
+  assert.match(js, /getCurrentPosition/, 'زر موقعي الحالي موجود؟');
+  // الأمان: مفيش innerHTML بيحقن نصوص بحث المستخدم
+  assert.ok(!/hits\.innerHTML = (?!'')/.test(js), 'innerHTML بيحقن غير نص؟');
+  const css = read('src/sidepanel/side-panel.css');
+  assert.match(css, /\.geo-map \{ width: 100%; height: 290px;/, 'ستايل المعاينة ناقص');
 });
