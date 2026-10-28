@@ -205,9 +205,12 @@ test('تاب واحد مضمون v1.18.4: الأداة بتتبع تبانبها
   assert.equal((queue.match(/foregroundTab: true/g) || []).length, 0, 'v1.21.16: صفر فرض فوكس في المحرك — العرض بس عند شاشة التحدي');
 });
 
-test('ضد الكابتشا من المنبع v1.18.4: مفيش num=100 ولا pws=0 في رابط البحث', () => {
+test('ضد الكابتشا من المنبع v1.18.4→v1.21.31: صفحة 100 سيرفر-سايد بطلب المستخدم — وpws=0 لسه ممنوعة', () => {
   const fn = urlkit.slice(urlkit.indexOf('buildSearchUrl'), urlkit.indexOf('queryOf'));
-  assert.ok(!/searchParams\.set\('num'/.test(fn), 'num=100 لسه في الرابط — بصمة بوت');
+  // عقيدة «ادّي جوجل 10 وبس» اتراجعت بطلب المستخدم الصريح والمرتب: التغطية الكاملة
+  // أهم، وهي نفس سلوك إعدادات BeyondTen اللي بيستخدمه جوجل نفسه للمستخدمين
+  assert.match(fn, /config\.page100 !== false/, 'بوابة page100 اتشالت — المستخدم عايز 100');
+  assert.match(fn, /set\('num', '100'\)/, 'num=100 مش راجع للرابط');
   assert.ok(!/searchParams\.set\('pws'/.test(fn), 'pws=0 لسه بيتحط في الرابط — بصمة بوت');
   assert.match(fn, /'gl'/, 'gl اتلغط بالغلط');
   assert.match(fn, /'hl'/, 'hl اتلغط بالغلط');
@@ -266,7 +269,7 @@ test('v1.18.5: النسخ/التصدير بيترتب زي قائمة الكلم
   assert.match(csvFn, /exportEntriesInUserOrder\(\)/, 'CSV مش بترتيب المستخدم');
   assert.match(csvFn, /r\.checkedAt \? new Date\(r\.checkedAt\)\.toISOString\(\) : ''/, 'تاريخ فارغ اتلغبط بتاريخ دلوقتي');
 
-  // كاتب الشيت في الخلفية — نفس القواعد بالظبط
+  // كاتب الشيت في الخلفية — نفس القواعد بالضبط
   assert.match(queue, /if \(!r\) \{ return '—'; \}/, 'كتابة الشيت الخلفية ما بتعكسش الشرطه');
   assert.match(queue, /lines\.some\(\(l\) => l !== '—'\)/, 'مفيش حارس ضد ملء الشيت شرطات من غير أي فحص');
   assert.match(queue, /Number\.isFinite\(pos\)/, 'كتابة الشيت الخلفية ممكن تكتب NaNai');
@@ -320,7 +323,7 @@ test('v1.18.9: باستر المدمجة اتشيلت خالص — manifest وem
   assert.ok(!existsSync(join(root, 'buster/manifest.json')), 'باستر لسه موصوفة كإضافة كاملة في الحزمة!');
 });
 
-test('v1.18.9: جزء الكابتشا رجع لزي ما كان في 1.18.6 بالظبط — ضغطة الباستا وبس، ومن غير أي بوابة نطاق في التبويب', () => {
+test('v1.18.9: جزء الكابتشا رجع لزي ما كان في 1.18.6 بالضبط — ضغطة الباستا وبس، ومن غير أي بوابة نطاق في التبويب', () => {
   assert.ok(!/srt\/scope|srt\/transcribe|S\.inScope/.test(cap), 'آلة التبويب لسه فيها حرس 1.18.7 — المفروض نسخة 1.18.6 النقية');
   assert.match(cap, /now - S\.busterTs < 18000/, 'مهلة الـ18 ثانية اتلغطت');
   assert.match(cap, /id: 'transcribeAudio'/, 'النسخ مش بيرجع لاسم البروتوكول الأصلي');
@@ -381,7 +384,7 @@ test('v1.18.8: أي ملف JS في src/ لازم يعدي node --check — ال�
 test('v1.18.8: القاموس نفسه سليم — لا فواصل مفقودة ولا مزدوجة عند مفاتيح الاستراحة/العدّاد', () => {
   for (const key of ['restNext', 'restNow', 'restNowClear', 'kwCountTip', 'copyEmpty', 'copyFail']) {
     const hits = [...i18nUi.matchAll(new RegExp(key + ':', 'g'))];
-    assert.equal(hits.length, 2, key + ' مفروض موجود في ar وen بالظبط');
+    assert.equal(hits.length, 2, key + ' مفروض موجود في ar وen بالضبط');
   }
   assert.ok(!/,\s*,/.test(i18nUi), 'في فاصلة مزدوجة ,, في القاموس');
   // كل سطر قيمة نصية لازم ينتهي بفاصلة (جوه بلوك STR) — استثناء آخر مفتاح قبل }
@@ -474,10 +477,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.30');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.30'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.30'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.30\]/m);
+  assert.equal(man.version, '1.21.31');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.31'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.31'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.31\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -567,19 +570,19 @@ test('v1197: كل الطبقات التانية بتطبق نفس السياسة
   assert.ok(!/const nameAllowed/.test(queue), 'حكم الـ AI بقى أي ضلع من الثلاثة (بلا بوابة nameAllowed)');
 });
 
-test('v1197: مسمّى الوضع اتحدّث في اللوحة والمعاجم — «الدومين بالظبط»', () => {
+test('v1197: مسمّى الوضع اتحدّث في اللوحة والمعاجم — «الدومين بالضبط»', () => {
   const i18n = read('src/lib/i18n-ui.js');
-  assert.match(i18n, /الدومين بالظبط \(والاسم لو مفيش دومين\)/);
+  assert.match(i18n, /الدومين بالضبط \(والاسم لو مفيش دومين\)/);
   assert.match(i18n, /Domain exact \(name only if no domain\)/);
   assert.ok(!i18n.includes("'الدومين أو الاسم'"), 'لسه المسمّى القديم بيوعِد بالاسم كمان');
   const html = read('src/sidepanel/side-panel.html');
-  assert.match(html, /<option value="both"[^>]*>الدومين بالظبط/);
+  assert.match(html, /<option value="both"[^>]*>الدومين بالضبط/);
 });
 
 /* ---------------- v1.19.8 — المراكز من 11 لـ100 ما تضيعش بصمت ---------------- */
 
 test('v1198: الجلب الخلفي اتقوّى — إعادة محاولة، num=20، فك تحويلات، وتوقيت ذاتي-التصحيح', () => {
-  assert.match(serp, /u\.searchParams\.set\('num', '20'\)/, 'صفحة الجلب الخلفي لسه بلا num=20');
+  assert.match(serp, /u\.searchParams\.set\('num', '100'\)/, 'صفحة الجلب الخلفي لسه صغيرة — v1.21.31 بتلمّ المتبقي في طلب واحد');
   assert.match(serp, /uu\.searchParams\.get\('q'\) \|\| uu\.searchParams\.get\('url'\)/, 'روابط /url?q= لسه بتسقط النتيجة بدل ما تتفك');
   assert.ok(serp.includes('سكتة ثم فرصة تانية'), 'الدفعة الفاشلة لسه بتتمحو من غير إعادة محاولة');
   assert.match(serp, /start = Math\.ceil\(merged\.length \/ 10\) \* 10; \/\/ تصحيح ذاتي/, 'التوقيت لسه +=10 أعمى');
@@ -1008,7 +1011,7 @@ test('v1219: مفيش سكرول متقطع قدام المستخدم — قفز
   assert.match(serp, /let diveStarted = false;/, 'راية القفزة الأولى مش موجودة');
   assert.match(serp, /let diveNudges = 0;/, 'عداد الربّتة مش موجود');
   assert.match(serp, /diveNudges % 5 === 0/, 'الربّتة مش كل 5 دورات (1.21.15) — أد إيه هتدوش؟');
-  assert.ok((serp.match(/window\.scrollTo\(\{ top: document\.body\.scrollHeight/g) || []).length === 2, 'مفروض قفزتان بالظبط: أولى للآخر + ربّتة شرطية');
+  assert.ok((serp.match(/window\.scrollTo\(\{ top: document\.body\.scrollHeight/g) || []).length === 2, 'مفروض قفزتان بالضبط: أولى للآخر + ربّتة شرطية');
   assert.match(serp, /relock\(\);\n\n    \/\/ 3\) حكم/, 'مفيش relock قبل حكم عدم الوجود — المستخدم هيتلسع بمنظر تحت');
   assert.match(serp, /cfg\.rescanMs \|\| 800/, 'ريسكان مش على 800');
 });
@@ -1170,7 +1173,7 @@ test('v12113: التصفير الكامل — إعدادات وكلمات ونت
 
 function rt13() { return read('src/background/core/router.js'); }
 
-test('v12113: العمود في المنتصف بالظبط + الأنيميشن الخفيف بحرس reduced-motion', () => {
+test('v12113: العمود في المنتصف بالضبط + الأنيميشن الخفيف بحرس reduced-motion', () => {
   const css = read('src/sidepanel/side-panel.css');
   const bAt = css.indexOf('\nbody {');
   const bodyRule = css.slice(bAt, css.indexOf('}', bAt));
@@ -1593,9 +1596,9 @@ test('v12129: كارت الخريطة محطوط فوق فريم Gsloc بنفس 
   assert.match(seg, /id="geoRadius"/, 'مفيش محدد النطاق');
   assert.match(seg, /id="geoBtnApply"/, 'مفيش زرار تطبيق حالًا');
   assert.match(seg, /id="geoBtnAll"/, 'مفيش زرجاع السعودية كلها');
-  assert.match(seg, /id="geoPreview"/, 'مفيش iframe معاينة');
+  assert.match(seg, /id="geoMap"/, 'مفيش حاوية الخريطة التفاعلية');
   // الفريم القديم لسه موجود وراه مباشرة — واجهة Gsloc ما اتشالتش
-  assert.ok(html.indexOf('id="frameGsloc"', at) > html.indexOf('geoPreview', at), 'فريم Gsloc اتنقل أو اتشال');
+  assert.ok(html.indexOf('id="frameGsloc"', at) > html.indexOf('geoMap', at), 'فريم Gsloc اتنقل أو اتشال');
   assert.ok(html.includes('../../gsloc/popup.html'), 'فريم Gsloc اتبوظ');
 });
 
@@ -1608,12 +1611,12 @@ test('v12129: الكتابة في storage.sync مباشرة — نفس المف�
   assert.match(js, /placeId: 'KSA-COUNTRY'/, 'زر «كل السعودية» ما بيرجعش لنفس.placeId بتاع embedded');
   assert.match(js, /C\.MSG\.SET_CONFIG, \{ patch: \{ gl: glLow \} \}/, 'مفيش مزامنة gl مع بلد الاختيار');
   assert.match(js, /contentWindow\.location\.reload\(\)/, 'فريم Gsloc ما بيتعملوش تحديث بعد التطبيق');
-  assert.match(js, /openstreetmap\.org\/export\/embed\.html\?bbox=/, 'مفيش معاينة خريطة حية');
+  assert.match(js, /tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/, 'مفيش تILES حية للخريطة');
   assert.match(js, /getCurrentPosition/, 'زر موقعي الحالي موجود؟');
   // الأمان: مفيش innerHTML بيحقن نصوص بحث المستخدم
   assert.ok(!/hits\.innerHTML = (?!'')/.test(js), 'innerHTML بيحقن غير نص؟');
   const css = read('src/sidepanel/side-panel.css');
-  assert.match(css, /\.geo-map \{ width: 100%; height: 290px;/, 'ستايل المعاينة ناقص');
+  assert.ok(css.includes('.geo-map {') && css.includes('height: 340px;') && css.includes('.geo-map.leaflet-container'), 'ستايل الخريطة الجديد ناقص');
 });
 
 /* -------- v1.21.30 — الركن بقى إعادة انطلاق + ↻ أولوية لكل كلمة -------- */
@@ -1656,4 +1659,40 @@ test('v12130: زرار ↻ — الأولوية بعد الكلمة الشغال
   const i18n = read('src/lib/i18n-ui.js');
   const arAt = i18n.indexOf('ar: {'); const enAt = i18n.indexOf('en: {');
   assert.ok(i18n.slice(arAt, enAt).includes('btnRecheck') && i18n.slice(enAt).includes('btnRecheck'), 'مفتاح الزرار ناقص في لغة');
+});
+
+/* -------- v1.21.31 — 100 نتيجة من المنبع + خريطة بيلتقط منها بالضبط -------- */
+test('v12131: صفحة الـ100 بقت قرار سيرفر-سايد — والدفعات الخلفية فول-باك محسّن', () => {
+  const st2 = read('src/background/core/state.js');
+  assert.match(st2, /page100: true,/, 'الـ100 مش ديفالتر');
+  assert.match(st2, /'autoXlsx', 'page100'\]/, 'الفلاغ مش في whitelist البولينز — هيترمرم من الإعدادات');
+  const uk = read('src/background/core/urlkit.js');
+  assert.ok(uk.indexOf("set('num', '100')") < uk.indexOf("set('ie'"), 'الـnum لازم يتحط قبل التوقيع النهائي للـURL');
+  // الجلب الخلفي لسه حي كخطة بديلة (لو جوجل رجّع 10 على أي حال)
+  assert.match(read('src/content/serp.js'), /cfg\.selfFetchMore !== false && items\.length < expectedNum/, 'الفول-باك اتقطع');
+});
+
+test('v12131: الخريطة التفاعلية — دوسة تختار، دبوس بيتسحب، ودائرة نطاق حية، والباكيد مكتفي بنفسه', () => {
+  const html = read('src/sidepanel/side-panel.html');
+  assert.ok(html.includes('href="vendor/leaflet/leaflet.css"'), 'ورق leaflet مش محمّل جوه اللوحة');
+  assert.ok(html.includes('src="vendor/leaflet/leaflet.js"'), 'سكريبت leaflet مش محمّل');
+  assert.match(html, /id="geoMap"/, 'مفيش حاوية الخريطة');
+  assert.ok(!html.includes('id="geoPreview"'), 'فريم المعاينة القديم لسه رابض — ازدواج');
+  assert.match(html, /<div id="geoMap" class="geo-map" role="application"/, 'الحاوية مش معرّفة كـ app');
+  const leaf = read('src/sidepanel/vendor/leaflet/leaflet.js');
+  assert.ok(leaf.length > 100000 && leaf.includes('Leaflet 1.9.4'), 'ملف leaflet المحزوم مقصوص أو غلط');
+  assert.ok(read('src/sidepanel/vendor/leaflet/leaflet.css').includes('.leaflet-container'), 'css مقصوص');
+  const js = read('src/sidepanel/side-panel.js');
+  assert.match(js, /Lg\.map\('geoMap'/, 'التهيئة مش على الحاوية');
+  assert.match(js, /map\.on\('click', \(e\) => \{ setSel\(e\.latlng\.lat, e\.latlng\.lng/, 'دوسة الاختيار مش مربوطة');
+  assert.match(js, /draggable: true/, 'الدبوس مش بيتسحب');
+  assert.match(js, /dragend/, 'تحريك الدبوس مش بيحدّث');
+  assert.match(js, /nominatim\.openstreetmap\.org\/reverse\?format=jsonv2/, 'مفيش reverse geocode لاسم النقطه');
+  assert.match(js, /Lg\.circle\(\[lat, lon\], \{ radius: radiusM\(\)/, 'دائرة النطاق مش متربطة بالمحدد');
+  assert.match(js, /circle\.setRadius\(radiusM\(\)\)/, 'النطاق مش بيحدث الدائرة لحظيًا');
+  assert.match(js, /typeof globalThis\.L !== 'undefined'/, 'مفيش degradation guard لو leaflet ما اتحملش');
+  assert.match(js, /map\.flyTo\(\[Number\(p\.lat\), Number\(p\.lon\)\]/, 'البحث بالاسم ما بيركّزش على الخريطة');
+  // الواجهة الجديدة لسه بتكتب في نفس المفتاح المشترك
+  assert.match(js, /chrome\.storage\.sync\.set\(\{ settings: base \}/, 'مسار التطبيق اتبوظ');
+  assert.match(js, /placeId: 'SRT-MAP'/, 'البصة اتشالت');
 });

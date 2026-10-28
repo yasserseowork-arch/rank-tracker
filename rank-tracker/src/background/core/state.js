@@ -49,6 +49,7 @@ export const DEFAULT_CONFIG = {
   batchSettleMs: 2600,          // ⚡ 1.21.20: كانت 6500 من عصر ما قبل num=100 سيرفر-سايد — الدفعات الخلفية (selfFetchMore) ضهرة أمان، فالثبات اتقصّر
   rescanMs: 800,                // ⚡ 1.21.20:Ctrl+F دوري خفيف — نفس فولو-باك serp من 1.21.9
   selfFetchMore: true,          // الجلب الخلفي بقى افتراضي: مكمّل الدفعات لحد expectedNum لو السكرول وقف نص الطريق
+  page100: true,                // 📄 v1.21.31 (طلب المستخدم المؤكد: «عايز أول 100»): الصفحة نفسها 100 نتيجة من سيرفر جوجل في نفس الطلب — الجلب الخلفي بقى فول-باك بس
   selfFetchMaxBatches: 9,       // أقصى دفعات خلفية (كل دفعة 10 نتائج) — تغطي 20→100
   maxChecksPerDay: 150,         // سقف يومي احتراماً لقواعد جوجل (0 = بدون سقف)
   errorReloadMax: 2,            // ريفرش تلقائي لصفحات الخطأ (عدد المرات)
@@ -127,7 +128,7 @@ export async function setConfig(patch) {
     const n = parseInt(next[key], 10);
     if (!Number.isNaN(n)) { next[key] = n; }
   }
-  const booleans = ['pauseOnCaptchaFail', 'autoResumeOnManualSolve', 'foregroundTab', 'reuseTab', 'verbose', 'selfFetchMore', 'clearBeforeRun', 'sheetWriteBack', 'mapsCheck', 'autoXlsx'];
+  const booleans = ['pauseOnCaptchaFail', 'autoResumeOnManualSolve', 'foregroundTab', 'reuseTab', 'verbose', 'selfFetchMore', 'clearBeforeRun', 'sheetWriteBack', 'mapsCheck', 'autoXlsx', 'page100'];
   for (const key of booleans) { next[key] = !!next[key]; }
   if (!['domain', 'name', 'both'].includes(next.matchMode)) { next.matchMode = 'both'; }
   // تنظيف الدومين: المستخدم يكتبه بدون https وأحياناً بمسار أو www

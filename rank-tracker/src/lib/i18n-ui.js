@@ -15,7 +15,7 @@
       statChecked: 'كلمات اتفحصت', statFound: 'ظهور الموقع', statAvg: 'متوسط الترتيب', statCaptcha: 'كابتشا اتحلت',
       chartTitle: 'منحنى الترتيب', chartEmpty: 'لسه مفيش بيانات — ابدأ الفحص وشوف المنحنى.',
       targetTitle: 'بيانات موقعك', lblDomain: 'دومين الموقع', lblName: 'اسم الموقع بالعربي (إن وُجد)', lblNameEn: 'اسم الموقع بالإنجليزي (إن وُجد)', lblMatch: 'طريقة المطابقة',
-      matchBoth: 'الدومين بالظبط (والاسم لو مفيش دومين)', matchDomain: 'الدومين بس', matchName: 'الاسم بس',
+      matchBoth: 'الدومين بالضبط (والاسم لو مفيش دومين)', matchDomain: 'الدومين بس', matchName: 'الاسم بس',
       rhythmTitle: 'المهلة قبل كل كلمة', lblDelay: 'مهلة قبل كل كلمة (ملي ثانية)', rhythmHint: 'باقي إعدادات السرعة والكابتشا في الإعدادات المتقدمة.',
       kwTitle: 'الكلمات المفتاحية', kwPlaceholder: 'حط الكلمات هنا — كل كلمة في سطر',
       btnAddKw: 'إضافة الكلمات', btnImportCsv: 'استيراد CSV', btnClearKw: 'مسح الكل',

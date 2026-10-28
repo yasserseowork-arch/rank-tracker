@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title data-i18n="panelTitle">لوحة تتبع الترتيب</title>
   <!-- v1.21.7: لينك الخط الخارجي متشال — CSP بتمنعه في MV3 وبيسيب خطأ كونسول مع صفر فرق بصري -->
-  <link rel="stylesheet" href="side-panel.css" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="side-panel.css" />
   <script src="../lib/constants.js"></script>
   <script src="../lib/messaging.js"></script>
   <script src="../lib/csv.js"></script>
@@ -90,7 +91,7 @@
       <label style="grid-column: 1 / -1;">
         <span data-i18n="lblMatch">نمط المطابقة</span>
         <select id="cfgMatch">
-          <option value="both" data-i18n="matchBoth">الدومين بالظبط (والاسم لو مفيش دومين)</option>
+          <option value="both" data-i18n="matchBoth">الدومين بالضبط (والاسم لو مفيش دومين)</option>
           <option value="domain" data-i18n="matchDomain">الدومين فقط</option>
           <option value="name" data-i18n="matchName">الاسم فقط</option>
         </select>
@@ -190,8 +191,8 @@
         <button id="geoBtnApply" class="btn btn-primary btn-sm" type="button">تطبيق حالًا</button>
         <button id="geoBtnAll" class="btn btn-ghost btn-sm" type="button" title="رجّع لديفولت الأداة: دولة كاملة من غير مدينة">كل السعودية</button>
       </div>
-      <iframe id="geoPreview" class="geo-map" src="about:blank" title="معاينة مكان التتبع" loading="lazy"></iframe>
-      <p id="geoNote" class="geo-note">اكتب اسم المكان في الخانة وختار من النتائج — «تطبيق حالًا» بتثبّته على طول: البحث الجاي بيطلع من النقطة دي، والرن الشايل بيسمع بيها من الكلمة اللي بعدها. لو المكان برا السعودية، دولة المكان (gl) بتتظبط معاه تلقائيًا.</p>
+      <div id="geoMap" class="geo-map" role="application" aria-label="خريطة منطقة التتبع — دوس عليها عشان تختار"></div>
+      <p id="geoNote" class="geo-note">اختار على الخريطة نفسها: دوسة في أي حتة بتحط الدبوس، واسحب الدبوس لتحريكه، والدائرة بتعرض نطاق التقريب. أو اكتب اسم مدينة/حي وفلتر عليه من النتائج — «تطبيق حالًا» بيثبّت المكان ده على طول: البحث الجاي بيطلع من النقطة دي، والرن الشايل بيسمع بيها من الكلمة اللي بعدها. لو المكان برا السعودية، دولة البحث (gl) بتتظبط معاه أوتوماتيك.</p>
     </div>
 
     <iframe id="frameGsloc" src="../../gsloc/popup.html" class="tool-frame" data-tool="gsloc"></iframe>
@@ -220,6 +221,7 @@
     </div>
   </div>
 
+  <script src="vendor/leaflet/leaflet.js"></script>
   <script type="module" src="side-panel.js"></script>
 </body>
 </html>

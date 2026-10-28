@@ -497,7 +497,7 @@
     async function grab(s) {
       const u = new URL(href);
       u.searchParams.set('start', String(s));
-      u.searchParams.set('num', '20'); // للصفحات المجلوبة بس — تاب المستخدم يفضل بلا بصمة
+      u.searchParams.set('num', '100'); // v1.21.31: طلب خلفي واحد بيلفّ المتبقي كله بدل 9 دفعات — أقل بصمة وأسرع
       const resp0 = await fetch(u.toString(), { credentials: 'include', redirect: 'follow' });
       if (!resp0.ok) { return { err: 'http-' + resp0.status }; }
       const html = await resp0.text();
