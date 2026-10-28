@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.26');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.26'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.26'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.26\]/m);
+  assert.equal(man.version, '1.21.27');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.27'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.27'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.27\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1508,4 +1508,42 @@ test('v12126: تكميم الـalert بقى بيغطي google.com.eg — وال�
   assert.ok(na.matches.includes('https://www.google.com.eg/search*'), 'مفيش .eg search');
   assert.ok(na.matches.includes('https://www.google.com.eg/sorry/*'), 'مفيش .eg sorry');
   assert.ok(na.matches.includes('https://www.google.com/search*'), 'الدومينات القديمة اتشالت غلط');
+});
+
+/* -------- v1.21.27 — محاذاة الكلمة + استرجاع الحدث الضايع + الأفضل يفوز -------- */
+test('v12127: ولا تسجيل بدون محاذاة — كل مواضع السباق بتستلم الكلمة والسكربت بيصدّرها', () => {
+  const n = queue.split(', cfg, signal, kw.keyword)').length - 1;
+  assert.equal(n, 4, 'فيه نداء raceSerpOrCaptcha لسه بلا محاذاة');
+  const at = queue.indexOf('raceSerpOrCaptcha(tabId, cfg, signal, expectKw)');
+  assert.ok(at > -1, 'التوقيع ما اتوسّعش بـexpectKw');
+  const body = queue.slice(at, queue.indexOf('waitSerp(tabId'));
+  assert.match(body, /new URL\(u\)\.searchParams\.get\('q'\)/, 'مفيش استخراج q من الـserpUrl للمحاذاة');
+  assert.match(body, /المحاذاة أحسن من التسجيل الغلط/, 'لوج تجاهل الحدث الأجنبي ناقص');
+  const sp = read('src/content/serp.js');
+  assert.match(sp, /keyword: keyword,\s*\n\s*serpUrl: href,/, 'الـpayload ما بيحملش الكلمة');
+});
+
+test('v12127: استرجاع التحليل من حالة التاب في 1.2 ثانية — مش في تايم‌آوت وريفشرات بتغيّر الجلسة', () => {
+  const at = queue.indexOf('raceSerpOrCaptcha(tabId, cfg, signal, expectKw)');
+  const body = queue.slice(at, queue.indexOf('waitSerp(tabId'));
+  assert.match(body, /C\.MSG\.SERP_CMD_STATE/, 'مفيش مسحوب حالة في البولر');
+  assert.match(body, /lastPayload/, 'ما فيش تسلم من آخر payload محفوظ');
+  assert.match(body, /استرجاع تحليل من حالة التاب/, 'لوج الاسترجاع ناقص');
+  const sp = read('src/content/serp.js');
+  assert.match(sp, /live\.lastPayload = payload;/, 'السكربت ما بيخزّنش آخر تحليل');
+  assert.match(sp, /lastPayload: live\.lastPayload \|\| null/, 'رسالة الحالة ما بترجّعوش');
+  const cmd = sp.slice(sp.indexOf('D.msg.on(C.MSG.SERP_CMD_SEARCH'), sp.indexOf('D.msg.on(C.MSG.SERP_CMD_STATE'));
+  assert.match(cmd, /live\.lastPayload = null;/, 'التصفير قبل كلمة جديدة ناقص — استرجاع قديم هيدايق الكلمة الجاية');
+});
+
+test('v12127: قاعدة الأفضل يفوز — نتيجة موجودة ما بتمسحهاش نتيجة وحشة، ومفيش راية مراجعة بلا لازمة', () => {
+  const rr = queue.slice(queue.indexOf('async recordResult'), queue.indexOf('async recordResult') + 9000);
+  assert.match(rr, /let bestKept = false;/, 'مفيش حارس الأفضل يفوز');
+  assert.match(rr, /runB\.startedAt && kw\.lastCheckedAt >= runB\.startedAt/, 'الحارس مش مقيّد بالرن الحالي — رن بعدوه لازم يكتب بحريته');
+  assert.match(rr, /if \(bestKept\) \{[\s\S]{0,200}ما بيكتبش فوق نتيجة موجودة/, 'لوج الحارس ناقص');
+  assert.equal(rr.split('kpatch.lastFound = match.found;').length - 1, 1, 'حقول الـlast* لازم تكون وراء if (!bestKept) بس');
+  const re = queue.slice(queue.indexOf('async recordExhausted'), queue.indexOf('async reviewPass'));
+  assert.match(re, /ما تحتاجش مراجعة: السطر يفضل زي ما هو/, 'exhausted ما بيعترفش بالحارس');
+  // التصدير الكامل: الـrow الجديدة بتتنضاف دايمًا قبل الحارس
+  assert.ok(rr.indexOf('state.addResult(row)') < rr.indexOf('const kpatch'), 'الصف الإضافي لازم يتسجل حتى مع الحراسة');
 });

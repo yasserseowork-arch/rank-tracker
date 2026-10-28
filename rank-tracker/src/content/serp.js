@@ -99,6 +99,10 @@
   D.msg.on(C.MSG.SERP_CMD_SEARCH, async (m) => {
     const kw = String(m.keyword || '').trim();
     if (!kw) { return { ok: false, reason: 'empty-keyword' }; }
+    // v1.21.27: كلمة جديدة بتلغي أي تحليل سابق — لا استرجاع قديم ولا محاذاة غلط
+    live.parsedSent = false;
+    live.lastPayload = null;
+    live.lastPayloadKeyword = null;
     if (!typeIntoSearchBox(kw)) { return { ok: false, reason: 'no-box' }; }
     await D.humanSleep(260, 130);
     const ok = submitSearchForm();
@@ -112,7 +116,9 @@
     results: live.results,
     reloads: live.reloads,
     early: live.early,
-    href: location.href
+    href: location.href,
+    lastPayload: live.lastPayload || null,
+    lastPayloadKeyword: live.lastPayloadKeyword || null
   }));
 
   /* --------------- القارئ المقاوم لتغييرات جوجل (درس Serp Counter) --------------- */
@@ -817,6 +823,7 @@
     const wait = await waitForResults(cfg);
     const payload = {
       keyword: keyword,
+      keyword: keyword,
       serpUrl: href,
       expectedNum: expectedNum,
       items: wait.items || [],
@@ -835,6 +842,11 @@
       parsedAt: Date.now()
     };
     live.parsedSent = true;
+    // 🧊 v1.21.27 — نسخة حية من آخر تحليل: لو حدث SERP_PARSED ضاع في التوقيت (أول
+    // برود بعد مسح البيانات أحيانًا بتسبق تركيب المستمعين)، الباكجراوند يقراها من
+    // SERP_CMD_STATE ويخلص في ثانية ونص بدل تايم‌آوت وريفشرات بتغيّر الجلسة والنتايج.
+    live.lastPayload = payload;
+    live.lastPayloadKeyword = keyword;
     const res = await D.msg.send(C.MSG.SERP_PARSED, payload);
     if (payload.early) {
       // قرأنا وكتبنا: قفل نهائي — الصفحة مش هتنزل تاني لحد ما نتنقل للكلمة الجاية

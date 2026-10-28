@@ -564,7 +564,7 @@ export class QueueEngine {
         }
       }
 
-      const first = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
+      const first = await this.raceSerpOrCaptcha(tab.id, cfg, signal, kw.keyword);
       if (first.type === 'aborted') { return this.abortKeyword(kw, 'paused'); }
 
       // 4) كابتشا ظهرت؟ أولاً: حل تلقائي بالكامل (Buster مدمجة + إطار التحدي ذاتي القيادة) — بدون أي تدخل منك
@@ -740,7 +740,7 @@ export class QueueEngine {
             const lastTab = await this.openFreshTab(kw, cfg, url, tab.id);
             if (lastTab) { tab = lastTab; }
 
-            const lastRace = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
+            const lastRace = await this.raceSerpOrCaptcha(tab.id, cfg, signal, kw.keyword);
             if (lastRace.type === 'serp' && (lastRace.payload.total > 0 || lastRace.payload.noResults)) {
               return this.recordResult(kw, lastRace.payload, cfg, pass ? 'new-tab-2' : 'new-tab');
             }
@@ -754,7 +754,7 @@ export class QueueEngine {
                 // 🧘 جولة الاستشفاء كمان ما تستسلمش للكابتشا: نستنى تتحل ونسحب نفس المكان
                 const clearedL = await this.waitCaptchaCleared(tab.id, kw, signal);
                 if (clearedL === 'cleared') {
-                  const r3 = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
+                  const r3 = await this.raceSerpOrCaptcha(tab.id, cfg, signal, kw.keyword);
                   if (r3.type === 'serp' && (r3.payload.total > 0 || r3.payload.noResults)) {
                     return this.recordResult(kw, r3.payload, cfg, 'after-patience');
                   }
@@ -812,7 +812,19 @@ export class QueueEngine {
     }
   }
 
-  raceSerpOrCaptcha(tabId, cfg, signal) {
+  raceSerpOrCaptcha(tabId, cfg, signal, expectKw) {
+    // 🧭 v1.21.27 (طلب المستخدم: «بحثت والموقع ظهر… عامل بحث بنفس الكلمة تاني والموقع
+    // اختفى»): حدث SERP_PARSED كان بيوصل لأي سباق مستمع — ففي تنقل صندوق البحث على نفس
+    // التاب، حدث كلمة سابقة متأخر كان بيتسجّل للكلمة اللي بعدها: «مواقع بتظهر وتختفي»
+    // من غير أي سبب حقيقي. من دلوقتي: كل حدث لازم يطق كلمة الصفحة نفسها، والمختلف
+    // يتجاهل ويكمل انتظار لحدثه الصحيح.
+    const normK = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const qOf = (u) => { try { return decodeURIComponent(new URL(u).searchParams.get('q') || ''); } catch (_) { return ''; } };
+    const kwAligned = (m) => {
+      if (!expectKw) { return true; }
+      const k = normK((m && m.keyword) || qOf(m && m.serpUrl));
+      return !k || k === normK(expectKw);
+    };
     // الانتظار على مقاس المسح «الواعي بالتقدّم»: السقف 60 ثانية + هامش، مش 20 + 8
     // v1.20.0: الجلب الخلفي (دفعات +إعادة المحاولات) بيزوّد المسح ~40 ثانية — الهامش القديم كان
     // بيقتل مسح سليم في آخر ثانية منه ويرميه في «timeout» = كلمة متفوَّتة بلا سبب
@@ -835,7 +847,9 @@ export class QueueEngine {
       if (signal) { signal.addEventListener('abort', () => finish({ type: 'aborted' }), { once: true }); }
 
       offs.push(bus.on(C.MSG.SERP_PARSED, (m) => {
-        if (m.tabId === tabId) { finish({ type: 'serp', payload: m }); }
+        if (m.tabId !== tabId) { return; }
+        if (kwAligned(m)) { finish({ type: 'serp', payload: m }); return; }
+        void logger.warn('queue', `🧭 حدث SERP لكلمة «${m.keyword || qOf(m.serpUrl) || '؟'}» وصل أثناء فحص «${expectKw}» — تجاهلناه؛ المحاذاة أحسن من التسجيل الغلط`);
       }));
       offs.push(bus.on(C.MSG.CAPTCHA_PRESENT, (m) => {
         if (m.tabId !== tabId) { return; }
@@ -869,7 +883,7 @@ export class QueueEngine {
         if (urlkit.isSorry(u)) { finish({ type: 'captcha', payload: { url: u } }); }
       });
 
-      // مسبار دوري: رابط + أخطاء شبكة
+      // مسبار دوري: رابط + أخطاء شبكة + إعادة إطفاء حدث مفقود (v1.21.27)
       poller = setInterval(async () => {
         const u = await tabctl.getUrl(tabId);
         if (urlkit.isSorry(u)) { finish({ type: 'captcha', payload: { url: u } }); return; }
@@ -877,7 +891,18 @@ export class QueueEngine {
           errorReloaded = true;
           await logger.warn('queue', 'خطأ شبكة أثناء الانتظار — ريفرش تلقائي');
           await tabctl.reload(tabId);
+          return;
         }
+        // 🧊 الحدث راح والسباق ماسك في هوا؟ اقرأ من الحالة الحيّة للسكربت نفسه —
+        // بكلمة مطابقة طبعًا. ده بيصلح «أول بحث خالص» في 1.2 ثانية بدل تلات دقايق
+        // تايم‌آوت وريفشرات كانت بتبدّل الجلسة وتغيّر النتائج نفسها.
+        try {
+          const st = await chrome.tabs.sendMessage(tabId, { type: C.MSG.SERP_CMD_STATE });
+          if (st && st.lastPayload && kwAligned(st.lastPayload)) {
+            await logger.info('queue', '🧊 استرجاع تحليل من حالة التاب — الحدث فاتنا والتسليم حالًا من غير ريفرش');
+            finish({ type: 'serp', payload: st.lastPayload });
+          }
+        } catch (_) {}
       }, 1200);
     });
   }
@@ -1122,7 +1147,7 @@ export class QueueEngine {
     await logger.warn('queue', `🩹 "${kw.keyword}" — الصفحة سليمة بس مفيش تحليل؛ reload هادي لنفس التاب (مفيش مسح بيانات)`);
     await this.notify('🩹 إنقاذ بعد الحل', `"${kw.keyword}" — الصفحة تمام؛ بنعيد المسح بس من غير مسح بيانات`);
     try { await tabctl.reload(tabId); } catch (_) { return null; }
-    const soft = await this.raceSerpOrCaptcha(tabId, cfg, signal);
+    const soft = await this.raceSerpOrCaptcha(tabId, cfg, signal, kw.keyword);
     if (soft.type === 'aborted') { return { abort: true }; }
     if (soft.type === 'serp' && (soft.payload.total > 0 || soft.payload.noResults)) {
       return { payload: soft.payload, via: 'captcha-solved-reload', reloaded: true };
@@ -1407,6 +1432,17 @@ export class QueueEngine {
     const out = await this.recordResult(kw, {
       items: [], aiItems: [], aiText: '', total: 0, noResults: true, adsCount: 0, serpUrl: ''
     }, cfg, 'retries-exhausted');
+    // 🛡 v1.21.27: لو الحارس فضّى السطر على نتيجة موجودة من الرن نفسه، راية المراجعة
+    // معناها لفة تالتة بحث بلا أي لازمة — السطر خلاص محسوم.
+    {
+      const runC = await state.getRun();
+      const curList = await state.getKeywords();
+      const cur = curList.find((k) => k && k.id === kw.id);
+      if (cur && cur.lastFound && runC && runC.startedAt && (cur.lastCheckedAt || 0) >= runC.startedAt) {
+        await logger.info('queue', `🛡 "${kw.keyword}" — النتيجة الكويسة المحروسة ما تحتاجش مراجعة: السطر يفضل زي ما هو`);
+        return out;
+      }
+    }
     // ⚠️ v1.21.7: «مافيش حكم» مش «مش موجود» — الصف بيتعلّم needsReview وبيتعاد
     // تلقائيًا في آخر الرن في جو أهدى (ومعاه زر يدوي في اللوحة)
     await state.updateKeyword(kw.id, { needsReview: true });
@@ -1620,16 +1656,20 @@ export class QueueEngine {
       }
     }
 
+    // 🛡 v1.21.27 (العلة اللي وصفها المستخدم حرفيًا): لو الكلمة جابت نتيجة «موجودة»
+    // في الرن ده، أي حكم «مش موجودة» من بحث متأخر على نفس الكلمة (جلسة نضيفة بعد مسح
+    // بيانات، بلاش شخصنة، أو توقيت خراب) ما بيمسحش الصف فوقها: السطر يفضل الأفضل،
+    // والحكم الجديد يتسجل كصف إضافي في التصدير الكامل — مفيش معلومة بتترمي.
+    let bestKept = false;
+    if (!match.found && !aiMatch.found && (kw.lastFound || kw.lastAiFound) && kw.lastCheckedAt) {
+      const runB = await state.getRun();
+      if (runB && runB.startedAt && kw.lastCheckedAt >= runB.startedAt) { bestKept = true; }
+    }
     await state.addResult(row);
     await state.bumpDailyCount();
 
-    const updated = await state.updateKeyword(kw.id, {
+    const kpatch = {
       status: C.STATUS.KW.DONE,
-      lastPosition: match.position,
-      lastFound: match.found,
-      lastAiPosition: aiMatch.found ? aiMatch.position : null,
-      lastAiFound: !!aiMatch.found,
-      lastCheckedAt: Date.now(),
       history: ((kw.history || []).concat([{
         position: match.position,
         aiPosition: aiMatch.found ? aiMatch.position : null,
@@ -1637,7 +1677,17 @@ export class QueueEngine {
         aiFound: aiMatch.found,
         ts: Date.now()
       }])).slice(-(cfg.maxHistoryPerKeyword || 40))
-    });
+    };
+    if (bestKept) {
+      await logger.warn('queue', `🛡 "${kw.keyword}" — حكم «مش موجودة» ما بيكتبش فوق نتيجة موجودة في نفس الرن؛ الصف حافظ الأفضل والتصدير فيه الاتنين`);
+    } else {
+      kpatch.lastPosition = match.position;
+      kpatch.lastFound = match.found;
+      kpatch.lastAiPosition = aiMatch.found ? aiMatch.position : null;
+      kpatch.lastAiFound = !!aiMatch.found;
+      kpatch.lastCheckedAt = Date.now();
+    }
+    const updated = await state.updateKeyword(kw.id, kpatch);
 
     const run = await state.getRun();
     await state.setRun({
