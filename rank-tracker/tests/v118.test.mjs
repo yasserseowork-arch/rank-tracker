@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.34');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.34'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.34'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.34\]/m);
+  assert.equal(man.version, '1.21.35');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.35'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.35'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.35\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1717,4 +1717,27 @@ test('v12134: أرشق بأمان — المسبار 800ms والفاصل الب
   assert.match(read('src/background/core/state.js'), /delayMs: 4000,/);
   assert.ok(q.includes('await sleep(20000, signal)'), 'سكن الـ20 ثانية اتبوظ');
   assert.match(read('src/content/serp.js'), /finalizeAi\(early\.ai, 1200\)/);
+});
+
+/* -------- v1.21.35 — تصفير انتهاكات CSP في كل الجلب الخلفي + إحياء الفحص المحلي -------- */
+test('v12135: ألغام on* بتتفك قبل DOMParser في كل مسار جلب — صفر انتهاك CSP في الكونصول', () => {
+  const ft = read('beyondten/content/fetch.js');
+  assert.ok(ft.includes('function cleanHTML'), 'مكسر الألغام مش في fetch.js');
+  assert.ok(ft.includes('return cleanHTML(text);'), 'fetchSERP لسه راجع نص خام بتفخخات CSP');
+  assert.ok(ft.includes('window.BT.fetcher = { delay, fetchSERP, cleanHTML };'), 'المكسر مش مصدّر على الناقلة');
+  const idx = read('beyondten/content/index.js');
+  assert.ok(idx.includes('parseFromString(window.BT.fetcher.cleanHTML(html), "text/html")'), 'index.js بيبارسر من غير تفكيك');
+  const sp = read('src/content/serp.js');
+  assert.ok(sp.includes('cleanSERPHTML(html)'), 'دفعات serp.js الخلفية لسه مكشوفة');
+  // المنطق: على الأقل نمط on= بيتشال من غير ما يلمس محتوى الروابط
+  const demo = '<a href="/maps?x=1" onmousedown="return kwn(this)">نص</a>';
+  assert.ok(!/ on[a-z]/i.test(demo.replace(/ on[a-z]{2,24}\s*=\s*"[^"]*"/gi, ' ')), 'تدبير التنظيف نفسه غلط');
+});
+
+test('v12135: الفحص المحلي قام من موته — مفيش DOMParser في الـService Worker والماسح النصي مسؤوول', () => {
+  const lc = read('src/background/core/localcheck.js');
+  assert.ok(!lc.includes('new DOMParser'), 'DOMParser لسه بيتفتح في الـSW — الميزة بتموت في صمت');
+  assert.ok(lc.includes('/maps/place/') && lc.includes('scanPlaceCards') && lc.includes('nameAllowed') && lc.includes('nameMatches('), 'هيكل الماسح اتكسر');
+  assert.ok(lc.includes('www.google.com.sa'), 'دومين السعودية ما اتحاذاش مع عقيدة 1.21.28');
+  assert.ok(lc.includes("u.searchParams.set('tbm', 'lcl');"), 'مسار الخرائط اتقفل؟');
 });

@@ -493,6 +493,18 @@
 
     // دفعة فاشلة كانت بتمحو تغطية المراكز الغويط بصمت (شكوى: «موقعي في #20 واتسجل مش
     // موجود») — بقى فيه إعادة محاولة عاقلة للدفعة نفسها، وتوقيت ذاتي-التصحيح
+    // v1.21.35: نفس لغم الـCSP اللي كان بيفجّر كونصول المستخدم — أي HTML مجلوب
+    // بيتحلل بـDOMParser بيرث سياسة صفحة جوجل (strict-dynamic+nonce) وكل on*= انتهاك
+    // أحمر. الدفعة دي بتتقرأ كنصوص بس، فننزع المقابض والسكربتات قبل البارسر.
+    const cleanSERPHTML = (s) => {
+      try {
+        return String(s || '')
+          .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+          .replace(/ on[a-z]{2,24}\s*=\s*"[^"]*"/gi, ' ')
+          .replace(/ on[a-z]{2,24}\s*=\s*'[^']*'/gi, ' ')
+          .replace(/ on[a-z]{2,24}\s*=\s*[^\s>]+/gi, ' ');
+      } catch (_) { return s; }
+    };
     async function grab(s) {
       const u = new URL(href);
       u.searchParams.set('start', String(s));
@@ -504,7 +516,7 @@
         D.msg.send(C.MSG.SERP_FETCH_BLOCKED, { reason: 'captcha', pageUrl: u.toString() });
         return { blocked: true };
       }
-      return { doc: new DOMParser().parseFromString(html, 'text/html') };
+      return { doc: new DOMParser().parseFromString(cleanSERPHTML(html), 'text/html') };
     }
 
     for (let batch = 0; batch < maxBatches && merged.length < expectedNum; batch++) {

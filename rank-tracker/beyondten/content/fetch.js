@@ -13,6 +13,19 @@ window.BT = window.BT || {};
       }
     });
   }
+  /** v1.21.35 (صفر console error): الـhandlers الداخلية (on*) في صفحة جوجل المجلوبة
+   *  بتفجّر انتهاكات CSP حمرا — DOMParser بيرث سياسة الصفحة المضيفة (strict-dynamic
+   *  + nonce)، وأي on*= بيتعمله بلوك والأCTION بتاعه null أصلًا. إحنا بندوّر على نصوص
+   *  النتائج بس: بننزع السكربتات والمقابض قبل التسليم لأي parser — والتنظيف idempotent. */
+  function cleanHTML(html){
+    try{
+      return String(html||"")
+        .replace(/<script\b[\s\S]*?<\/script>/gi," ")
+        .replace(/ on[a-z]{2,24}\s*=\s*"[^"]*"/gi," ")
+        .replace(/ on[a-z]{2,24}\s*=\s*'[^']*'/gi," ")
+        .replace(/ on[a-z]{2,24}\s*=\s*[^\s>]+/gi," ");
+    }catch(_){ return html; }
+  }
   async function fetchSERP(ctx, pageIndex, signal){
     const url = window.BT.params.makePageURL(ctx, pageIndex);
     let lastErr = null;
@@ -25,7 +38,7 @@ window.BT = window.BT || {};
         // بدل ما تتحسب صفحة فاضية وتُحرق للأبد
         if (res.redirected && /\/sorry\//i.test(res.url)) throw new Error("sorry_page");
         if (text.length < 250000 && /unusual traffic/i.test(text) && !/id="search"/.test(text)) throw new Error("sorry_page");
-        return text;
+        return cleanHTML(text);
       }catch(e){
         lastErr = e;
         if (signal?.aborted) throw e;
@@ -35,5 +48,5 @@ window.BT = window.BT || {};
     }
     throw lastErr || new Error("Fetch failed");
   }
-  window.BT.fetcher = { delay, fetchSERP };
+  window.BT.fetcher = { delay, fetchSERP, cleanHTML };
 })();

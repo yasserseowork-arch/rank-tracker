@@ -198,7 +198,7 @@
         let appended = 0;
         htmls.forEach((html, j) => {
           const idxp = batch[j];
-          const doc = new DOMParser().parseFromString(html, "text/html");
+          const doc = new DOMParser().parseFromString(window.BT.fetcher.cleanHTML(html), "text/html");
           if (looksLikeConsent(doc)) { consentBreak = true; return; }
           const blocks = window.BT.parser.extractTopLevelItems(doc);
           const unique = [];
