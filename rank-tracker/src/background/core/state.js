@@ -5,7 +5,7 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const K = {
   CONFIG: 'srt.config',
@@ -32,8 +32,8 @@ export const DEFAULT_CONFIG = {
   delayMs: 4000,                // مهلة إلزامية قبل كل كلمة (طلب المستخدم: 4 ثوانٍ)
   jitterMs: 1500,
   cooldownEvery: 8,             // كل N كلمات خذ استراحة طويلة
-  cooldownMs: 30000,           // v1.20.5: 45←30 ثانية — الأمان لسه في الـcooldownEvery والـjitter العشوائي
-  cooldownJitterMs: 20000,
+  cooldownMs: 25000,           // v1.21.36 (طلب السرعة): 30←25 — الاستراحة كل 8 كلمات لسه درع، بس طولها كان زائد
+  cooldownJitterMs: 15000,
   // الكابتشا
   captchaMaxAttempts: 2,
   captchaAttemptTimeoutMs: 35000,
@@ -366,6 +366,16 @@ export async function migrate() {
     if (parseInt(cfg8.rescanMs, 10) === 1800) { patch8.rescanMs = 800; }
     if (parseInt(cfg8.settleMs, 10) === 1800) { patch8.settleMs = 1100; }
     if (Object.keys(patch8).length) { await setConfig(patch8); }
+  }
+  if (version < 9) {
+    // ⚡ 1.21.36: اللي سابعين الاستراحة على الافتراضي القديم (30+20) ياخدوا الجديد (25+15)؛
+    // أي رقم عدّله المستخدم بإيده محمي زي ما هو
+    const cfg9 = await getConfig();
+    const patch9 = {};
+    if (parseInt(cfg9.cooldownMs, 10) === 30000 && parseInt(cfg9.cooldownJitterMs, 10) === 20000) {
+      patch9.cooldownMs = 25000; patch9.cooldownJitterMs = 15000;
+    }
+    if (Object.keys(patch9).length) { await setConfig(patch9); }
   }
   await local.set(K.SCHEMA, SCHEMA_VERSION);
   return SCHEMA_VERSION;

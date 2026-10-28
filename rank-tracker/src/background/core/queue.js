@@ -388,7 +388,7 @@ export class QueueEngine {
         // 🌡 صبر إضافي بعد حرارة الكابتشا: كلمتين واطفين كابتشا؟ الاستراحة الجاية أطول —
         // ده أنفع ألف مرة من إننا نطارد جوجل بسرعة ونجيب /sorry/ تاني
         if (this.captchaHeat >= 2) {
-          const extra = 8000 + Math.floor(Math.random() * 6000);
+          const extra = 4500 + Math.floor(Math.random() * 3500); // ⚡ 1.21.36: 8-14←4.5-8
           await logger.info('queue', `🌡 تبريد ${Math.round(extra / 1000)} ثانية إضافية بعد كابتشا متكررة — والصبر أمان`);
           await sleep(extra, this.signal());
           this.captchaHeat -= 1;
@@ -836,7 +836,7 @@ export class QueueEngine {
    *  بترجع 'noop' والندّاه يركّن الكلمة بدل ما يدور في فراغ. */
   async restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts) {
     if (capRestarts >= 2) { return null; }
-    const cool = 15000 + Math.floor(Math.random() * 10000);
+    const cool = 9000 + Math.floor(Math.random() * 9000); // ⚡ 1.21.36: 15-25←9-18 — المسح الكامل وترحيب الرئيسية جوه openFreshTab بياخدو نفسهم 3-4 ثواني، فالسبات فوقهم كان ضريبة
     await logger.warn('queue', `🔄 "${kw.keyword}" — الكابتشا ركنّت: بنبدأ بيها من الصفر (المحاولة ${capRestarts + 1}/2) بعد استقرار ${Math.round(cool / 1000)} ثانية — لا استنانة يدوية ولا إيقاف للرن`);
     await sleep(cool, signal);
     if (signal && signal.aborted) { return 'aborted'; }
@@ -1767,7 +1767,14 @@ export class QueueEngine {
     }
     // فحص النتائج المحلية (خرائط) اختياري — مثل خطوة السيناريو اليدوي
     if (cfg.mapsCheck) {
-      const loc = await localCheck(kw.keyword, cfg);
+      // ⏱ v1.21.36 (طلب المستخدم: «بطيئة بقالها ساعة في 18 كلمة»): الفحص المحلي رجّعناه
+      // في 1.21.35 شغالًا بجد — بس فضل fetch بلا سقف، ويوم زحمة/حرارة بيعلّق الكلمة وراه.
+      // بقى race بمهلة 6 ثواني (ثنتين ونص في حرارة عالية): لحق؟ اتسجل. مجاش؟ كمّل الرن
+      // فورًا والسطر يكمل من غير عمود محلي — التغطية الرئيسية ما تتوقفش على ضيف.
+      const loc = await Promise.race([
+        localCheck(kw.keyword, cfg),
+        new Promise((res) => { setTimeout(() => res(null), (this.captchaHeat || 0) >= 2 ? 2500 : 6000); }),
+      ]);
       if (loc) {
         row.localFound = loc.found;
         row.localPosition = loc.position;

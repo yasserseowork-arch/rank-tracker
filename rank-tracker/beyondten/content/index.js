@@ -222,9 +222,10 @@
         // Soft throttle if empty results
         if (appended < 5 && CONCURRENCY > 2) CONCURRENCY = Math.max(2, CONCURRENCY - 1);
       }
-      // v1.2.2: فاصل بين الدفعات — مهدّن مع الحفاظ على الأمان (1.2–2.4 ثانية)
+      // v1.2.2: فاصل بين الدفعات — مهدّن مع الحفاظ على الأمان؛ v1.21.36 (طلب المستخدم:
+      // «سرعة بدون مشاكل»): 1.2-2.4 ← 0.9-1.8 ث — لسه فوق أي بوت بلا فواصل، والباقي ساكن
       if (i + CONCURRENCY < targets.length && !signal.aborted) {
-        await delay(1200 + Math.random() * 1200, signal);
+        await delay(900 + Math.random() * 900, signal);
       }
     }
   }
