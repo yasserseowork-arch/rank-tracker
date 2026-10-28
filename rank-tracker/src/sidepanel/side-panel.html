@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title data-i18n="panelTitle">لوحة تتبع الترتيب</title>
   <!-- v1.21.7: لينك الخط الخارجي متشال — CSP بتمنعه في MV3 وبيسيب خطأ كونسول مع صفر فرق بصري -->
-  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="side-panel.css" />
   <script src="../lib/constants.js"></script>
   <script src="../lib/messaging.js"></script>
@@ -163,38 +162,6 @@
       <p data-i18n="paneGslocDesc">اختر المدينة واللغة (gl/hl) لنتائج بحث جوجل</p>
     </div>
 
-    <!-- v1.21.29 (طلب المستخدم): خريطة حية — دور على أي مدينة/حي/عالم، اختاره،
-         دوس «تطبيق حالًا»: الموقع بيتكتب في الإعداد المشترك وbackground بيسمع به
-         لحظيًا (declarativeNetRequest) — من غير إعادة تشغيل، والمسح التالي بيطلع من هنا -->
-    <div class="card geo-card">
-      <div class="geo-head">
-        <h3>خريطة منطقة التتبع</h3>
-        <span id="geoNow" class="geo-chip">جاري القراءة…</span>
-        <span id="geoSel" class="geo-chip geo-chip-sel hidden"></span>
-      </div>
-      <div class="geo-row">
-        <input id="geoSearch" type="text" class="input geo-input" placeholder="دوّر على مدينة أو حي أو معلم — اكتب عربي أو إنجليزي…" autocomplete="off" spellcheck="false" />
-        <button id="geoBtnMy" class="btn btn-ghost btn-sm" type="button" title="استخدم موقع جهازك الحالي">موقعي</button>
-      </div>
-      <div id="geoHits" class="geo-hits hidden"></div>
-      <div class="geo-row">
-        <label class="geo-label">نطاق التقريب:
-          <select id="geoRadius" class="input geo-radius">
-            <option value="5000">5 كم — حي</option>
-            <option value="15000">15 كم — مدينة</option>
-            <option value="35000">35 كم — مدينة كبيرة</option>
-            <option value="65000" selected>65 كم — الافتراضي التاريخي</option>
-            <option value="150000">150 كم — إقليم</option>
-            <option value="1000000">1000 كم — دولة كاملة</option>
-          </select>
-        </label>
-        <button id="geoBtnApply" class="btn btn-primary btn-sm" type="button">تطبيق حالًا</button>
-        <button id="geoBtnAll" class="btn btn-ghost btn-sm" type="button" title="رجّع لديفولت الأداة: دولة كاملة من غير مدينة">كل السعودية</button>
-      </div>
-      <div id="geoMap" class="geo-map" role="application" aria-label="خريطة منطقة التتبع — دوس عليها عشان تختار"></div>
-      <p id="geoNote" class="geo-note">اختار على الخريطة نفسها: دوسة في أي حتة بتحط الدبوس، واسحب الدبوس لتحريكه، والدائرة بتعرض نطاق التقريب. أو اكتب اسم مدينة/حي وفلتر عليه من النتائج — «تطبيق حالًا» بيثبّت المكان ده على طول: البحث الجاي بيطلع من النقطة دي، والرن الشايل بيسمع بيها من الكلمة اللي بعدها. لو المكان برا السعودية، دولة البحث (gl) بتتظبط معاه أوتوماتيك.</p>
-    </div>
-
     <iframe id="frameGsloc" src="../../gsloc/popup.html" class="tool-frame" data-tool="gsloc"></iframe>
   </div>
   <div id="paneBeyondten" class="tab-pane hidden">
@@ -221,7 +188,6 @@
     </div>
   </div>
 
-  <script src="vendor/leaflet/leaflet.js"></script>
   <script type="module" src="side-panel.js"></script>
 </body>
 </html>

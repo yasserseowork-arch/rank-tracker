@@ -477,10 +477,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.31');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.31'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.31'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.31\]/m);
+  assert.equal(man.version, '1.21.32');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.32'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.32'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.32\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1585,40 +1585,6 @@ test('v12128: بصمة المنطقة من فوتر جوجل — بتتسجل، 
   assert.match(sp, /regionText/, 'الـpayload ما بيحملش النص');
 });
 
-/* -------- v1.21.29 — خريطة تفاعلية لمنطقة التتبع: اختار، دوس تطبيق — اتطبق حالًا -------- */
-test('v12129: كارت الخريطة محطوط فوق فريم Gsloc بنفس الواجهة القديمة ساكنة', () => {
-  const html = read('src/sidepanel/side-panel.html');
-  const at = html.indexOf('id="paneGsloc"');
-  assert.ok(at > -1, 'مفيش تبويب الموقع');
-  const seg = html.slice(at, html.indexOf('id="frameGsloc"', at));
-  assert.match(seg, /geo-card/, 'مفيش كارت الخريطة');
-  assert.match(seg, /id="geoSearch"/, 'مفيش صندوق بحث الأماكن');
-  assert.match(seg, /id="geoRadius"/, 'مفيش محدد النطاق');
-  assert.match(seg, /id="geoBtnApply"/, 'مفيش زرار تطبيق حالًا');
-  assert.match(seg, /id="geoBtnAll"/, 'مفيش زرجاع السعودية كلها');
-  assert.match(seg, /id="geoMap"/, 'مفيش حاوية الخريطة التفاعلية');
-  // الفريم القديم لسه موجود وراه مباشرة — واجهة Gsloc ما اتشالتش
-  assert.ok(html.indexOf('id="frameGsloc"', at) > html.indexOf('geoMap', at), 'فريم Gsloc اتنقل أو اتشال');
-  assert.ok(html.includes('../../gsloc/popup.html'), 'فريم Gsloc اتبوظ');
-});
-
-test('v12129: الكتابة في storage.sync مباشرة — نفس المفتاح اللي الـbackground بيسمع عليه', () => {
-  const js = read('src/sidepanel/side-panel.js');
-  assert.match(js, /initGeoMap\(\)/, 'مفيش تهيئة للكارت');
-  assert.match(js, /nominatim\.openstreetmap\.org\/search\?format=jsonv2&limit=6&accept-language=ar,en&q=/, 'مفيش بحث أماكن متعدد اللغات');
-  assert.match(js, /chrome\.storage\.sync\.set\(\{ settings: base \}/, 'مافيش كتابة على مفتاح settings المشترك');
-  assert.match(js, /placeId: 'SRT-MAP'/, 'مفيش بصمة مصدر الاختيار');
-  assert.match(js, /placeId: 'KSA-COUNTRY'/, 'زر «كل السعودية» ما بيرجعش لنفس.placeId بتاع embedded');
-  assert.match(js, /C\.MSG\.SET_CONFIG, \{ patch: \{ gl: glLow \} \}/, 'مفيش مزامنة gl مع بلد الاختيار');
-  assert.match(js, /contentWindow\.location\.reload\(\)/, 'فريم Gsloc ما بيتعملوش تحديث بعد التطبيق');
-  assert.match(js, /tile\.openstreetmap\.org\/\{z\}\/\{x\}\/\{y\}\.png/, 'مفيش تILES حية للخريطة');
-  assert.match(js, /getCurrentPosition/, 'زر موقعي الحالي موجود؟');
-  // الأمان: مفيش innerHTML بيحقن نصوص بحث المستخدم
-  assert.ok(!/hits\.innerHTML = (?!'')/.test(js), 'innerHTML بيحقن غير نص؟');
-  const css = read('src/sidepanel/side-panel.css');
-  assert.ok(css.includes('.geo-map {') && css.includes('height: 340px;') && css.includes('.geo-map.leaflet-container'), 'ستايل الخريطة الجديد ناقص');
-});
-
 /* -------- v1.21.30 — الركن بقى إعادة انطلاق + ↻ أولوية لكل كلمة -------- */
 test('v12130: ركن الكابتشا ما بقاش قعدة انتظار — دقيقة رحمة وإعادة من الصفر في تاب جديد (سقف 2)', () => {
   assert.match(queue, /if \(waited >= 60\) \{/, 'الصبر لسه 5 دقايق');
@@ -1661,7 +1627,7 @@ test('v12130: زرار ↻ — الأولوية بعد الكلمة الشغال
   assert.ok(i18n.slice(arAt, enAt).includes('btnRecheck') && i18n.slice(enAt).includes('btnRecheck'), 'مفتاح الزرار ناقص في لغة');
 });
 
-/* -------- v1.21.31 — 100 نتيجة من المنبع + خريطة بيلتقط منها بالضبط -------- */
+/* -------- v1.21.31 — 100 نتيجة من المنبع (الكارت والخريطة اتشالوا في 1.21.32) -------- */
 test('v12131: صفحة الـ100 بقت قرار سيرفر-سايد — والدفعات الخلفية فول-باك محسّن', () => {
   const st2 = read('src/background/core/state.js');
   assert.match(st2, /page100: true,/, 'الـ100 مش ديفالتر');
@@ -1672,27 +1638,32 @@ test('v12131: صفحة الـ100 بقت قرار سيرفر-سايد — وال�
   assert.match(read('src/content/serp.js'), /cfg\.selfFetchMore !== false && items\.length < expectedNum/, 'الفول-باك اتقطع');
 });
 
-test('v12131: الخريطة التفاعلية — دوسة تختار، دبوس بيتسحب، ودائرة نطاق حية، والباكيد مكتفي بنفسه', () => {
+/* -------- v1.21.32 — الخريطة اتشالت خالص بطلب المستخدم: اللوحة رجعت خفيفة، والـ100 ساكنة -------- */
+test('v12132: مفيش خريطة ولا leaflet ولا كارت — تبويب الموقع=fريم Gsloc بس، ومفيش أي أثر بايت', () => {
   const html = read('src/sidepanel/side-panel.html');
-  assert.ok(html.includes('href="vendor/leaflet/leaflet.css"'), 'ورق leaflet مش محمّل جوه اللوحة');
-  assert.ok(html.includes('src="vendor/leaflet/leaflet.js"'), 'سكريبت leaflet مش محمّل');
-  assert.match(html, /id="geoMap"/, 'مفيش حاوية الخريطة');
-  assert.ok(!html.includes('id="geoPreview"'), 'فريم المعاينة القديم لسه رابض — ازدواج');
-  assert.match(html, /<div id="geoMap" class="geo-map" role="application"/, 'الحاوية مش معرّفة كـ app');
-  const leaf = read('src/sidepanel/vendor/leaflet/leaflet.js');
-  assert.ok(leaf.length > 100000 && leaf.includes('Leaflet 1.9.4'), 'ملف leaflet المحزوم مقصوص أو غلط');
-  assert.ok(read('src/sidepanel/vendor/leaflet/leaflet.css').includes('.leaflet-container'), 'css مقصوص');
   const js = read('src/sidepanel/side-panel.js');
-  assert.match(js, /Lg\.map\('geoMap'/, 'التهيئة مش على الحاوية');
-  assert.match(js, /map\.on\('click', \(e\) => \{ setSel\(e\.latlng\.lat, e\.latlng\.lng/, 'دوسة الاختيار مش مربوطة');
-  assert.match(js, /draggable: true/, 'الدبوس مش بيتسحب');
-  assert.match(js, /dragend/, 'تحريك الدبوس مش بيحدّث');
-  assert.match(js, /nominatim\.openstreetmap\.org\/reverse\?format=jsonv2/, 'مفيش reverse geocode لاسم النقطه');
-  assert.match(js, /Lg\.circle\(\[lat, lon\], \{ radius: radiusM\(\)/, 'دائرة النطاق مش متربطة بالمحدد');
-  assert.match(js, /circle\.setRadius\(radiusM\(\)\)/, 'النطاق مش بيحدث الدائرة لحظيًا');
-  assert.match(js, /typeof globalThis\.L !== 'undefined'/, 'مفيش degradation guard لو leaflet ما اتحملش');
-  assert.match(js, /map\.flyTo\(\[Number\(p\.lat\), Number\(p\.lon\)\]/, 'البحث بالاسم ما بيركّزش على الخريطة');
-  // الواجهة الجديدة لسه بتكتب في نفس المفتاح المشترك
-  assert.match(js, /chrome\.storage\.sync\.set\(\{ settings: base \}/, 'مسار التطبيق اتبوظ');
-  assert.match(js, /placeId: 'SRT-MAP'/, 'البصة اتشالت');
+  const css = read('src/sidepanel/side-panel.css');
+  for (const [hay, tag] of [[html, 'html'], [js, 'js'], [css, 'css']]) {
+    for (const ghost of ['leaflet', 'Leaflet', 'geo-card', 'geoSearch', 'geoMap', 'geoRadius', 'geoNote', 'geoHits', 'nominatim', 'Nominatim', 'initGeoMap']) {
+      assert.ok(!hay.includes(ghost), tag + ': أثر «' + ghost + '» لسه موجود — الشيل مش كامل');
+    }
+  }
+  assert.ok(!existsSync(join(root, 'src/sidepanel/vendor')), 'مجلد vendor لسه رابض على القرص');
+  // الفريم الأصلي ساكن في مكانه — هي المصدر الوحيد للمنطقة جوه اللوحة
+  const at = html.indexOf('id="paneGsloc"');
+  assert.ok(at > -1, 'مفيش تبويب الموقع');
+  const seg = html.slice(at, html.indexOf('</div>', html.indexOf('id="frameGsloc"', at)));
+  assert.ok(seg.includes('<iframe id="frameGsloc" src="../../gsloc/popup.html"'), 'فريم Gsloc اتبوظ');
+  assert.ok(!/geo-card|خريطة/.test(seg), 'لسه فيه كلام خريطة في التبويب');
+  // الفريم هو آخر حاجة في التبويب — مفيش أي حشوة بعده
+  assert.match(html, /id="frameGsloc"[^<]*<\/iframe>\s*<\/div>\s*<div id="paneBeyondten"/, 'فيه حشوة بعد الفريم؟');
+  // وفي اللوحة نفسها مفيش أي صدى للجغرافيا القديمة
+  assert.ok(!/geoSearch|geoMap|initGeo|Nominatim/i.test(js), 'ال JS أثر خريطة لسه قايم');
+});
+test('v12132: شيل الخريطة ما لمستش صفحة الـ100 — urlkit وstate وserp زي ما هي بالضبط', () => {
+  const uk = read('src/background/core/urlkit.js');
+  assert.match(uk, /config\.page100 !== false/, 'بوابة page100 لمست');
+  assert.ok(uk.includes("set('num', '100')") && !uk.includes("set('pws'"), 'اتزان num/pws اتبوظ');
+  assert.match(read('src/background/core/state.js'), /page100: true,/);
+  assert.match(read('src/content/serp.js'), /set\('num', '100'\)/);
 });
