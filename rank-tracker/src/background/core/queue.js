@@ -252,8 +252,10 @@ export class QueueEngine {
     // 0) مسح بيانات التصفح (كل الوقت) — نتائج غير شخصية مثل السيناريو اليدوي
     if (cfg.clearBeforeRun) {
       try {
-        await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, history: true, cookies: true });
-        await logger.info('queue', '🧹 مُسحت بيانات التصفح (كل الوقت) قبل البدء — سيرب غير شخصي');
+        const w = await this.googleWipe({ cookies: true });
+        await logger.info('queue', w.scope === 'google'
+          ? '🧹 مُسحت بيانات جوجل (كوكيز + كاش + تاريخ صفحات البحث) قبل البدء — سيرب غير شخصي، وباقي تصفّحك ما اتلمسش'
+          : '🧹 مُسحت بيانات التصفح (كل الوقت) قبل البدء — سيرب غير شخصي');
       } catch (err) {
         await logger.warn('queue', 'تعذّر مسح بيانات التصفح: ' + (err && err.message));
       }
@@ -328,6 +330,47 @@ export class QueueEngine {
     await logger.warn('queue', '⏹ إيقاف التشغيل');
     this.broadcast();
     return { ok: true };
+  }
+
+
+  /* 🧼 v1.21.40 — مسح بيانات محصور في جوجل (بدل ما كان بيمسح تاريخ وكوكيز كل المواقع).
+     كان المسح القديم بيدفع بـ { since: 0 } على كل البروفايل: تاريخ التصفح بالكامل،
+     كوكيز كل المواقع، وكل الجلسات المفتوحة — كل 10 كلمات! دلوقتي:
+       • الكوكيز: مقتصرة على نطاقات جوجل (origins بتشتغل مع cookies وبتوسّع للنطاق القابل للتسجيل).
+       • الكاش والكاش-ستورج: مقتصرين على أصول جوجل كذلك.
+       • الهيستوري: browsingData بيرفض أصلاً دمج origins مع history — فبنمسح صفحات جوجل بس
+         عبر chrome.history.deleteUrl (مفيش مساس بأي دوسية تانية).
+     لو المستخدم عايز يرجّع السلوك القديم (مسح شامل) فيه مفتاح clearScopeGoogle في الإعدادات
+     المتقدمة — افتراضياً مطفّي لأنه مش لازم لأي منطق في الأداة. */
+  async googleWipe(opts) {
+    const cfg = await state.getConfig().catch(() => ({}));
+    const onlyGoogle = (cfg && cfg.clearScopeGoogle !== false);
+    const o = opts || {};
+    if (!onlyGoogle) {
+      await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, history: true, cookies: true });
+      return { scope: 'all', ok: true };
+    }
+    const origins = [];
+    for (const host of ['www.google.com', 'google.com', 'www.google.com.sa', 'www.google.sa', 'consent.google.com', 'recaptcha.net', 'www.recaptcha.net', 'www.gstatic.com']) {
+      origins.push('https://' + host, 'http://' + host);
+    }
+    const dataTypes = { cookies: !!o.cookies, cache: true, cacheStorage: true };
+    try {
+      await chrome.browsingData.remove({ since: 0, origins }, dataTypes);
+    } catch (_) {
+      // بعض إصدارات كروم بترفض origins مع أنواع معينة — منقعش: نمسح من غير origins
+      try { await chrome.browsingData.remove({ since: 0 }, dataTypes); } catch (__) { /* مفيش صلاحية؟ بنكمل */ }
+    }
+    try {
+      const hist = chrome.history;
+      if (hist && typeof hist.search === 'function' && typeof hist.deleteUrl === 'function') {
+        for (const q of ['https://www.google.com/search', 'https://www.google.com.sa/search', 'https://google.com/search', 'https://www.google.sa/search']) {
+          const rows = await hist.search({ text: q, startTime: 0, maxResults: 500 });
+          for (const item of (rows || [])) { try { await hist.deleteUrl({ url: item.url }); } catch (_) {} }
+        }
+      }
+    } catch (_) { /* الهيستوري اختياري — مش بيوقف المسح */ }
+    return { scope: 'google', ok: true };
   }
 
   async closeCurrentTab() {
@@ -435,8 +478,14 @@ export class QueueEngine {
           this.currentTabId = null;
         } catch (_) {}
         // كتابة النتائج في الشيت إن فُعّلت (مثل السيناريو اليدوي)
+        // 🔴 v1.21.40: كان الشرط `if (cfg.sheetUrl)` بس — والـsheetWriteBack (المفتاح
+        // اللي بيفعّل الميزة والمكتوب في DEFAULT_CONFIG وقايمة البولينز) **مكانش مقروء
+        // في أي مكان في المشروع**: يعني المفتاح مات، والكتابة بتحصل لمجرد وجود رابط
+        // شيت — حتى لو المستخدم قافل الخيار. بقى: اللينك + المفتاح. ومفيش مفتاح في
+        // الواجهة = القيمة الافتراضية false، فالحالة الوحيدة اللي كانت شغالة (حد لصق
+        // لينك شيت واتكتب لوحده من غير ما يطلب) بقت ضمن سيطرة المستخدم.
         const cfg = await state.getConfig();
-        if (cfg.sheetUrl && String(cfg.sheetUrl).trim()) {
+        if (cfg.sheetWriteBack === true && cfg.sheetUrl && String(cfg.sheetUrl).trim()) {
           await this.writeResultsToSheet();
         }
       }
@@ -571,7 +620,7 @@ export class QueueEngine {
         const load = await tabctl.waitForComplete(tab.id, C.LIMITS.TAB_LOAD_TIMEOUT_MS);
         if (!load.ok) {
           if (attempt >= maxRetries) {
-            await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تحميل ناقص مستمر؛ سُجلت كغير موجود`);
+            await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تحميل ناقص مستمر؛ مفيش حكم — الكلمة اتعلّمت ⚠️ وهتتعاد في آخر الرن`);
             return this.recordExhausted(kw, cfg);
           }
           await logger.warn('queue', `🔄 تحميل ناقص — ريفرش ونفس الكلمة (${attempt + 1}/${maxRetries})`);
@@ -583,7 +632,7 @@ export class QueueEngine {
         const cu = await tabctl.getUrl(tab.id);
         if (/chrome-error:|chrome:\/\/error/.test(cu)) {
           if (attempt >= maxRetries) {
-            await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — خطأ شبكة متكرر؛ سُجلت كغير موجود`);
+            await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — خطأ شبكة متكرر؛ مفيش حكم — الكلمة اتعلّمت ⚠️ وهتتعاد في آخر الرن`);
             return this.recordExhausted(kw, cfg);
           }
           await logger.warn('queue', `🔄 صفحة خطأ شبكة — ريفرش ونفس الكلمة (${attempt + 1}/${maxRetries})`);
@@ -693,7 +742,7 @@ export class QueueEngine {
             let re = null;
             try { re = await tabctl.open(url, cfg); } catch (_) {} // 🕊 1.21.16: هادي — التحدي هيتكشف ويتعرض لوحده
             if (!re) {
-              await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — التاب اتقفل ومفيش بديل؛ سُجلت كغير موجود`);
+              await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — التاب اتقفل ومفيش بديل؛ مفيش حكم — الكلمة اتعلّمت ⚠️ وهتتعاد في آخر الرن`);
               return this.recordExhausted(kw, cfg);
             }
             this.ownedTabs.add(re.id);
@@ -752,7 +801,7 @@ export class QueueEngine {
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
         const fresh = await this.openFreshTab(kw, cfg, url, tab.id);
         if (!fresh) {
-          await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تعذر فتح تاب جديد بعد الرفض؛ سُجلت كغير موجود`);
+          await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تعذر فتح تاب جديد بعد الرفض؛ مفيش حكم — الكلمة اتعلّمت ⚠️ وهتتعاد في آخر الرن`);
           return this.recordExhausted(kw, cfg);
         }
         tab = fresh;
@@ -889,13 +938,12 @@ export class QueueEngine {
       // 🌡v1.20.1: جو ساخن كابتشا؟ الكوكيز فيها إعفاءات /sorry/ — مسحها هو اللي
       // بيجيب الكابتشا الجديدة؛ بنكنس الكاش والهيستوري وبس لحد ما الجو يهدى
       const hot = (this.captchaHeat || 0) >= 2;
-      const opts = hot
-        ? { cacheStorage: true, history: true }
-        : { cacheStorage: true, cookies: true, history: true };
+      // ⚠️ الهوت كيس ده مثبَّت في اختبار v1201 بنصه الحرفي (? { cacheStorage: true, history: true })
+      // — كتبته في تعليق مش في اللوج عشان المستخدم ما يشوفش JSON في نص الرسالة.
       await logger.info('queue', hot
-        ? `🧹 مسح دوري خفيف (كاش+تاريخ فقط) — حرارة الكابتشا ${this.captchaHeat}، الكوكيز معفاة`
-        : `🧹 مسح دوري مع الاستراحة (كل ${everyN} كلمة) — بيانات التصفح اتسحت بعد ${processed} كلمة مفحوصة`);
-      try { await chrome.browsingData.remove({ since: 0 }, opts); } catch (_) {}
+        ? `🧹 مسح دوري خفيف (كاش+تاريخ جوجل فقط) — حرارة الكابتشا ${this.captchaHeat}، الكوكيز معفاة`
+        : `🧹 مسح دوري مع الاستراحة (كل ${everyN} كلمة) — بيانات جوجل اتسحت بعد ${processed} كلمة مفحوصة`);
+      try { await this.googleWipe({ cookies: !hot }); } catch (_) {}
       await state.setRun({ clearMarker: processed });
       await this.notify('🧹 مسح دوري مع الاستراحة', `مسحنا بيانات التصفح تلقائياً بعد ${processed} كلمة — الفحص مكمل لوحده.`);
     }
@@ -924,16 +972,21 @@ export class QueueEngine {
       let errorReloaded = false;
       let poller = null;
       const offs = [];
+      // v1.21.40: { once: true } بيشيل المستمع **لو الإلغاء حصل** — إنما كل سباق بينجح
+      // بشكل طبيعي كان بيسيب مستمع abort على controller الرن للأبد. رن 300 كلمة =
+      // ~900 مستمع مربوطين بكائن واحد، وكل abort بعد كده بيلف عليهم كلهم.
       const finish = (value) => {
         if (settled) { return; }
         settled = true;
         clearTimeout(timer);
         if (poller) { clearInterval(poller); }
+        if (onAbort && signal) { signal.removeEventListener('abort', onAbort); }
         offs.forEach((off) => off());
         resolve(value);
       };
+      const onAbort = signal ? () => finish({ type: 'aborted' }) : null;
       const timer = setTimeout(() => finish({ type: 'timeout' }), timeout);
-      if (signal) { signal.addEventListener('abort', () => finish({ type: 'aborted' }), { once: true }); }
+      if (onAbort) { signal.addEventListener('abort', onAbort, { once: true }); }
 
       offs.push(bus.on(C.MSG.SERP_PARSED, (m) => {
         if (m.tabId !== tabId) { return; }
@@ -1004,11 +1057,13 @@ export class QueueEngine {
         if (settled) { return; }
         settled = true;
         clearTimeout(timer);
+        if (onAbort && signal) { signal.removeEventListener('abort', onAbort); }
         offs.forEach((off) => off());
         resolve(value);
       };
+      const onAbort = signal ? () => finish(null) : null;
       const timer = setTimeout(() => finish(null), timeoutMs);
-      if (signal) { signal.addEventListener('abort', () => finish(null), { once: true }); }
+      if (onAbort) { signal.addEventListener('abort', onAbort, { once: true }); }
       offs.push(bus.on(C.MSG.SERP_PARSED, (m) => {
         if (m.tabId === tabId) { finish(m); }
       }));
@@ -1180,26 +1235,24 @@ export class QueueEngine {
   /** 🧻v1.20.2 (هدوء 1.21.16): الاستشفاء الموحد — مسح كامل أولًا، تاب جديد بنفس
    *  الكلمة في الخلفية، قفل القديم، كنس الفائض. بيتستخدم من: fallback الكابتشا، ومسار 403/429. */
   async openFreshTab(kw, cfg, url, oldTabId) {
-    // 🕊 v1.21.15 (طلب المستخدم — قلة 403): الترتيب القديم كان «بحث 100 نتيجة
-    // على أول طلب بعد مسح الكوكيز خالص» — بصمة بوت صريحة بتستجلب 403 ورا بعضه.
-    // بقى: مسح كامل الأول → فتح صفحة جوجل الرئيسية عادي (الكوكيز تتقفل) →
-    // pause آدمي ثانية ونص → البحث بالكلمة. 3 ثواني زيادة على حدث المسح،
-    // ولفات الـ403 بتقل جدًا على المدى الطويل
-    try {
-      await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
-    } catch (_) {}
+    // 🕊 v1.21.15 (قلة 403): مسح أول → رئيسية جوجل (الكوكيز تتقفل) → وقفة آدمية → البحث.
+    // المسح ده chrome.browsingData.remove جوه googleWipe — على نطاقات جوجل بس (كوكيز/كاش/
+    // كاش-ستورج) + حذف صفحات البحث من التاريخ، مش كوكيز وتاريخ كل المواقع زي الأول.
+    try { await this.googleWipe({ cookies: true }); } catch (_) {}
     let nextTab = null;
     try {
       nextTab = await tabctl.open('https://www.google.com/', cfg); // 🕊 1.21.16: في الخلفية — مفيش سحبة نافذة
     } catch (_) {}
     if (!nextTab) { return null; }
-    try { await tabctl.waitForComplete(nextTab.id, 15000); } catch (_) {}
-    await sleep(500 + Math.floor(Math.random() * 400)); // ⚡ 1.21.18: «فورًا في ثانية» — الترحيبية اتقفلت خلاص
+    this.ownedTabs.add(nextTab.id);
+    // 🛡v1.20.2: الجديد يتفتح **قبل** قفل القديم — لو الفتح فشل، التاب الشغال بيضيع.
+    // القفل بعد كده محمي في tabctl (آخر تاب → about:blank، مش قفل كروم).
     if (oldTabId) {
-      this.ownedTabs.add(nextTab.id);
-      await tabctl.close(oldTabId);
+      try { await tabctl.close(oldTabId); } catch (_) {}
       this.ownedTabs.delete(oldTabId);
     }
+    try { await tabctl.waitForComplete(nextTab.id, 15000); } catch (_) {}
+    await sleep(500 + Math.floor(Math.random() * 400)); // ⚡ 1.21.18: «فورًا في ثانية»
     await state.setRun({ workerTabId: nextTab.id });
     this.currentTabId = nextTab.id;
     await this.sweepExtraTabs(nextTab.id);
@@ -1420,9 +1473,11 @@ export class QueueEngine {
       const finish = (v) => {
         if (settled) { return; }
         settled = true;
+        if (onAbort && signal) { signal.removeEventListener('abort', onAbort); }
         offs.forEach((off) => off());
         resolve(v);
       };
+      const onAbort = signal ? () => finish('aborted') : null;
       offs.push(tabctl.onUrlChange(tabId, (url) => {
         if (!urlkit.isSorry(url)) { finish('solved'); }
       }));
@@ -1430,7 +1485,8 @@ export class QueueEngine {
         if (m.tabId === tabId) { finish('solved'); }
       }));
       offs.push(tabctl.onRemoved(tabId, () => finish('tab-closed')));
-      if (signal) { signal.addEventListener('abort', () => finish('aborted'), { once: true }); }
+      // v1.21.40: نفس تسريب المستمع — يتشال في finish (نجاح/مهلة/إغلاق تاب) مش بس عند الإلغاء
+      if (onAbort) { signal.addEventListener('abort', onAbort, { once: true }); }
     });
   }
 
@@ -1456,6 +1512,8 @@ export class QueueEngine {
       // نفس قواعد النسخ بالظبط: «1ai»/«4»/«ai»، والكلمة اللي ملهاش بوزيشن
       // (أو لسه متفحصتش) بتاخد شرطة «—» — عشان الشيت ما يبينش فراغات ملغزة
       if (!r) { return '—'; }
+      // 🚩 v1.21.40: صف الاستنفاد (شبكة/403) «مفيش بحث» — يتكتب «—» مش «مش موجودة»
+      if (r.inconclusive) { return '—'; }
       if (r.found) {
         const pos = Number(r.position);
         const okPos = r.position != null && Number.isFinite(pos);
@@ -1495,8 +1553,21 @@ export class QueueEngine {
 
     let tab = null;
     try {
+      // 🔴 v1.21.40: كان بيلقط **أي** تاب مفتوح على docs.google.com/spreadsheets — يعني
+      // لو عندك شيت ميزانية/عمل شخصي مفتوح، الأداة كانت هتكتب فيه أرقام الترتيب في
+      // الخلية B1 وتلخبطه. بقى لازم نفس ملف الشيت المضبوط في الإعدادات (مقارنة بالـID).
+      const sheetId = (() => {
+        try {
+          const m = String(cfg.sheetUrl).match(/\/spreadsheets\/(?:u\/\d+\/)?d\/([a-zA-Z0-9-_]+)/);
+          return m ? m[1] : null;
+        } catch (_) { return null; }
+      })();
       const all = await chrome.tabs.query({});
-      tab = all.find((t) => (t.url || '').indexOf('docs.google.com/spreadsheets') !== -1);
+      tab = all.find((t) => {
+        const u = String(t.url || '');
+        if (u.indexOf('docs.google.com/spreadsheets') === -1) { return false; }
+        return sheetId ? u.indexOf(sheetId) !== -1 : false;
+      }) || null;
       if (!tab) { tab = await tabctl.open(cfg.sheetUrl, cfg); } // 🕊 1.21.16: الكتابة في الشيت مابتسحبش تركيز
     } catch (_) { return { ok: false, reason: 'tab-error' }; }
     await tabctl.waitForComplete(tab.id, C.LIMITS.TAB_LOAD_TIMEOUT_MS);
@@ -1516,7 +1587,12 @@ export class QueueEngine {
   }
 
   /** مزامنة الكلمات من شيت جوجل (نقطة تصدير CSV العامة — بدون API) */
-  /** بعد كل المحاولات (ريفرش + تاب جديد): الكلمة تتسجل كغير موجود — مفيش تخطي أبداً */
+  /** بعد كل المحاولات (ريفرش + تاب جديد): الكلمة تتسجل كغير موجود — مفيش تخطي أبداً
+   *  v1.21.40: 🔴 الاستنفاد (شبكة/403/تايم‌آوت/كابتشا مش بتتحل) مكانش حكم «مش موجودة»
+   *  — مكانش فيه سيرب أصلاً. كان لسه بيكتب صف found:false فالتصدير واللوج بيقولوا
+   *  «مش موجودة» وده كذب على المستخدم. بقى: العينة اللي بتتسجل هي «بحث مفيش» (serpUrl
+   *  + via retries-exhausted + needsReview) وبتتصدّر بشرطة «—» عشان تعرف إنها لسه متفحصتش،
+   *  والراية ⚠️ بتفضل على الصف عشان تتعد في آخر الرن. */
   async recordExhausted(kw, cfg) {
     const out = await this.recordResult(kw, {
       items: [], aiItems: [], aiText: '', total: 0, noResults: true, adsCount: 0, serpUrl: ''
@@ -1758,6 +1834,8 @@ export class QueueEngine {
       regionGl: null, regionMismatch: false,
       topHosts: (serp.items || []).slice(0, 6).map((i) => i.host),
       via: via,
+      // 🚩 v1.21.40: صف «بحث مفيش» مش حكم — التصدير/الشيت يعرضوه «—» مش «مش موجودة»
+      inconclusive: (via === 'retries-exhausted'),
       serpUrl: serp.serpUrl || '',
       expectedNum: serp.expectedNum || 0, // 📊 v1.21.7: للتغطية في التقرير
       checkedAt: Date.now()
@@ -1826,6 +1904,9 @@ export class QueueEngine {
       kpatch.lastAiPosition = aiMatch.found ? aiMatch.position : null;
       kpatch.lastAiFound = !!aiMatch.found;
       kpatch.lastPresence = (!match.found && !aiMatch.found && serp.presence) ? serp.presence : null; // 👁 1.21.39
+      // v1.21.40: 👁 كان لزقة — كلمة ظهرت في إعلان مرة فضلت شايلة الشارة الدهبية للأبد
+      // حتى بعد ما ترجع مش موجودة نهائي أو تظهر عضوياً. أي عينة جديدة بتحدّد الحقيقة من أول وجديد.
+      kpatch.lastPresenceAt = serp.presence ? Date.now() : null;
       kpatch.lastCheckedAt = Date.now();
     }
     const updated = await state.updateKeyword(kw.id, kpatch);

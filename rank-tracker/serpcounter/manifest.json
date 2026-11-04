@@ -10,7 +10,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.google.*/search*"],
+      "matches": ["https://www.google.com/search*", "https://www.google.com.sa/search*", "https://www.google.sa/search*", "https://www.google.com.eg/search*", "https://www.google.eg/search*", "https://www.google.ae/search*", "https://www.google.com.ae/search*", "https://www.google.co.uk/search*", "https://www.google.de/search*", "https://www.google.fr/search*", "https://www.google.tr/search*", "https://www.google.co.in/search*", "https://www.google.com.tr/search*", "https://google.com/search*", "https://google.com.sa/search*", "https://google.sa/search*"],
       "js": ["content.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"

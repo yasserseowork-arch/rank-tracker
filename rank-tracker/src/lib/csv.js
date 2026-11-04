@@ -72,7 +72,13 @@
   }
 
   function escapeCell(value, delimiter) {
-    const s = value == null ? '' : String(value);
+    let s = value == null ? '' : String(value);
+    // 🛡 v1.21.40: تحصين حقن الصيغ (CSV Injection) — كلمة مفتاحية زي
+    // =HYPERLINK("http://evil","اضغط") أو +cmd|'/c calc'!A1 بتتحول **صيغة حيّة**
+    // لما تفتح ملف CSV في Excel/Sheets. الكلمات المفتاحية هنا بتيجي من شيت المستخدم
+    // ومن الصفحات، فبتتكتب عندنا على أقراص برضه. الحل القياسي: شرطة عليا قبل أي خلية
+    // بتبدأ بـ = + - @ أو tab/CR، والشرطة نفسها ما بتظهرش في العرض.
+    if (/^[=+\-@\t\r]/.test(s)) { s = "'" + s; }
     const needs = s.indexOf(delimiter) !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1;
     return needs ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
@@ -91,7 +97,12 @@
 
   /** تحويل صفوف إلى TSV جاهز للصق داخل Google Sheets */
   function toTsv(rows) {
-    return (rows || []).map((r) => (r || []).map((c) => String(c == null ? '' : c).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n');
+    // 🛡 v1.21.40: نفس تحصين حقن الصيغ — اللصق في Google Sheets هو المسار الأساسي
+    // بتاع الأداة (زر «نسخ للصق في الشيت»)، وخلايا بتبدأ بـ = أو + أو @ بتتقري صيغة.
+    return (rows || []).map((r) => (r || []).map((c) => {
+      const s = String(c == null ? '' : c).replace(/[\t\r\n]+/g, ' ');
+      return /^[=+\-@]/.test(s) ? "'" + s : s;
+    }).join('\t')).join('\n');
   }
 
   const HEADER_HINTS = ['keyword', 'keywords', 'كلمة', 'الكلمة', 'الكلمه', 'كلمه', 'query', 'search term', 'البحث', 'عبارة'];

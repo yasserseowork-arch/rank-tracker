@@ -71,9 +71,32 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 chrome.runtime.onStartup.addListener(() => boot('onStartup'));
 
-// 🔥 سخّن محرك النسخ الصوتي (Whisper) في الخلفية أول تشغيل — التنزيل مرة واحدة وبس،
-// وبعدها أي كابتشا بتتحل فورًا من غير ما المستخدم يستنى موديل 40 ميجا نص فحص.
-import('./core/solver.js').then((m) => { try { m.prewarm(); } catch (_) {} }).catch(() => {});
+// 🔥 سخّن محرك النسخ الصوتي (Whisper) — لكن مش في كل استيقاظ!
+// v1.21.40: 🔴 كان import + prewarm على مستوى الموديول — يعني كل مرة الـService Worker
+// يقوم من النوم (وهو بيقوم باستمرار: كل تبويب/رسالة/ألارم) بيفتح وثيقة offscreen
+// ويطلب نسخ WAV صامت بمهلة 30 دقيقة. والنتيجة إن موديل 40 ميجا **بيتنزّل ويمسح**
+// (closeDoc في الآخر) كل ما كروم يفتح — مش «مرة واحدة وبس» زي ما المكتوب. كمان
+// وثيقة offscreen شغالة بتمنع الـWorker من النوم. دلوقتي التسخين بيحصل مرة واحدة
+// في اليوم بالكتير (تُختم في storage.local)، وأول فشل بيدي إشارة للنوم شوية.
+const PREWARM_KEY = 'srt.prewarmAt';
+const PREWARM_RETRY_KEY = 'srt.prewarmFailAt';
+async function maybePrewarm() {
+  try {
+    const now = Date.now();
+    const got = await chrome.storage.local.get([PREWARM_KEY, PREWARM_RETRY_KEY]);
+    const lastOk = (got && got[PREWARM_KEY]) || 0;
+    const lastFail = (got && got[PREWARM_RETRY_KEY]) || 0;
+    // نجح في آخر 24 ساعة أو فشل في آخر ساعة؟ مفيش داعي
+    if (now - lastOk < 24 * 60 * 60 * 1000) { return; }
+    if (now - lastFail < 60 * 60 * 1000) { return; }
+    const m = await import('./core/solver.js');
+    const res = await m.prewarm();
+    await chrome.storage.local.set({ [res && res.ok === false ? PREWARM_RETRY_KEY : PREWARM_KEY]: Date.now() });
+  } catch (_) {
+    try { await chrome.storage.local.set({ [PREWARM_RETRY_KEY]: Date.now() }); } catch (__) {}
+  }
+}
+setTimeout(() => { maybePrewarm().catch(() => {}); }, 1500);
 
 // تشغيل فوري عند تحميل الـ Worker لأول مرة
 boot('cold-start');

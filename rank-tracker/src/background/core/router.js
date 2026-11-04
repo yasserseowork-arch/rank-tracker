@@ -16,10 +16,13 @@ export function createRouter(engine) {
       return;
     }
     const isExtensionPage = !sender.tab; // رسائل اللوحة/الخيارات بلا تبويب
-    if (!isExtensionPage) { return; }    // رسائل التبويبات يعالجها ناقل الطابور
 
     const type = message.type;
-    // رسائل محتوى التبويبات يعالجها ناقل الطابور، عدا قراءة الإعدادات فهي للجميع
+    // v1.21.40 — 🔴 العلة الأم: رسائل التبويبات كانت بتترمي كلها من غير رد، وserp.js
+    // وcaptcha.js بيسألوا `srt/config/get` أول حاجة عند الإقلاع. النتيجة كانت:
+    // كل فحص بيشتغل بإعدادات فاضية = صفر بلوكات أول شاشة، صفر مصلحة من هدف، صفر
+    // حدود كابتشا… إلخ. دلوقتي القراءة والسلام (GET_CONFIG/PING) متاحة للمحتوى،
+    // وباقي الأنواع الحسّاسة (تشغيل/إيقاف/إعدادات/كلمات) لصفحات الإضافة بس.
     const allowedForContent = [C.MSG.GET_CONFIG, C.MSG.PING];
     if (!isExtensionPage && !allowedForContent.includes(type)) { return; }
 

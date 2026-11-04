@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "short_name": "__MSG_appShortName__",
-  "version": "1.21.39",
+  "version": "1.21.40",
   "default_locale": "ar",
   "description": "__MSG_appDesc__",
   "minimum_chrome_version": "123",
@@ -15,8 +15,8 @@
     "sidePanel",
     "notifications",
     "browsingData",
+    "history",
     "debugger",
-    "webRequest",
     "declarativeNetRequest",
     "webNavigation",
     "offscreen",
@@ -33,10 +33,12 @@
     "*://recaptcha.net/*",
     "*://www.recaptcha.net/*",
     "*://www.gstatic.com/recaptcha/*",
-    "<all_urls>",
     "https://www.google.com/",
     "https://maps.google.com/",
-    "https://photon.komoot.io/"
+    "https://photon.komoot.io/",
+    "https://*.google.com/*",
+    "https://*.google.com.sa/*",
+    "https://*.google.sa/*"
   ],
   "background": {
     "service_worker": "src/background/sw.js",
@@ -67,7 +69,9 @@
         "https://www.google.sa/search*",
         "https://google.sa/search*",
         "https://www.google.com.sa/search*",
-        "https://google.com.sa/search*"
+        "https://google.com.sa/search*",
+        "https://www.google.com.eg/search*",
+        "https://google.com.eg/search*"
       ],
       "js": [
         "src/lib/constants.js",
@@ -93,7 +97,9 @@
         "*://google.com/recaptcha/*",
         "*://recaptcha.net/*",
         "*://www.recaptcha.net/*",
-        "*://www.gstatic.com/recaptcha/*"
+        "*://www.gstatic.com/recaptcha/*",
+        "https://www.google.com.eg/sorry/*",
+        "https://google.com.eg/sorry/*"
       ],
       "js": [
         "src/lib/constants.js",
@@ -320,7 +326,8 @@
         "*://www.google.tt/*",
         "*://www.google.vg/*",
         "*://www.google.vu/*",
-        "*://www.google.ws/*"
+        "*://www.google.ws/*",
+        "*://www.google.eg/*"
       ],
       "include_globs": [
         "*q=*",
@@ -347,7 +354,6 @@
         "https://*.google.co.uk/search*",
         "https://*.google.de/search*",
         "https://*.google.fr/search*",
-        "https://*.google.in/search*",
         "https://*.google.com.bd/search*",
         "https://*.google.sa/search*",
         "https://*.google.com.sa/search*",
@@ -378,7 +384,10 @@
         "https://*.google.si/search*",
         "https://*.google.es/search*",
         "https://*.google.se/search*",
-        "https://*.google.ch/search*"
+        "https://*.google.ch/search*",
+        "https://*.google.co.in/search*",
+        "https://*.google.com.eg/search*",
+        "https://*.google.eg/search*"
       ],
       "run_at": "document_idle"
     },

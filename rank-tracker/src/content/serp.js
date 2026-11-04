@@ -868,8 +868,15 @@
 
   /* --------------------------------- الإقلاع --------------------------------- */
   async function main() {
-    const cfgRes = await D.msg.send(C.MSG.GET_CONFIG);
-    const cfg = cfgRes && cfgRes.config ? cfgRes.config : {};
+    // v1.21.40: قراءة الإعدادات محصّنة ضد فشل واحد — الـService Worker بيقوم من النوم
+    // أحيانًا بعد أول رسالة، وأول رد ممكن ييجي فاضي. ما ينفعش مسح كامل يشتغل بـ{}
+    // (صفر بلوكات أول شاشة، صفر مصلحة من الهدف...). محاولتين بفاصل قصير.
+    let cfg = {};
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const cfgRes = await D.msg.send(C.MSG.GET_CONFIG);
+      if (cfgRes && cfgRes.ok && cfgRes.config) { cfg = cfgRes.config; break; }
+      if (attempt === 0) { await new Promise((r) => setTimeout(r, 400)); }
+    }
 
     if (await handleBadPage(cfg)) { return; }
 

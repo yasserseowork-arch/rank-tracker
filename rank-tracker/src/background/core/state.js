@@ -56,6 +56,7 @@ export const DEFAULT_CONFIG = {
   captchaClearRetries: 3,       // كابتشا؟ مسح بيانات المتصفح + تاب جديد — عدد المرات لكل كلمة
   // دورة العمل الكاملة (مثل السيناريو اليدوي)
   clearBeforeRun: true,         // 🧼 v1.21.38 (طلب المستخدم الصريح): مسح كامل لبيانات التصفح قبل كل رن — أساس مجهول نضيف من أول ثانية؛ المفتاح يفضل اختياريًا للي عايز الجلسة الدافية
+  clearScopeGoogle: true,       // 🛡 v1.21.40: المسح محصور في جوجل (كوكيز/كاش/تاريخ جوجل بس) — عمرنا ما نمسح تاريخ أو كوكيز باقي مواقعك أو تسجيلات دخولك وحساباتك؛ القيمة عمرها ما بتتحفظ إلا لو المستخدم بنفسه شال الحصر
   clearEveryN: 10,              // v1.21.38 (طلب المستخدم): مسح دوري كامل كل 10 كلمات — متزامن مع الاستراحة (0 = معطّل)
   sheetUrl: '',                 // رابط شيت جوجل للمزامنة والكتابة
   sheetWriteBack: false,        // كتابة عمود الترتيب في الشيت عند انتهاء الجولة
@@ -122,12 +123,13 @@ export async function setConfig(patch) {
   const numeric = ['num', 'delayMs', 'jitterMs', 'cooldownEvery', 'cooldownMs', 'cooldownJitterMs',
     'captchaMaxAttempts', 'captchaAttemptTimeoutMs', 'captchaGapMs', 'captchaRefreshRetries', 'keywordRetries', 'captchaClearRetries', 'settleMs', 'scrollStepMs',
     'maxWaitResultsMs', 'maxHistoryPerKeyword', 'maxChecksPerDay', 'errorReloadMax',
-    'batchSettleMs', 'rescanMs', 'selfFetchMaxBatches', 'scanHardCapMs', 'clearEveryN'];
+    'batchSettleMs', 'rescanMs', 'selfFetchMaxBatches', 'scanHardCapMs', 'clearEveryN',
+];
   for (const key of numeric) {
     const n = parseInt(next[key], 10);
     if (!Number.isNaN(n)) { next[key] = n; }
   }
-  const booleans = ['pauseOnCaptchaFail', 'autoResumeOnManualSolve', 'foregroundTab', 'reuseTab', 'verbose', 'selfFetchMore', 'clearBeforeRun', 'sheetWriteBack', 'mapsCheck', 'autoXlsx'];
+  const booleans = ['pauseOnCaptchaFail', 'autoResumeOnManualSolve', 'foregroundTab', 'reuseTab', 'verbose', 'selfFetchMore', 'clearBeforeRun', 'clearScopeGoogle', 'sheetWriteBack', 'mapsCheck', 'autoXlsx'];
   for (const key of booleans) { next[key] = !!next[key]; }
   if (!['domain', 'name', 'both'].includes(next.matchMode)) { next.matchMode = 'both'; }
   // تنظيف الدومين: المستخدم يكتبه بدون https وأحياناً بمسار أو www
@@ -290,9 +292,13 @@ export async function clearLogs() {
 
 /* --------------------------------- الهجرة --------------------------------- */
 
-/** عدّاد الفحوصات اليومي (سقف احتراماً لقواعد جوجل) */
+/** عدّاد الفحوصات اليومي (سقف احتراماً لقواعد جوجل)
+ *  v1.21.40: كان بيحسب «اليوم» بـUTC — والمستخدم في القاهرة UTC+2/UTC+3، فالسقف
+ *  اليومي كان بيترجع (أو يتقفل) الساعة 2/3 صباحًا بالتوقيت المحلي: «اتقفل السقف»
+ *  واليوم لسه بدري، أو يوم جديد يفتح قبل نص الليل. بقى التاريخ محلي. */
 export async function getDailyCount() {
-  const today = new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   const stored = await local.get('srt.dailyCount', { date: today, count: 0 });
   if (stored.date !== today) { return { date: today, count: 0 }; }
   return stored;
@@ -396,8 +402,8 @@ export async function migrate() {
 /* ------------------------------- نسخة شاملة ------------------------------- */
 
 export async function snapshot() {
-  const [config, keywords, results, run, logs] = await Promise.all([
-    getConfig(), getKeywords(), getResults(), getRun(), getLogs()
+  const [config, keywords, results, run, logs, stats] = await Promise.all([
+    getConfig(), getKeywords(), getResults(), getRun(), getLogs(), getRunStats()
   ]);
   return {
     version: C.VERSION,
@@ -406,11 +412,19 @@ export async function snapshot() {
     results: results.slice(0, 300),
     run,
     logs: logs.slice(-150),
-    stats: computeStats(results, keywords)
+    // v1.21.40: 🔴 الإحصاءات (متفحص/ظهور/متوسط) كانت بتتحسب من آخر 300 صف
+    // **قديم-أول** — يعني بعد 300 فحص الرقم بيثبت غلط (ومتوسط الترتيب بيبقى
+    // متوسط فحوصات قديمة مش الحالة الحالية). دلوقتي من كل النتائج المحفوظة + الفحص الحالي.
+    stats: Object.assign(computeStats(results, keywords, run), {
+      // v1.21.40: «كابتشا اتحلت» في اللوحة كانت بتقرا run.captchaSolves (بيتصفّر مع
+      // كل start) فبتقول صفر بعد كل تشغيل. التراكمي = سجل آخر 20 رن + الرن الشغال،
+      // لأن سجل الرنات بيتكتب بعد الإنهاء بس (الرن الحالي مش فيه).
+      captchaSolvesTotal: stats.reduce((n, r) => n + (Number(r && r.captchaSolves) || 0), 0) + ((run && run.captchaSolves) || 0)
+    })
   };
 }
 
-function computeStats(results, keywords) {
+function computeStats(results, keywords, run) {
   const checked = results.length;
   const foundRows = results.filter((r) => r.found);
   const positions = foundRows.map((r) => r.position).filter((p) => typeof p === 'number');
@@ -423,6 +437,10 @@ function computeStats(results, keywords) {
     best: positions.length ? Math.min(...positions) : null,
     pending: keywords.filter((k) => k.status === C.STATUS.KW.PENDING).length,
     done: keywords.filter((k) => k.status === C.STATUS.KW.DONE).length,
-    total: keywords.length
+    total: keywords.length,
+    // v1.21.40: عدّاد الكابتشا في اللوحة كان بيقرا run.captchaSolves اللي بيتصفّر
+    // مع كل start() — يعني «كابتشا اتحلت» كان بيقول صفر بعد كل رن رغم إن فيه كابتشا
+    // اتحلت. snapshot بيضيف الإجمالي التراكمي من سجل الرنات (captchaSolvesTotal).
+    captchaSolves: (run && run.captchaSolves) || 0
   };
 }

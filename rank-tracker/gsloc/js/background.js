@@ -62,6 +62,9 @@ function genAcceptLanguage() {
 }
 
 function checkEnabled() {
+  // v1.21.40 ط¹: gs Location كان بيغيّر الهيدر على google.com بس (urlFilter ثابت)،
+  // بينما الأداة الأم بتفتح بحث السعودية على google.com.sa — يعني الرفيق المكاني
+  // كان **مش بيلمس الصفحات اللي بنفحصها**. بقى فيه قاعدتين: .com و.com.sa.
   if (settings.enabled) {
     // الأيقونة ملك الإضافة الموحدة — لا نغيّرها من أدوات مدمجة
     chrome.declarativeNetRequest.updateSessionRules(
@@ -97,6 +100,33 @@ function checkEnabled() {
                 "sub_frame"
               ]
             }
+          },
+          {
+            // v1.21.40: نفس الهيدرين على الدومين السعودي اللي الأداة الأم بتستخدمه
+            "id": 2,
+            "priority": 1,
+            "action": {
+              "type": "modifyHeaders",
+              "requestHeaders": [
+                {
+                  "header": "x-geo",
+                  "operation": "set",
+                  "value": genUULE()
+                },
+                {
+                  "header": "accept-language",
+                  "operation": "set",
+                  "value": genAcceptLanguage()
+                }
+              ]
+            },
+            "condition": {
+              "urlFilter": "google.com.sa/search",
+              "resourceTypes": [
+                "main_frame",
+                "sub_frame"
+              ]
+            }
           }
         ]},() => {
           if (chrome.runtime.lastError) {
@@ -107,7 +137,10 @@ function checkEnabled() {
   } else {
     chrome.declarativeNetRequest.updateSessionRules(
       {
-        removeRuleIds: [1]
+        removeRuleIds: [1, 2],
+        // v1.21.40: كان بيمسح 1 بس وسايب 2 (rule .com.sa الجديدة) معلقة —
+        // وضع «إيقاف الموقع» كان بيسيب التمويه شغال. الاتنين بيتشالوا.
+        addRules: []
       },
       () => {
         if (chrome.runtime.lastError) {
@@ -119,19 +152,25 @@ function checkEnabled() {
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'sync') {
+  // v1.21.40: 🔴 الشرط ده كان `area !== 'sync'` — وكل كاتبي الإعدادات في الأداة
+  // (popup.js، options.js، وembedded.js) بيكتبوا في `local`. يعني أي تغيير في الموقع
+  // أو gl/hl من واجهة gs Location **مكانش بيوصل للخلفية أبدًا**: القواعد بتفضل على
+  // الإعداد القديم لحد أول إعادة تشغيل لكروم، والمستخدم شايف «اتحفظ» وهو مش شغال.
+  if (area !== 'local') {
     return;
   }
-  if (changes.settings) {
+  if (changes.settings && changes.settings.newValue) {
     Object.assign(settings, changes.settings.newValue);
     checkEnabled();
     setupContextMenu(knownPlaces);
   }
-  if (changes.options) {
+  if (changes.options && changes.options.newValue) {
     Object.assign(options, changes.options.newValue);
   }
-  if (changes.knownPlaces) {
-    Object.assign(knownPlaces, changes.knownPlaces.newValue);
+  if (changes.knownPlaces && Array.isArray(changes.knownPlaces.newValue)) {
+    // تطهير نضيف — Object.assign على مصفوفة بيسيب شوائب (نفس درس 1.21.0)
+    knownPlaces.length = 0;
+    Array.prototype.push.apply(knownPlaces, changes.knownPlaces.newValue);
     setupContextMenu(knownPlaces);
   }
 });

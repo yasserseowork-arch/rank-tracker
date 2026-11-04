@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.39');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.39'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.39'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.39\]/m);
+  assert.equal(man.version, '1.21.40');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.40'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.40'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.40\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -759,7 +759,16 @@ test('v1210: الطقم كامل — مانيفستات للإضافات الم�
     assert.ok(man.name && man.version && man.description, dir + ' مانيفست ناقص بيانات');
     if (dir !== 'gsloc') {
       const cs = man.content_scripts[0];
-      assert.match(cs.matches[0], /google\.\*\/search/, dir + ' بيحقن بره صفحات البحث');
+      // v1.21.40: التثبيت القديم كان بيشترط النمط `google.*/search` — وده **نمط غير صالح
+      // في كروم** (Invalid host wildcard) يعني الإضافة كانت بترفض التحميل من أصله.
+      // التثبيت بقى أذكى: كل نمط لازم يكون قانوني + يغطي .com و.com.sa (دومين الفحص الفعلي)
+      for (const m of cs.matches) {
+        assert.match(m, /^https:\/\/(\*\.|www\.)?google\.(?:[a-z]{2,3}|co\.[a-z]{2}|com\.[a-z]{2})\/search\*$/,
+          dir + ': نمط matches غير قانوني → ' + m);
+      }
+      assert.ok(cs.matches.some((m) => m.includes('google.com/search')), dir + ' مش مغطي google.com');
+      assert.ok(cs.matches.some((m) => m.includes('google.com.sa/search')), dir + ' مش مغطي google.com.sa');
+      assert.ok(!cs.matches.some((m) => m.includes('google.*')), dir + ' لسه فيه wildcard غير صالح');
     }
   }
   const btMan = JSON.parse(read('beyondten/manifest.json'));

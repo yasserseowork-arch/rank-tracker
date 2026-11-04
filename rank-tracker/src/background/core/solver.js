@@ -97,18 +97,26 @@ export function transcribeAudioUrl(audioUrl, timeoutMs) {
  * في تخزين الإضافة؛ بنعمله في الخلفية أول التشغيل عشان الكابتشا الأولى ماتستناش.
  */
 export function prewarm() {
-  chain = chain.then(async () => {
-    if (!chrome.offscreen) { return; }
+  const job = chain.then(async () => {
+    if (!chrome.offscreen) { return { ok: false, reason: 'offscreen-unavailable' }; }
     try {
       await ensureDoc();
       try {
-        await askPort({ id: 'transcribeAudio', audioString: SILENT_WAV_B64, audioOptions: {} }, 30 * 60 * 1000);
+        const text = await askPort({ id: 'transcribeAudio', audioString: SILENT_WAV_B64, audioOptions: {} }, 8 * 60 * 1000);
+        // v1.21.40: تفريق نضيف بين «نجح على طول» و«نجح بعد تنزيل الموديل» —
+        // رد فاضي/silent على مقطع صامت مش دليل فشل، لكنه كمان مش دليل إن الموديل متكش.
+        await logger.info('solver', text === null
+          ? '🧠 محرك النسخ الصوتي اشتغل (الرد الصامت متوقع على مقطع فاضي) — النموذج متكش محليًا'
+          : '🧠 محرك النسخ الصوتي جاهز — النموذج محمّل ومكشوّك محليًا');
+        return { ok: true, text: text };
       } finally {
         await closeDoc();
       }
-      await logger.info('solver', '🧠 محرك النسخ الصوتي جاهز — النموذج محمّل ومكشوّك محليًا');
     } catch (err) {
       await logger.warn('solver', 'تسخين المحرك Voice فشل هيتحاول مع أول تحدي: ' + (err && err.message));
+      return { ok: false, reason: String(err && err.message) };
     }
   });
+  chain = job.then(() => {}, () => {});
+  return job;
 }

@@ -24,6 +24,11 @@ export function buildSearchUrl(keyword, cfg) {
   // البلوك المحلي والترتيب بيتفارقوا، فالتحقق اليدوي للمستخدم بيبان مختلف. نطابق الدومين
   // مع المنطقة — بس في حدود اللي السكربتات محقونة فيه فعلًا (com.sa و .sa)؛ أي منطقة
   // تانية تفضل على google.com عشان الحقن ما يقعش. cfg.googleHost override يدوي للأذكياء.
+  // ⚠️ v1.21.40: قرار 1.21.28 («غير السعودية يفضل google.com») **متساب زي ما هو عن قصد**:
+  // الحقن مضمون على com/com.sa، وأي دومين مش محقون فيه معناه أداة بتفتح سيرب ومش شايفة
+  // صفحاته. gl=eg مثلًا بيتفتح على google.com — والفرق بيظهر للمستخدم في تحذير
+  // regionFromFooter (لوج «جوجل قدّم النتايج من منطقة...»)، مش في تغيير دومين صامت.
+  // اللي عايز دومين تاني بيكتبه في cfg.googleHost بنفسه.
   const host = (gl === 'sa') ? (config.googleHost || 'www.google.com.sa') : (config.googleHost || 'www.google.com');
   const u = new URL('https://' + host + '/search');
   u.searchParams.set('q', String(keyword || '').trim());

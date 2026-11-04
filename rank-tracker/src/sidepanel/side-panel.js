@@ -75,7 +75,11 @@ function renderStats() {
   $('statChecked').textContent = s.checked || 0;
   $('statFound').textContent = s.found || 0;
   $('statAvg').textContent = s.avgPosition == null ? '—' : '#' + s.avgPosition;
-  $('statCaptcha').textContent = (snapshot.run && snapshot.run.captchaSolves) || 0;
+  // v1.21.40: كان بيقرا run.captchaSolves اللي بيتصفّر مع كل «بدء فحص» — يعني
+  // بعد أي رن جديد كان بيقول صفر كأنه مفيش كابتشا اتحلت أبداً. بقى الإجمالي التراكمي.
+  $('statCaptcha').textContent = s.captchaSolvesTotal != null
+    ? s.captchaSolvesTotal
+    : ((snapshot.run && snapshot.run.captchaSolves) || 0);
   renderRestStrip();
 }
 
@@ -313,7 +317,7 @@ function renderAll() {
   // في الكابتشا كان بيرسم اللستة كلها من الصفر (تهنيج مع 200+ كلمة). نفس البصمة = مفيش DOM
   const r = snapshot.run || {};
   const sig = JSON.stringify([
-    r.status, r.currentIndex, r.checked, r.total, r.breakUntil || 0,
+    r.status, r.currentIndex, r.checked, r.total, r.breakUntil || 0, (snapshot.stats || {}).captchaSolvesTotal || 0,
     (r.captcha && r.captcha.attempts) || 0,
     (snapshot.keywords || []).length,
     (snapshot.keywords || []).map((k) => (k.status || '') + '|' + (k.lastPosition == null ? '' : k.lastPosition) + '|' + (k.needsReview ? 1 : 0)).join(';'),
@@ -437,6 +441,9 @@ function exportEntriesInUserOrder() {
 /* خانة الترتيب الموحدة: «1ai» / «4» / «ai» / «—» — نفس شكل اللوحة بالظبط */
 function posCellForExport(r) {
   if (!r) { return '—'; }
+  // 🚩 v1.21.40: «بحث مفيش» (شبكة/403/تايم‌آوت) مش حكم «مش موجودة» — بيتصدّر «—» زي
+  // الكلمة اللي لسه ما اتفحصتش، بدل ما يكذب على المستخدم في عمود الترتيب.
+  if (r.inconclusive) { return '—'; }
   const pos = Number(r.position);
   const okPos = r.position != null && Number.isFinite(pos);
   if (r.found) { return okPos ? (r.aiFound ? pos + 'ai' : String(pos)) : (r.aiFound ? 'ai' : '—'); }
@@ -450,7 +457,7 @@ function resultRowsForExport() {
     return [
       e.keyword,
       posCellForExport(e.result),
-      r.found ? 'yes' : (r.aiFound ? 'ai' : 'no'),
+      r.inconclusive ? 'unknown' : (r.found ? 'yes' : (r.aiFound ? 'ai' : 'no')),
       r.aiFound ? (r.aiPosition != null ? r.aiPosition : '') : '',
       r.urlDisplay || r.url || '',
       r.title || '',

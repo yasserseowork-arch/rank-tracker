@@ -57,18 +57,22 @@ async function load() {
 }
 
 function bind() {
-  for (const [id] of FIELDS) {
+  for (const [id, key, kind] of FIELDS) {
     const el = $(id);
     if (!el) { continue; }
     el.addEventListener('change', async () => {
+      // v1.21.40: 🔴 كان بيبعت **كل** الحقول مع أي تعديل — فحقل رقمي فاضي أو مكتوب
+      // نص (زي «12ا») كان بيتحول صفر ويكتب فوق إعداد سليم انت مش بتعدّله، والملصقات
+      // المتقاطعة (settle/wait/settle) كانت بتتبادل القيم من غير ما تلمسها. بقى
+      // بيبعت الحقل اللي اتغير هو بس — والحارس في setConfig بيتصرف مع الباقي.
       const patch = {};
-      for (const [fid, key, kind] of FIELDS) {
-        const fel = $(fid);
-        if (!fel) { continue; }
-        if (kind === 'bool') { patch[key] = fel.checked; }
-        else if (kind === 'number') { patch[key] = parseInt(fel.value, 10) || 0; }
-        else { patch[key] = String(fel.value || '').trim(); }
-      }
+      if (kind === 'bool') { patch[key] = !!el.checked; }
+      else if (kind === 'number') {
+        const n = parseInt(el.value, 10);
+        // فاضي/مش رقم = مسح النية مش صفر: منبعتش الحقل خالص (القيمة الحالية تفضل)
+        if (!Number.isFinite(n)) { el.value = ''; return; }
+        patch[key] = n;
+      } else { patch[key] = String(el.value || '').trim(); }
       await send(C.MSG.SET_CONFIG, { patch });
     });
   }
@@ -100,15 +104,17 @@ function bind() {
       const data = JSON.parse(await file.text());
       if (data.config) { await send(C.MSG.SET_CONFIG, { patch: data.config }); }
       if (Array.isArray(data.keywords)) { await send(C.MSG.KEYWORDS_SET, { keywords: data.keywords }); }
-      alert(chrome.i18n.getMessage('importDone') || 'تم الاستيراد');
+      alert(t('importDone'));
       await load();
     } catch (err) {
-      alert((chrome.i18n.getMessage('importFail') || 'فشل الاستيراد') + ': ' + (err && err.message));
+      alert(t('importFail') + ': ' + (err && err.message));
     }
   });
 
   $('btnResetAll').addEventListener('click', async () => {
-    if (!confirm(chrome.i18n.getMessage('confirmReset') || 'تصفير كل البيانات؟')) { return; }
+    // v1.21.40: كان بياخد نص chrome.i18n (والمفاتيح دي مش في _locales للأداة بأسماء
+    // الواجهة) فيطلع المفتاح خام؛ بقى من قاموس الواجهة المترجم.
+    if (!confirm(t('confirmReset'))) { return; }
     await chrome.storage.local.clear();
     if (chrome.storage.session) { await chrome.storage.session.clear(); }
     await load();

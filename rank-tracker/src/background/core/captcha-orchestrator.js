@@ -179,12 +179,19 @@ export class CaptchaOrchestrator {
         settled = true;
         clearTimeout(timer);
         clearInterval(poller);
+        if (onAbort && signal) { try { signal.removeEventListener('abort', onAbort); } catch (_) {} }
         offs.forEach((off) => off());
         resolve(value);
       };
 
+      // v1.21.40: نفس تسريب مستمع الإلغاء (once بيتشال بس لو الإلغاء حصل) — يتشال في finish
+      const onAbort = signal ? () => finish(false) : null;
       const timer = setTimeout(() => finish(false), timeoutMs);
-      if (signal) { signal.addEventListener('abort', () => finish(false), { once: true }); }
+      if (onAbort) {
+        signal.addEventListener('abort', onAbort, { once: true });
+        // ولو الإشارة ملغاة أصلًا قبل ما نسجّل: finish فورًا من غير ما نستنى مهلة 120 ث
+        if (signal.aborted) { finish(false); }
+      }
 
       // 1) تغيّر الرابط بعيداً عن /sorry/ (polling + event معاً) (URL change away from /sorry/ (polling + event together))
       offs.push(tabctl.onUrlChange(tabId, (url) => {
