@@ -5,7 +5,7 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11; // v1.21.38: دورة المسح الجديدة (قبل الرن + كل 10 كلمات)
 
 export const K = {
   CONFIG: 'srt.config',
@@ -31,8 +31,8 @@ export const DEFAULT_CONFIG = {
   // الإيقاع البشري
   delayMs: 4000,                // مهلة إلزامية قبل كل كلمة (طلب المستخدم: 4 ثوانٍ)
   jitterMs: 1500,
-  cooldownEvery: 8,             // كل N كلمات خذ استراحة طويلة
-  cooldownMs: 10000,           // v1.21.37 (طلب المستخدم: «راحات ثابتة»): كل 8 كلمات = 10 ثواني بالظبط، مفيش عشوائية ولا تمطيط
+  cooldownEvery: 10,            // كل N كلمات خذ استراحة طويلة — v1.21.38: اتظبطت على 10 مع دورة المسح عُدّاد واحد يدير الاتنين
+  cooldownMs: 10000,           // v1.21.37 (طلب المستخدم: «راحات ثابتة»): كل 10 كلمات = 10 ثواني بالظبط، مفيش عشوائية ولا تمطيط
   cooldownJitterMs: 0,
   // الكابتشا
   captchaMaxAttempts: 2,
@@ -55,8 +55,8 @@ export const DEFAULT_CONFIG = {
   keywordRetries: 5,            // أي مشكلة؟ ريفرش + نفس الكلمة — عدد مرات إعادة المحاولة
   captchaClearRetries: 3,       // كابتشا؟ مسح بيانات المتصفح + تاب جديد — عدد المرات لكل كلمة
   // دورة العمل الكاملة (مثل السيناريو اليدوي)
-  clearBeforeRun: false,        // 🎯 v1.21.37 (طلب المستخدم: دقة التتبع): مفيش مسح قبل الرن — الجلسة الدافية هي مطابقة بحثك اليدوي بالظبط؛ المسح بقى سلاح تصعيد للكابتشا وبس
-  clearEveryN: 8,               // مسح دوري متزامن مع الاستراحة: كل 8 كلمات (0 = معطّل) — بصمة أقل وكابتشا أقل
+  clearBeforeRun: true,         // 🧼 v1.21.38 (طلب المستخدم الصريح): مسح كامل لبيانات التصفح قبل كل رن — أساس مجهول نضيف من أول ثانية؛ المفتاح يفضل اختياريًا للي عايز الجلسة الدافية
+  clearEveryN: 10,              // v1.21.38 (طلب المستخدم): مسح دوري كامل كل 10 كلمات — متزامن مع الاستراحة (0 = معطّل)
   sheetUrl: '',                 // رابط شيت جوجل للمزامنة والكتابة
   sheetWriteBack: false,        // كتابة عمود الترتيب في الشيت عند انتهاء الجولة
   sheetStartCell: 'B1',         // خلية بداية لصق عمود الترتيب
@@ -324,7 +324,7 @@ export async function migrate() {
     await setKeywords(fixed);
   }
   if (version < 4) {
-    // عادات جديدة: الكابتشا محاولتين بس، والمسح الدوري بقى متزامن مع الاستراحة (كل 8)
+    // عادات جديدة: الكابتشا محاولتين بس، والمسح الدوري بقى متزامن مع الاستراحة (كل 10 من 1.21.38)
     const cfg = await getConfig();
     const patchCfg = {};
     const att = parseInt(cfg.captchaMaxAttempts, 10);
@@ -377,12 +377,17 @@ export async function migrate() {
     }
     if (Object.keys(patch9).length) { await setConfig(patch9); }
   }
-  if (version < 10) {
-    // 🎯 1.21.37: المسح قبل الرن كان بيفصل نتيجة الأداة عن نتيجة بحثك الإيد (برفيلك
-    // مسجّل دخولك وتاريخك، والأداة كانت بتبدأ مجهول) — اللي سيبوه على الافتراضي يتحول
-    // للجلسة الدافية؛ المسح لسه موجود في كل مسارات تصعيد الكابتشا زي ما هو
-    const cfgA = await getConfig();
-    if (cfgA.clearBeforeRun === true) { await setConfig({ clearBeforeRun: false }); }
+  if (version < 11) {
+    // 🧼 1.21.38 (طلب المستخدم الصريح): مسح كامل قبل كل رن + دورة مسح/استراحة كل 10 كلمات.
+    // اللي سابها على جلسة .37 الدافية أو الدور القديم (8) يترقّى للأمر الجديد؛
+    // اللي سطّر 0 بنفسه (معطّل المسح الدوري) محترم ومابيتلمسش
+    const cfgB = await getConfig();
+    const patchB = {};
+    if (cfgB.clearBeforeRun !== true) { patchB.clearBeforeRun = true; }
+    if (parseInt(cfgB.cooldownEvery, 10) === 8) { patchB.cooldownEvery = 10; }
+    const cn11 = parseInt(cfgB.clearEveryN, 10);
+    if (cn11 === 8 || !Number.isFinite(cn11)) { patchB.clearEveryN = 10; }
+    if (Object.keys(patchB).length) { await setConfig(patchB); }
   }
   await local.set(K.SCHEMA, SCHEMA_VERSION);
   return SCHEMA_VERSION;

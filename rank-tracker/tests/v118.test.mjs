@@ -160,8 +160,8 @@ test('كابتشا v1.18.3: حلّ؟ مفيش مسح مستعجل — نتحرى
 });
 
 test('الإعدادات v1.18.3: المحاولتين إجباريًا + المسح بقى كل 8 مع الاستراحة', () => {
-  assert.match(st, /clearEveryN:\s*8,/, 'ديفولت المسح لسه 10');
-  assert.match(st, /export const SCHEMA_VERSION = 10;/, 'مفيش نسخة ميجريشن جديدة (1.21.20)');
+  assert.match(st, /clearEveryN:\s*10,/, 'ديفولت المسح مش على 10 — أمر 1.21.38');
+  assert.match(st, /export const SCHEMA_VERSION = 11;/, 'مفيش نسخة ميجريشن جديدة (1.21.20)');
   assert.match(st, /att > 2\) \{ patchCfg\.captchaMaxAttempts = 2; \}/, 'مفيش إجبار المحاولتين على الإعدادات القديمة');
   assert.match(st, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'المسح القديم (10) مش بيتحوّل للـ8');
 });
@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.37');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.37'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.37'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.37\]/m);
+  assert.equal(man.version, '1.21.38');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.38'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.38'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.38\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -905,7 +905,7 @@ test('v1215: اللقطة الأولى الناقصة مابتنهيش — 8 ب�
 });
 
 test('v1215: المسح الدوري — قبل البدء وكل N كلمات — آليات مقفولة', () => {
-  assert.match(st, /clearBeforeRun: false,/, 'مسح ما قبل البدء لسه مفصول افتراضيًا — الجلسة الدافية (v1.21.37)');
+  assert.match(st, /clearBeforeRun: true,/, 'مسح ما قبل البدء مفصول — الأمر الجديد 1.21.38: مسح كامل قبل الرن');
   assert.match(queue, /processed - marker >= everyN/, 'عدّاد الـN اتبوظ — المسح الدوري بيتعمل بكل كلمة أو لأبد');
   assert.match(queue, /if \(!everyN\) \{ return; \}/, 'التعطيل بـ0 مش متعامل معاه');
   assert.match(queue, /run\.clearMarker \|\| 0/, 'الماركر اللي بيمنع تكرار المسح لنفس العدد اتشال');
@@ -1361,7 +1361,7 @@ test('v12120: الافتراضيات السريعة + ميجريشن سكيما 
   assert.match(st, /if \(version < 8\) \{/, 'مفيش ميجريشن ترقية للقيم التقيلة المحفوظة');
   assert.match(st, /parseInt\(cfg8\.batchSettleMs, 10\) === 6500/, 'المايجريشن مابتلمسش الافتراضي القديم');
   assert.match(st, /delayMs: 4000,/, 'ديلاي المستخدم اتغير — ممنوع إلا بطلبه');
-  assert.match(st, /cooldownEvery: 8,/, 'استراحة كل 8 — زي ما اتفقنا');
+  assert.match(st, /cooldownEvery: 10,/, 'دورة الاستراحة والمسح لازم تبقى 10 — أمر 1.21.38');
 });
 
 test('v12120: قاعدة الـAI العامة — مترسم فوري، بوادر كامل، صفر انتظار على اللا-شيء', () => {
@@ -1464,7 +1464,7 @@ test('v12116: التبويبات بتفتح في الخلفية — والتنش
 });
 
 test('v12116: migration لـ schema 7 — المستخدم القديم بيتحوّل للوضع الهادي', () => {
-  assert.match(st, /export const SCHEMA_VERSION = 10;/, 'رقم السكيما مارتفعش');
+  assert.match(st, /export const SCHEMA_VERSION = 11;/, 'رقم السكيما مارتفعش');
   assert.match(st, /if \(version < 7\) \{/, 'البلوك الجديد مش في الـmigrate');
   assert.match(st, /cfg7\.foregroundTab === true.*setConfig\(\{ foregroundTab: false \}\)/, 'الترقية مش بتتدخّل صح');
 });
@@ -1653,7 +1653,7 @@ test('v12133: الـnum اتمسح من جذوره — مفيش page100 في أ�
   assert.ok(!uk.includes('page100'), 'بوابة page100 لسه قايمه في urlkit');
   const st2 = read('src/background/core/state.js');
   assert.ok(!st2.includes('page100'), 'page100 لسه في الإعدادات');
-  assert.match(st2, /clearBeforeRun: false,/);
+  assert.match(st2, /clearBeforeRun: true,/);
   assert.match(st2, /'mapsCheck', 'autoXlsx'\];/, 'whitelist البولينز ما رجعتش لحالتها');
   assert.match(read('src/content/serp.js'), /set\('num', '20'\)/, 'الدفعات الخلفية ما رجعتش لـ num=20');
 });
@@ -1756,9 +1756,9 @@ test('v12136: الفحص المحلي بقى ضيف مبيلفّش — race بس
 test('v12136/37: راحات قصيرة ثابتة بكل مكان — العقاب 2.5، الركن 30، الاستراحة 10+0، والجلسة الدافية', () => {
   assert.match(queue, /const extra = 2500;/, 'عقاب الحرارة مش 2.5 ثابتة (حلال 1.21.37)');
   const st = read('src/background/core/state.js');
-  assert.match(st, /export const SCHEMA_VERSION = 10;/, 'السكيما ما اترقّتش لـ10');
+  assert.match(st, /export const SCHEMA_VERSION = 11;/, 'السكيما ما اترقّتش لـ10');
   assert.match(st, /parseInt\(cfg9\.cooldownMs, 10\) === 30000 \|\| parseInt\(cfg9\.cooldownMs, 10\) === 25000/, 'هجرة الاستراحة مش موصولة');
-  assert.match(st, /if \(cfgA\.clearBeforeRun === true\) \{ await setConfig\(\{ clearBeforeRun: false \}\); \}/, 'هجرة الجلسة الدافية مش موصولة');
+  assert.match(st, /if \(cfgB\.clearBeforeRun !== true\) \{ patchB\.clearBeforeRun = true; \}/, 'هجرة دورة المسح الجديدة (11) مش موصولة');
   assert.ok(st.includes('cooldownJitterMs: 0'), 'جيتّر لسه شغال — الأمر: كله ثابت');
   // الإيقاع كله بقى ثابتًا بأمر المستخدم — مفيش تمطيط عشوائي في الفواصل
   const sch = read('src/background/core/scheduler.js');
@@ -1796,12 +1796,15 @@ test('v12137: ↻ بقى زرًا — idle يشغّل الرن من الكلمة
   assert.ok(body.includes('if (!live) {') && body.includes('Promise.resolve(this.start())') && body.includes('started: true'), 'وضع الخمول ما بيرفعش الرن');
 });
 
-test('v12137: دقة يدوية — الرن على الجلسة الدافية بلا مسح بادئ، والمسح لسه سلاح التصعيد', () => {
+test('v12137/38: دورة المسح بأمر المستخدم — wipe كامل قبل الرن وكل 10 كلمات، مع إعفاء الجو الحر', () => {
   const st = read('src/background/core/state.js');
-  assert.match(st, /clearBeforeRun: false,/);
-  assert.ok(queue.includes('if (cfg.clearBeforeRun) {'), 'مسار المسح المشروط لسه متوصل (للي يفعّله بإيده)');
+  assert.match(st, /clearBeforeRun: true,/);
+  assert.match(st, /clearEveryN: 10,/, 'المسح الدوري مش على 10 — الأمر اتكسر');
+  assert.match(st, /cooldownEvery: 10,/, 'الاستراحة مش مزامنة دورة المسح على 10');
+  assert.match(st, /clearBeforeRun !== true\) \{ patchB\.clearBeforeRun = true/, 'هجرة 11 مش وصّالة المسح قبل الرن');
+  assert.ok(queue.includes('if (cfg.clearBeforeRun) {'), 'مسار المسح المشروط لسه متوصل');
   assert.ok(queue.includes('const coldStart = !!cfg.clearBeforeRun;'), 'تسخين البداية بيتبع الاختيار');
-  // مسارات الطوارئ ما بتستنيش المفتاح: المسح جوه openFreshTab دايم
+  assert.ok(queue.includes('{ cacheStorage: true, history: true }'), 'إعفاء الجو الحر اختفى — الكوكيز وقت العاصفة بتهاب؛ مفيش دعوات كابتشا على النفس!');
   const of = queue.slice(queue.indexOf('async openFreshTab'), queue.indexOf('async openFreshTab') + 1400);
   assert.ok(of.includes('browsingData.remove'), 'مسح الطوارئ اختفى — مفيش سلاح ضد 403!');
 });
