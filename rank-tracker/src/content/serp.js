@@ -483,6 +483,56 @@
     return null;
   }
 
+  /* 👁 v1.21.39 (طلب المستخدم: «بأشوفه في الصفحة والأداة بتقول مفيش نتيجة»):
+     القانون ثابت — الإعلان وبلوكات التسوّق مش بتتحسب رنك عضوي. لكن الاختفاء
+     التام من التقرير كان بيحسّس المستخدم إن الأداة عمياء. الدالة دي بتعمل
+     presence-scan للروابط اللي بره الـ100 عضوي (تads إعلانات + كاروسيل تسوّق
+     + أي بلوك تاني) بنفس مطابقة matchLib (دومين بالظبط، أو اسم بالـOR)،
+     والنتيجة بتتسجل «ظهرت خارج العضوي» في اللوج والصف — من غير أي رنك. */
+  function presenceScan(cfg, seenItems) {
+    if (!hasTarget(cfg) || !D.match) { return null; }
+    try {
+      const seen = new Set((seenItems || []).map((i) => i.url));
+      const pool = [];
+      const els = D.qsa('a[href^="http"]') || [];
+      for (let i = 0; i < els.length && pool.length < 220; i++) {
+        const a = els[i];
+        let href = '';
+        try { href = a.href || ''; } catch (_) { continue; }
+        if (!href || seen.has(href)) { continue; }
+        let kind = 'other';
+        try {
+          if (a.closest('#tads, #tadsb, #bads, #topads, .ads-visurl, [data-text-ad], .uZ3Aoe')) { kind = 'ad'; }
+          else if (a.closest('#mbEnd, .sh__d, .RjDIuf, .EkjREb, .cu-container, [data-jiis*="shopping"]')) { kind = 'shopping'; }
+        } catch (_) {}
+        let snippet = '';
+        try {
+          const card = a.closest('.g, li, .sh__d, div');
+          snippet = card ? String(card.textContent || '').replace(/\s+/g, ' ').slice(0, 300) : '';
+          if (kind === 'other' && /تسوق|تسوّق|Shopping|السعر|ر\.س/.test(snippet.slice(0, 120))) { kind = 'shopping'; }
+        } catch (_) {}
+        if (kind === 'ad' || kind === 'shopping' || kind === 'other') {
+          pool.push({ title: String(a.innerText || a.title || '').replace(/\s+/g, ' ').trim().slice(0, 200), url: href, snippet: snippet });
+        }
+      }
+      if (!pool.length) { return null; }
+      let hit = D.match.matchItems(pool, Object.assign({}, cfg, { matchMode: 'domain' }));
+      if (!hit || !hit.found) {
+        const byName = D.match.matchItems(pool, Object.assign({}, cfg, { matchMode: 'name' }));
+        if (byName && byName.found) { hit = byName; }
+      }
+      if (!hit || !hit.found) { return null; }
+      const m = hit.matched || {};
+      let kind = 'other';
+      try {
+        const el = Array.prototype.find.call(els, (x) => x.href === m.url);
+        if (el && el.closest('#tads, #tadsb, #bads, #topads, .ads-visurl, [data-text-ad], .uZ3Aoe')) { kind = 'ad'; }
+        else if (el && el.closest('#mbEnd, .sh__d, .RjDIuf, .EkjREb, .cu-container')) { kind = 'shopping'; }
+      } catch (_) {}
+      return { kind: kind, url: m.url, title: String(m.title || '').slice(0, 120) };
+    } catch (_) { return null; }
+  }
+
   /* --------- جلب باقي الدفعات خلفيةً (بدون تنقّل) عندما لا تكفي الصفحة --------- */
   async function selfFetchMore(cfg, baseItems, aiItems) {
     const merged = baseItems.slice();
@@ -840,6 +890,8 @@
       aiItems: wait.aiItems || [],
       aiText: wait.aiText || '',
       adsCount: wait.adsCount || 0,
+      // 👁 1.21.39: ظهور خارج العضوي (إعلان/تسوّق) — للمعلومية بس، مش رنك
+      presence: (wait.hit && wait.hit.where === 'organic') ? null : presenceScan(cfg, wait.items),
       total: (wait.items || []).length,
       early: !!wait.early,
       earlyWhere: wait.hit ? wait.hit.where : null,

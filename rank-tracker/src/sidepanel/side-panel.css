@@ -303,6 +303,7 @@ textarea { width: 100%; resize: vertical; min-height: 74px; }
 .pos-badge.hit { color: var(--primary); }
 .pos-badge.miss { color: var(--danger); }
 .pos-badge.ai { color: var(--info); }
+.pos-badge.presence { color: #e8b339; cursor: help; }
 
 .icon-btn {
   background: transparent; border: none; color: var(--muted);

@@ -217,8 +217,14 @@ function renderKeywords() {
     const tdPos = document.createElement('td');
     const pos = document.createElement('span');
     const kwAi = kw.lastPosition == null && kw.lastAiPosition != null;
-    pos.className = 'pos-badge ' + (kw.lastFound ? 'hit' : (kwAi ? 'ai' : (kw.lastCheckedAt ? 'miss' : '')));
-    pos.textContent = kw.lastPosition != null ? (kw.lastAiFound || kw.lastAiPosition != null ? kw.lastPosition + 'ai' : '#' + kw.lastPosition) : (kwAi ? 'ai' : (kw.lastCheckedAt ? '—' : '·'));
+    const kwPresence = kw.lastPosition == null && !kwAi && kw.lastPresence && kw.lastPresence.kind;
+    pos.className = 'pos-badge ' + (kw.lastFound ? 'hit' : (kwAi ? 'ai' : (kwPresence ? 'presence' : (kw.lastCheckedAt ? 'miss' : ''))));
+    pos.textContent = kw.lastPosition != null ? (kw.lastAiFound || kw.lastAiPosition != null ? kw.lastPosition + 'ai' : '#' + kw.lastPosition) : (kwAi ? 'ai' : (kwPresence ? '👁' : (kw.lastCheckedAt ? '—' : '·')));
+    if (kwPresence) {
+      pos.title = (kw.lastPresence.kind === 'ad' ? 'ظهرت في خانة إعلان — مش محتسبة رنك (قانون الإعلانات)'
+                   : kw.lastPresence.kind === 'shopping' ? 'ظهرت في بلوك التسوّق/المنتجات — مش محتسبة رنك'
+                   : 'ضايفينك في الصفحة خارج العضوي — مش محتسبة رنك') + (kw.lastPresence.url ? ' — ' + kw.lastPresence.url : '');
+    }
     tdPos.appendChild(pos);
 
     const tdDel = document.createElement('td');

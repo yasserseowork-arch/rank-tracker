@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.38');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.38'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.38'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.38\]/m);
+  assert.equal(man.version, '1.21.39');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.39'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.39'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.39\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1807,4 +1807,22 @@ test('v12137/38: دورة المسح بأمر المستخدم — wipe كامل
   assert.ok(queue.includes('{ cacheStorage: true, history: true }'), 'إعفاء الجو الحر اختفى — الكوكيز وقت العاصفة بتهاب؛ مفيش دعوات كابتشا على النفس!');
   const of = queue.slice(queue.indexOf('async openFreshTab'), queue.indexOf('async openFreshTab') + 1400);
   assert.ok(of.includes('browsingData.remove'), 'مسح الطوارئ اختفى — مفيش سلاح ضد 403!');
+});
+
+/* ---------------- v1.21.39 — 👁 الظهور خارج العضوي: تسجيل مش ترتيب ---------------- */
+
+test('v12139: presence-scan بيقرأ الإعلان والتسوّق ويسجّلهم للمعلومية — من غير ما يلمس الرنك', () => {
+  const serp = read('src/content/serp.js');
+  assert.ok(serp.includes('function presenceScan(cfg, seenItems)'), 'دالة المطابقة مش موجودة');
+  assert.match(serp, /presence: \(wait\.hit && wait\.hit\.where === 'organic'\) \? null : presenceScan\(cfg, wait\.items\),/, 'مش موصولة بالـpayload');
+  assert.ok(serp.includes("closest('#tads, #tadsb, #bads, #topads, .ads-visurl, [data-text-ad], .uZ3Aoe')"), 'تصنيف الإعلانات مش على نفس منتقاي العضوي');
+  assert.equal((serp.match(/a\.closest\('#tads, #tadsb, #bads, \.ads-visurl, \[data-text-ad\], #topads'\)\) \{ continue; \}/g) || []).length, 2, 'تخطي الإعلانات في العضوي اتلمس — القانون مقدس');
+  assert.ok(queue.includes('kpatch.lastPresence = (!match.found && !aiMatch.found && serp.presence)'), 'presence مش بيتسجل على الكلمة');
+  assert.ok(queue.includes('presence: (!match.found && !aiMatch.found && serp.presence) ? serp.presence.kind : null,'), 'presence مش داخل العينة');
+  assert.ok(queue.includes('👁'), 'لوج المعلومية مش مفتوح');
+  const js = read('src/sidepanel/side-panel.js');
+  assert.ok(js.includes("kwPresence ? '👁'"), 'الشارة مابتظهرش في الصف');
+  assert.ok(read('src/sidepanel/side-panel.css').includes('.pos-badge.presence'), 'لون الشارة ناقص');
+  assert.ok(!/lastPosition\s*=\s*[^;\n]*presence/.test(queue), 'presence بتدخل في الرنك — ده اختراع ممنوع');
+  assert.ok(!/match\.position\s*=[^;\n]*presence/.test(queue), 'presence بتدخل في الرنك — ده اختراع ممنوع');
 });

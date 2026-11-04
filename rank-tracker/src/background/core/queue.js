@@ -1814,6 +1814,7 @@ export class QueueEngine {
         aiPosition: aiMatch.found ? aiMatch.position : null,
         found: match.found,
         aiFound: aiMatch.found,
+        presence: (!match.found && !aiMatch.found && serp.presence) ? serp.presence.kind : null,
         ts: Date.now()
       }])).slice(-(cfg.maxHistoryPerKeyword || 40))
     };
@@ -1824,6 +1825,7 @@ export class QueueEngine {
       kpatch.lastFound = match.found;
       kpatch.lastAiPosition = aiMatch.found ? aiMatch.position : null;
       kpatch.lastAiFound = !!aiMatch.found;
+      kpatch.lastPresence = (!match.found && !aiMatch.found && serp.presence) ? serp.presence : null; // 👁 1.21.39
       kpatch.lastCheckedAt = Date.now();
     }
     const updated = await state.updateKeyword(kw.id, kpatch);
@@ -1838,6 +1840,8 @@ export class QueueEngine {
       await logger.info('queue', `✅ "${kw.keyword}" → الترتيب #${match.position} من ${match.scanned} نتيجة (${match.reasons.join('+')})${match.viaCounter ? ' — وفق رقم Serp Counter ✔' : ''}${serp.early ? ' — خروج مبكر ✔' : ''}`);
     } else if (aiMatch.found) {
       await logger.info('queue', `🤖 "${kw.keyword}" → ظهر في AI Overview ${aiMatch.position ? 'باستشهاد #' + aiMatch.position : 'باسم الموقع نصياً'} (غير موجود عضوياً ضمن ${match.scanned})`);
+    } else if (serp.presence) {
+      await logger.info('queue', `👁 "${kw.keyword}" → عضويًا مش موجودة ضمن ${match.scanned}، بس الصفحة مضايفاك في ${serp.presence.kind === 'ad' ? 'خانة إعلان' : serp.presence.kind === 'shopping' ? 'بلوك تسوّق/منتجات' : 'بلوك خارج العضوي'} (${serp.presence.url}) — اتسجل للمعلومية، ومش بيتحسب رنك`);
     } else {
       await logger.warn('queue', `⚠️ "${kw.keyword}" → غير موجود ضمن ${match.scanned} نتيجة ولا في AI Overview`);
       await logger.info('queue', `🔎 تشخيص — أول النطاقات المقروءة: ${row.topHosts.join(' | ') || '(لا شيء)'} | إعدادك: ${cfg.storeDomain || '-'} / ${cfg.storeName || '-'} / ${cfg.storeNameEn || '-'}`);
