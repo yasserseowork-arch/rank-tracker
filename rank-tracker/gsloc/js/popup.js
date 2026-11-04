@@ -26,7 +26,7 @@ const background = {
     },
   ],
 };
-chrome.storage.sync.get(null, (data) => {
+chrome.storage.local.get(null, (data) => {
   if (data.settings) {
     Object.assign(background.settings, data.settings);
   }
@@ -55,7 +55,7 @@ function checkEnabled() {
 
 let acEngine;
 function initEngine() {
-  chrome.storage.sync.get("options", function (result) {
+  chrome.storage.local.get("options", function (result) {
     const useGoogle = result?.options?.useGoogleEndpoint || false;
 
     if (acEngine) {
@@ -3419,7 +3419,7 @@ $("#place")
     }
 
     background.settings.timestamp = new Date().getTime();
-    chrome.storage.sync.set({ settings: background.settings });
+    chrome.storage.local.set({ settings: background.settings });
   });
 
 
@@ -3453,7 +3453,7 @@ function enabler() {
   }
   // persist settings
   background.settings.timestamp = new Date().getTime();
-  chrome.storage.sync.set({ settings: background.settings });
+  chrome.storage.local.set({ settings: background.settings });
 }
 
 function isFloat(n) {
@@ -3495,10 +3495,10 @@ function loadHandler() {
   $("#enabled").change(enabler);
 
   $("#sync-gl").on("change", function() {
-    chrome.storage.sync.set({ "sync-gl": $(this).prop("checked") });
+    chrome.storage.local.set({ "sync-gl": $(this).prop("checked") });
   });
 
-  chrome.storage.sync.get("sync-gl", function(res) {
+  chrome.storage.local.get("sync-gl", function(res) {
     if (res["sync-gl"] !== undefined) {
       $("#sync-gl").prop("checked", res["sync-gl"]);
     }
@@ -3519,12 +3519,12 @@ function loadHandler() {
       background.settings.longitude = lng;
       updateCustomLocation();
       background.settings.timestamp = new Date().getTime();
-      chrome.storage.sync.set({ settings: background.settings });
+      chrome.storage.local.set({ settings: background.settings });
     } else {
       background.settings.longitude = val;
       updateCustomLocation();
       background.settings.timestamp = new Date().getTime();
-      chrome.storage.sync.set({ settings: background.settings });
+      chrome.storage.local.set({ settings: background.settings });
     }
   });
 
@@ -3542,12 +3542,12 @@ function loadHandler() {
       background.settings.longitude = lng;
       updateCustomLocation();
       background.settings.timestamp = new Date().getTime();
-      chrome.storage.sync.set({ settings: background.settings });
+      chrome.storage.local.set({ settings: background.settings });
     } else {
       background.settings.latitude = val;
       updateCustomLocation();
       background.settings.timestamp = new Date().getTime();
-      chrome.storage.sync.set({ settings: background.settings });
+      chrome.storage.local.set({ settings: background.settings });
     }
   });
 
@@ -3556,7 +3556,7 @@ function loadHandler() {
     background.settings.hl = $("#hl").val() || $("#hl").attr("placeholder") || "en";
     background.settings.gl = $("#gl").val() || $("#gl").attr("placeholder") || "US";
     background.settings.timestamp = new Date().getTime();
-    chrome.storage.sync.set({ settings: background.settings });
+    chrome.storage.local.set({ settings: background.settings });
   });
 
 
@@ -3581,7 +3581,7 @@ function loadHandler() {
     // Unshift to put it at the top of the context menu
     background.knownPlaces.unshift(newFavorite);
 
-    chrome.storage.sync.set({
+    chrome.storage.local.set({
       settings: background.settings,
       knownPlaces: background.knownPlaces
     }, function () {
@@ -3623,7 +3623,7 @@ function loadHandler() {
     background.settings.regions = data.name + " - " + data.lang;
     $("#regions").prop("placeholder", background.settings.regions);
     background.settings.timestamp = new Date().getTime();
-    chrome.storage.sync.set({ settings: background.settings });
+    chrome.storage.local.set({ settings: background.settings });
   });
 
   function renderFavorites() {
@@ -3647,7 +3647,7 @@ function loadHandler() {
       deleteBtn.on("click", function (e) {
         e.stopPropagation();
         background.knownPlaces.splice(index, 1);
-        chrome.storage.sync.set({ knownPlaces: background.knownPlaces }, function () {
+        chrome.storage.local.set({ knownPlaces: background.knownPlaces }, function () {
           renderFavorites();
         });
       });
@@ -3662,7 +3662,7 @@ function loadHandler() {
         background.settings.gl = place.gl;
         background.settings.timestamp = new Date().getTime();
 
-        chrome.storage.sync.set({ settings: background.settings }, function () {
+        chrome.storage.local.set({ settings: background.settings }, function () {
           $("#place").prop("placeholder", place.name || place.location);
           $("#latitude").val(place.latitude);
           $("#longitude").val(place.longitude);
@@ -3690,6 +3690,6 @@ function loadHandler() {
   $("#theme-toggle-btn").on("click", function() {
     $('body').toggleClass('dark-mode');
     const isDark = $('body').hasClass('dark-mode');
-    chrome.storage.sync.set({ theme: isDark ? 'dark' : 'light' });
+    chrome.storage.local.set({ theme: isDark ? 'dark' : 'light' });
   });
 };

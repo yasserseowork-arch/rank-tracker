@@ -161,7 +161,7 @@ test('كابتشا v1.18.3: حلّ؟ مفيش مسح مستعجل — نتحرى
 
 test('الإعدادات v1.18.3: المحاولتين إجباريًا + المسح بقى كل 8 مع الاستراحة', () => {
   assert.match(st, /clearEveryN:\s*8,/, 'ديفولت المسح لسه 10');
-  assert.match(st, /export const SCHEMA_VERSION = 9;/, 'مفيش نسخة ميجريشن جديدة (1.21.20)');
+  assert.match(st, /export const SCHEMA_VERSION = 10;/, 'مفيش نسخة ميجريشن جديدة (1.21.20)');
   assert.match(st, /att > 2\) \{ patchCfg\.captchaMaxAttempts = 2; \}/, 'مفيش إجبار المحاولتين على الإعدادات القديمة');
   assert.match(st, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'المسح القديم (10) مش بيتحوّل للـ8');
 });
@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.36');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.36'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.36'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.36\]/m);
+  assert.equal(man.version, '1.21.37');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.37'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.37'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.37\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -626,7 +626,7 @@ test('v1200: الكابتشا العنيدة — صبر بلا إلغاء وبل
 
 test('v1200: حرارة الكابتشا تطوّل الاستراحة الجاية — والـ race ما يقتلش مسح طويل', () => {
   assert.match(queue, /this\.captchaHeat = \(this\.captchaHeat \|\| 0\) \+ 1;/, 'حرارة الكابتشا مش بتتعد');
-  assert.match(queue, /if \(this\.captchaHeat >= 2\) \{[\s\S]{0,240}?await sleep\(extra, this\.signal\(\)\);/, 'الاستراحة الإضافية مش بتتطبق');
+  assert.match(queue, /if \(this\.captchaHeat >= 2\) \{[\s\S]{0,400}?await sleep\(extra, this\.signal\(\)\);/, 'الاستراحة الإضافية مش بتتطبق');
   assert.match(queue, /const timeout = cap \+ \(cfg\.selfFetchMore === false \? 40000 : 90000\);/, 'هامش الـ race لسه 40 ثانية — بيقتل المسح اللي فيه جلب خلفي');
   assert.match(queue, /this\.captchaHeat = 0; \/\/ 🌡 حرارة الكابتشا \(v1\.20\.0\)/, 'الـ constructor مش مصفّر الحرارة');
 });
@@ -649,8 +649,8 @@ const cons = read('src/lib/constants.js');
 
 test('v1201: مفيش توقيتات دقيقة متكررة — المهلة قبل الكلمة والجلب الخلفي اتهمّنت', () => {
   const sched = read('src/background/core/scheduler.js');
-  assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/,
-    'المهلة لسه قيمة ثابتة كل كلمة — بصمة');
+  assert.match(sched, /const ms = cold \? 600 : 4000;/,
+    'المهلة بقى ثابتة قصيرة — أمر المستخدم 1.21.37: كله ثابت');
   assert.match(serp, /await D\.humanSleep\(550, 300\);/, 'فاصل الجلب الخلفي مش على مقاس 1.21.9');
   assert.ok(!/const ms = 10000;/.test(sched), 'القيمة الثابتة لسه موجودة');
 });
@@ -702,12 +702,12 @@ test('v1205: كنس التابات مابيقدرش يقفل كروم — كل �
 
 test('v1205: التسريع الآمن متقفل بالأرقام — وسلسلة الهجرة 45←30←25 متوصلة', () => {
   const sched = read('src/background/core/scheduler.js');
-  assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'المهلة قبل الكلمة مش على مقاس 1.20.5');
+  assert.match(sched, /const ms = cold \? 600 : 4000;/, 'الفواصل ما بقتش ثابتة على مقاس 1.21.37');
   assert.match(sched, /const cold = !!\(context && context\.cold\);/, 'الفصل بين الوضعين مش في الـscheduler؟');
   assert.match(serp, /await D\.humanSleep\(550, 300\);/, 'فاصل الدفعات اتسارع تحت الحد الآمن؟');
-  assert.match(st, /cooldownMs: 25000,/, 'الافتراضي الجديد مش 25 ثانية');
+  assert.match(st, /cooldownMs: 10000,/, 'الافتراضي الجديد مش 10 ثواني ثابتة');
   assert.match(st, /if \(parseInt\(cfg\.cooldownMs, 10\) === 45000\) \{ patchCfg\.cooldownMs = 30000; \}/, 'مفيش ميجريشن من الـ45000 القديم');
-  assert.match(queue, /const extra = 4500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'تبريد الحرارة مش على مقاس 1.21.36 (4.5-8)');
+  assert.match(queue, /const extra = 2500;/, 'عقاب الحرارة مش 2.5 ثابتة');
   assert.match(read('beyondten/content/index.js'), /\}, 4000\); \/\/ v1\.2\.2/, 'الشاشر لسه كل 5 ثواني');
 });
 
@@ -862,8 +862,8 @@ test('v1213: watchdog بنبض 30 ثانية + شفاء الصفوف المعل�
 
 test('v1213: ⚡ وضع بارد بإيقاع يدوي — وبأول كابتشا رجوع كامل للإيقاع الآمن', () => {
   assert.match(sched, /const cold = !!\(context && context\.cold\);/, 'الفصل بين الوضعين مش في الـscheduler؟');
-  assert.match(sched, /cold\s*\n?\s*\?\s*550 \+ Math\.floor\(Math\.random\(\) \* 750\)/, 'فاصل الوضع البارد مش على مقاس 1.21.9');
-  assert.match(sched, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'الإيقاع الآمن الدافي اتبوظ — ده ممنوع');
+  assert.match(sched, /const ms = cold \? 600 : 4000;/, 'فاصل الوضع البارد مش على مقاس 1.21.9');
+  assert.match(sched, /const ms = cold \? 600 : 4000;/, 'الإيقاع الآمن الدافي اتبوظ — ده ممنوع');
   assert.match(queue, /cold: \(this\.captchaHeat \|\| 0\) === 0/, 'النداء مابيحكيش حالة الحرارة');
   // الحرارة بتبرد كلمة بكلمة (قفل سابق لسه شغال) → الوضع البارد بيرجع لوحده بعد العاصفة
   assert.match(queue, /this\.captchaHeat -= 1;/, 'التبريد التلقائي للحرارة اتشال');
@@ -878,8 +878,8 @@ test('v1213: ⚡ وضع بارد بإيقاع يدوي — وبأول كابتش
 test('v1214: heat==1 بتطفّى بكلمة نضيفة (كانت أبدية) — والبارد بقى سرعة يدوي حقيقية', () => {
   assert.match(queue, /else if \(this\.captchaHeat === 1\) \{/, 'لسه الحرارة على 1 مش بتنزل — الوضع البارد مستحيل ييجي');
   assert.match(queue, /this\.captchaHeat = 0;/, 'التصفير مش مسجل نفسه');
-  assert.match(sched, /: 5500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'الإيقاع الدافي اتبوظ — ممنوع');
-  assert.match(sched, /cold\s*\n?\s*\?\s*550 \+ Math\.floor\(Math\.random\(\) \* 750\)/, 'البارد مش على 0.7–1.6 (v1.21.9)');
+  assert.match(sched, /const ms = cold \? 600 : 4000;/, 'الإيقاع الدافي اتبوظ — ممنوع');
+  assert.match(sched, /const ms = cold \? 600 : 4000;/, 'البارد بقى 0.6 ثابتة — مفيش عشوائي (v1.21.37)');
 });
 
 test('v1214: نزول المسح الطويل اتخفّف — من غير لمس توقيتات الكابتشا المقدسة', () => {
@@ -905,7 +905,7 @@ test('v1215: اللقطة الأولى الناقصة مابتنهيش — 8 ب�
 });
 
 test('v1215: المسح الدوري — قبل البدء وكل N كلمات — آليات مقفولة', () => {
-  assert.match(st, /clearBeforeRun: true,/, 'مسح ما قبل البدء اتطفي من الافتراضي');
+  assert.match(st, /clearBeforeRun: false,/, 'مسح ما قبل البدء لسه مفصول افتراضيًا — الجلسة الدافية (v1.21.37)');
   assert.match(queue, /processed - marker >= everyN/, 'عدّاد الـN اتبوظ — المسح الدوري بيتعمل بكل كلمة أو لأبد');
   assert.match(queue, /if \(!everyN\) \{ return; \}/, 'التعطيل بـ0 مش متعامل معاه');
   assert.match(queue, /run\.clearMarker \|\| 0/, 'الماركر اللي بيمنع تكرار المسح لنفس العدد اتشال');
@@ -927,7 +927,7 @@ test('v1216: ديفولت الأدوات المدمجة بقى قطري عام �
   // هجرة ديفولت الرياض القديم — بشرط إنه لسه ديفولتنا (مو اختيار Places ولا وضع معطّل)
   assert.match(emb, /s\.name === 'Riyadh' && s\.location === 'Riyadh, Saudi Arabia' && s\.enabled !== false/, 'مفيش ترقية للديفولت الرياض القديم');
   // اختيار المستخدم من Places محترم: الشرط التاني بس في الـif&&!s، ماعدا ديفولتنا ما بنكتبش فوق حد
-  assert.match(emb, /if \(!s\) \{ chrome\.storage\.sync\.set\(\{ settings: saudiDefaults \}\); return; \}/, 'زرع أول تشغيل اتبوظ');
+  assert.match(emb, /if \(!s\) \{ chrome\.storage\.local\.set\(\{ settings: saudiDefaults \}\); return; \}/, 'زرع أول تشغيل اتبوظ');
 });
 
 test('v1216: x-geo بيقرأ القطر من الإعدادات — 65كم الافتراضي التاريخي لمدين Places لسه هو الاحتياطي', () => {
@@ -1046,8 +1046,8 @@ test('v1219: Cairo جوه الإضافة — ملفات حية، @font-face، و
 
 test('v1219: السرعة الجديدة مطبقة — والممنوعات Sacred زي صخورها', () => {
   const sch = read('src/background/core/scheduler.js');
-  assert.match(sch, /\?\s*550 \+ Math\.floor\(Math\.random\(\) \* 750\)/, 'البارد 0.55–1.3 مش مطبق');
-  assert.match(sch, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'دفء الكابتشا اتلمس — ممنوع');
+  assert.match(sch, /const ms = cold \? 600 : 4000;/, 'البارد مش 0.6 ثابتة');
+  assert.match(sch, /const ms = cold \? 600 : 4000;/, 'دفء الكابتشا اتلمس — ممنوع');
   assert.match(serp, /await D\.humanSleep\(550, 300\);/, 'فاصل الدفعات 0.9–1.8 مش مطبق');
   assert.match(serp, /await D\.humanSleep\(600, 250\);/, 'توسيع AI مش على مقاس 1.21.9');
   assert.match(queue, /await sleep\(4000 \+ Math\.floor\(Math\.random\(\) \* 4000\), signal\);/, 'فاصل المراجعة 4–8 مش مطبق');
@@ -1305,7 +1305,7 @@ test('v12125: كاسحة البروفيلات المتوازية — 4 ورا ب
   const n = queue.split('this.captchaStreak = (this.captchaStreak || 0) + 1;').length - 1;
   assert.equal(n, 2, 'العدّ مش في موضعَي captchaSeenThisRun الاتنين');
   assert.match(queue, /if \(\(this\.captchaStreak \|\| 0\) >= 4\) \{/, 'الكاسحة مش على 4 متتالية');
-  assert.match(queue, /const chill = 90000 \+ Math\.floor\(Math\.random\(\) \* 30000\);/, 'البردية مش 90–120 ثانية');
+  assert.match(queue, /const chill = 30000;/, 'البردية مش 90–120 ثانية');
   assert.match(queue, /breakUntil: Date\.now\(\) \+ chill, breakTotalMs: chill/, 'الشريط السفلي ما بيعدّيهاش');
   assert.match(queue, /this\.captchaStreak = 2; \/\/ مفيش تصفير كامل/, 'الكاسحة لازم ترجع تشتغل لو الحرارة استمرت');
   assert.match(queue, /this\.captchaStreak = 0; \/\/ 🧊 1\.21\.25: كلمة اتسجلت نضيفة = السلسلة اتكسرت/, 'تصفير السلسلة عند كل كلمة نضيفة مش موجود');
@@ -1464,7 +1464,7 @@ test('v12116: التبويبات بتفتح في الخلفية — والتنش
 });
 
 test('v12116: migration لـ schema 7 — المستخدم القديم بيتحوّل للوضع الهادي', () => {
-  assert.match(st, /export const SCHEMA_VERSION = 9;/, 'رقم السكيما مارتفعش');
+  assert.match(st, /export const SCHEMA_VERSION = 10;/, 'رقم السكيما مارتفعش');
   assert.match(st, /if \(version < 7\) \{/, 'البلوك الجديد مش في الـmigrate');
   assert.match(st, /cfg7\.foregroundTab === true.*setConfig\(\{ foregroundTab: false \}\)/, 'الترقية مش بتتدخّل صح');
 });
@@ -1589,7 +1589,7 @@ test('v12130: ركن الكابتشا ما بقاش قعدة انتظار — د
   const helper = queue.slice(queue.indexOf('async restartAfterCaptchaPark'), queue.indexOf('async bumpPriority'));
   assert.ok(helper.length > 100, 'مفيش دالة إعادة الانطلاق');
   assert.match(helper, /if \(capRestarts >= 2\) \{ return null; \}/, 'مفيش سقف مرتين للكلمة الواحدة');
-  assert.match(helper, /const cool = 9000 \+ Math\.floor\(Math\.random\(\) \* 9000\);/, 'التبريد مش 9–18 ثانية');
+  assert.match(helper, /const cool = 5000;/, 'تبريد الركن مش 5 ثابتة');
   assert.ok(!/browsingData\.remove|clearBrowser/.test(helper), 'الإعادة تنسف البيانات نفسها؟ لأ — المسح الكبير فضّل لسقف الـ6');
   const n = queue.split('this.restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts)').length - 1;
   assert.equal(n, 2, 'مسار الركن التاني (بعد استنفاد المسحات) موصّلش');
@@ -1653,6 +1653,7 @@ test('v12133: الـnum اتمسح من جذوره — مفيش page100 في أ�
   assert.ok(!uk.includes('page100'), 'بوابة page100 لسه قايمه في urlkit');
   const st2 = read('src/background/core/state.js');
   assert.ok(!st2.includes('page100'), 'page100 لسه في الإعدادات');
+  assert.match(st2, /clearBeforeRun: false,/);
   assert.match(st2, /'mapsCheck', 'autoXlsx'\];/, 'whitelist البولينز ما رجعتش لحالتها');
   assert.match(read('src/content/serp.js'), /set\('num', '20'\)/, 'الدفعات الخلفية ما رجعتش لـ num=20');
 });
@@ -1673,7 +1674,7 @@ test('v12133: جذر العلة متلمّ — حقن BeyondTen بيوصل googl
   }
   assert.equal(bt.run_at, 'document_idle', 'توقيت الحقن اتبوظ');
   const idx = read('beyondten/content/index.js');
-  assert.ok(idx.includes("chrome.storage.sync.get(['resultsCount', 'extensionEnabled', 'autoLoad', 'pureMode']"), 'بوت الإكستنشن نفسه اتلمس');
+  assert.ok(idx.includes("chrome.storage.local.get(['resultsCount', 'extensionEnabled', 'autoLoad', 'pureMode']"), 'بوت الإكستنشن نفسه اتلمس');
   assert.ok(idx.includes('renumberAll') && idx.includes('mountUI') && idx.includes('startLoading'), 'مجرى العرض والتحميل اتبوظ');
   const prm = read('beyondten/content/params.js');
   assert.ok(!prm.includes('"num"'), 'KEEP بتاع beyondten اتلمس — num ما ينفعش يدخله أبدًا');
@@ -1713,7 +1714,7 @@ test('v12134: أرشق بأمان — المسبار 800ms والفاصل الب
   assert.ok(q.includes('}, 800);'), 'المسبار ما اتسرّعش');
   assert.ok(q.includes('}, 1200);'), 'تايمر الكابتشا اتلمس — ممنوع');
   const sch = read('src/background/core/scheduler.js');
-  assert.match(sch, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'الفاصل الدافي ده مقدس — ليه تتلمس؟');
+  assert.match(sch, /const ms = cold \? 600 : 4000;/, 'الفواصل الثابتة اتلمست — مقاس 1.21.37');
   assert.match(read('src/background/core/state.js'), /delayMs: 4000,/);
   assert.ok(q.includes('await sleep(20000, signal)'), 'سكن الـ20 ثانية اتبوظ');
   assert.match(read('src/content/serp.js'), /finalizeAi\(early\.ai, 1200\)/);
@@ -1752,15 +1753,55 @@ test('v12136: الفحص المحلي بقى ضيف مبيلفّش — race بس
   assert.ok(seg.includes('if (loc) {'), 'مفيش tolerate للـtimeout — السطر كان بيموت');
 });
 
-test('v12136: عقاب الحرارة بقى متناسب — 4.5-8 ث اضافية، والركن بيبرد 9-18، والدفعات بفواصل 0.9-1.8، والاستراحة 25+15', () => {
-  assert.match(queue, /const extra = 4500 \+ Math\.floor\(Math\.random\(\) \* 3500\);/, 'عقاب الحرارة مش 4.5-8');
+test('v12136/37: راحات قصيرة ثابتة بكل مكان — العقاب 2.5، الركن 30، الاستراحة 10+0، والجلسة الدافية', () => {
+  assert.match(queue, /const extra = 2500;/, 'عقاب الحرارة مش 2.5 ثابتة (حلال 1.21.37)');
   const st = read('src/background/core/state.js');
-  assert.match(st, /export const SCHEMA_VERSION = 9;/, 'السكيما ما اترقّتش لـ9');
-  assert.match(st, /parseInt\(cfg9\.cooldownMs, 10\) === 30000 && parseInt\(cfg9\.cooldownJitterMs, 10\) === 20000/, 'هجرة القيم القديمة لللي مبيتعدّلوش مش موصولة');
-  assert.ok(st.includes('cooldownJitterMs: 15000'), 'jitter لسه 20 ثانية');
-  // المقدسات الساخنة: الفاصل الدافي والراحة بعد الحل وسبات الكابتشا — ما حد لمسهمش
+  assert.match(st, /export const SCHEMA_VERSION = 10;/, 'السكيما ما اترقّتش لـ10');
+  assert.match(st, /parseInt\(cfg9\.cooldownMs, 10\) === 30000 \|\| parseInt\(cfg9\.cooldownMs, 10\) === 25000/, 'هجرة الاستراحة مش موصولة');
+  assert.match(st, /if \(cfgA\.clearBeforeRun === true\) \{ await setConfig\(\{ clearBeforeRun: false \}\); \}/, 'هجرة الجلسة الدافية مش موصولة');
+  assert.ok(st.includes('cooldownJitterMs: 0'), 'جيتّر لسه شغال — الأمر: كله ثابت');
+  // الإيقاع كله بقى ثابتًا بأمر المستخدم — مفيش تمطيط عشوائي في الفواصل
   const sch = read('src/background/core/scheduler.js');
-  assert.match(sch, /5500 \+ Math\.floor\(Math\.random\(\) \* 3500\)/, 'الفاصل الدافي اتلمس — ده مش ملكك');
-  assert.ok(queue.includes('await sleep(3500, signal); // v1.20.5'), 'راحة ما بعد الحل اتبوظت');
-  assert.ok(queue.includes('const chill = 90000 + Math.floor(Math.random() * 30000);'), 'تهنيّة الدقيقة ونص اتشالت — دي بتكسر الحصار');
+  assert.match(sch, /const ms = cold \? 600 : 4000;/, 'الفاصل مش ثابت قصير — الأمر اتكسر');
+  assert.ok(queue.includes('await sleep(3500, signal); // v1.20.5'), 'راحة ما بعد الحل المقدسة اتبوظت');
+  assert.ok(queue.includes('const chill = 30000;'), 'تهنئة الحصار مش 30 ثابتة');
+});
+
+/* -------- v1.21.37 — محور مظبوط، بروفيلات معزولة، راحات ثابتة، ↻ بيشتغل، ودقة بإيدك -------- */
+test('v12137: المحور بق زي عينك — #1 فوق والغلط تحت، والتسميات بتطابق رسم النقط', () => {
+  const ch = read('src/sidepanel/charts.js');
+  assert.ok(ch.includes('const value = Math.round(minY + ((maxY - minY) / 4) * i);'), 'التسميات لسه معكوسة');
+  // نفس yFor (pos الأصغر = y أصغر = فوق) — يعني التسمية العليا لازم تكون minY
+  assert.ok(ch.includes('const yFor = (pos) => pad.top + h - ((maxY - pos) / (maxY - minY)) * h;'), 'خريطة النقاط نفسها اتبوظت — ده يقلب المنحنى');
+});
+
+test('v12137: عزلة البروفيلات — storage.sync اتمسح من كل ملفات الشحنة، وفيه جسر تركة مرة واحدة', () => {
+  const files = ['src/background/embedded.js', 'gsloc/js/background.js', 'gsloc/js/popup.js',
+                 'beyondten/content/index.js', 'beyondten/popup/popup.js'];
+  for (const f of files) {
+    const s = read(f);
+    assert.ok(!s.includes('chrome.storage.sync.set'), f + ': لسه بيكتب في السحابة المشتركة');
+    assert.ok(!s.includes('chrome.storage.sync.onChanged'), f + ': لسه سامع الـsync بين البروفيلات');
+  }
+  const emb = read('src/background/embedded.js');
+  assert.ok(emb.includes("chrome.storage.local.get(['theme', 'settings'], (loc)"), 'جسر النقل من تركة sync اتشال');
+  assert.ok(emb.includes('chrome.storage.sync.get(K2'), 'الجسر بيقرا التركة من السحابة مرة واحدة — ناقص');
+});
+
+test('v12137: ↻ بقى زرًا — idle يشغّل الرن من الكلمة نفسها، والرفض بس للكلمة الحية فعلًا', () => {
+  const bp = queue.slice(queue.indexOf('async bumpPriority(keywordId)'));
+  const body = bp.slice(0, 1900);
+  assert.ok(body.includes('const live = runNow.status === C.STATUS.RUN.RUNNING || runNow.status === C.STATUS.RUN.CAPTCHA || runNow.status === C.STATUS.RUN.PAUSED;'), 'تعريف الحية مش مطابق');
+  assert.ok(body.includes('if (live && (k.status === C.STATUS.KW.RUNNING || k.status === C.STATUS.KW.CAPTCHA))'), 'الرفض لسه على الشارة وبس — بيعلق للأبد مع باجت بايت');
+  assert.ok(body.includes('if (!live) {') && body.includes('Promise.resolve(this.start())') && body.includes('started: true'), 'وضع الخمول ما بيرفعش الرن');
+});
+
+test('v12137: دقة يدوية — الرن على الجلسة الدافية بلا مسح بادئ، والمسح لسه سلاح التصعيد', () => {
+  const st = read('src/background/core/state.js');
+  assert.match(st, /clearBeforeRun: false,/);
+  assert.ok(queue.includes('if (cfg.clearBeforeRun) {'), 'مسار المسح المشروط لسه متوصل (للي يفعّله بإيده)');
+  assert.ok(queue.includes('const coldStart = !!cfg.clearBeforeRun;'), 'تسخين البداية بيتبع الاختيار');
+  // مسارات الطوارئ ما بتستنيش المفتاح: المسح جوه openFreshTab دايم
+  const of = queue.slice(queue.indexOf('async openFreshTab'), queue.indexOf('async openFreshTab') + 1400);
+  assert.ok(of.includes('browsingData.remove'), 'مسح الطوارئ اختفى — مفيش سلاح ضد 403!');
 });

@@ -22,14 +22,14 @@ var gsMenuIds = []; // عناصر القائمة السياقية بتاعتنا
 chrome.contextMenus.onClicked.addListener(genericOnClick);
 // v1.21.0: قواعد session بتموت مع إعادة تشغيل/تحديث كروم — نعيد تطبيقها عند التحديث
 chrome.runtime.onInstalled.addListener(function() {
-  chrome.storage.sync.get(['settings'], (data) => {
+  chrome.storage.local.get(['settings'], (data) => {
     if (data.settings) { Object.assign(settings, data.settings); }
     checkEnabled();
   });
 });
 
 chrome.runtime.onStartup.addListener(function() {
-  chrome.storage.sync.get(null, (data) => {
+  chrome.storage.local.get(null, (data) => {
     if (data.settings) {
       Object.assign(settings, data.settings);
       checkEnabled();
@@ -211,5 +211,5 @@ function genericOnClick(info, tab) {
     }
   }
   settings.timestamp = new Date().getTime();
-  chrome.storage.sync.set({settings: settings});
+  chrome.storage.local.set({settings: settings});
 }

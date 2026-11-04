@@ -388,7 +388,7 @@ export class QueueEngine {
         // 🌡 صبر إضافي بعد حرارة الكابتشا: كلمتين واطفين كابتشا؟ الاستراحة الجاية أطول —
         // ده أنفع ألف مرة من إننا نطارد جوجل بسرعة ونجيب /sorry/ تاني
         if (this.captchaHeat >= 2) {
-          const extra = 4500 + Math.floor(Math.random() * 3500); // ⚡ 1.21.36: 8-14←4.5-8
+          const extra = 2500; // v1.21.37 (طلب المستخدم: راحات ثابتة): من 4.5-8 ← 2.5 ثانية على العدّاد، مفيش تمطيط عشوائي
           await logger.info('queue', `🌡 تبريد ${Math.round(extra / 1000)} ثانية إضافية بعد كابتشا متكررة — والصبر أمان`);
           await sleep(extra, this.signal());
           this.captchaHeat -= 1;
@@ -401,7 +401,7 @@ export class QueueEngine {
         // 4 كابتشات ورا بعض = جوجل بيستجوب العنوان من الناحيتين مع بعض — تهنّيّة
         // دقيقة ونص بتكسر الدورة أحسن ألف مرة من لُفّ المسح العلاني في الاتنين.
         if ((this.captchaStreak || 0) >= 4) {
-          const chill = 90000 + Math.floor(Math.random() * 30000);
+          const chill = 30000; // v1.21.37 (طلب المستخدم): من 90-120 ← 30 ثانية ثابتة — الحصار بيتكسر بردية قصيرة منتظمة أحسن من ضربة طويلة مالهاش داعي كل مرة
           await logger.warn('queue', `🧊 ${this.captchaStreak} كابتشات ورا بعض — بردية ${Math.round(chill / 1000)} ثانية قبل ما نكمّل (خصوصًا لو بروفيل تاني شغال على نفس الـIP)`);
           await state.setRun({ breakUntil: Date.now() + chill, breakTotalMs: chill }); // الشريط السفلي يعدّيها قدامك
           await sleep(chill, this.signal());
@@ -836,7 +836,7 @@ export class QueueEngine {
    *  بترجع 'noop' والندّاه يركّن الكلمة بدل ما يدور في فراغ. */
   async restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts) {
     if (capRestarts >= 2) { return null; }
-    const cool = 9000 + Math.floor(Math.random() * 9000); // ⚡ 1.21.36: 15-25←9-18 — المسح الكامل وترحيب الرئيسية جوه openFreshTab بياخدو نفسهم 3-4 ثواني، فالسبات فوقهم كان ضريبة
+    const cool = 5000; // v1.21.37: من 9-18 ← 5 ثواني ثابتة — المسح والترحيبية جوه openFreshTab بياخدو 3-4 ثواني فوقها أصلًا
     await logger.warn('queue', `🔄 "${kw.keyword}" — الكابتشا ركنّت: بنبدأ بيها من الصفر (المحاولة ${capRestarts + 1}/2) بعد استقرار ${Math.round(cool / 1000)} ثانية — لا استنانة يدوية ولا إيقاف للرن`);
     await sleep(cool, signal);
     if (signal && signal.aborted) { return 'aborted'; }
@@ -851,19 +851,28 @@ export class QueueEngine {
     const keywords = await state.getKeywords();
     const k = keywords.find((x) => x && x.id === keywordId);
     if (!k) { return { ok: false, reason: 'not-found' }; }
-    if (k.status === C.STATUS.KW.RUNNING || k.status === C.STATUS.KW.CAPTCHA) {
+    const runNow = await state.getRun();
+    const live = runNow.status === C.STATUS.RUN.RUNNING || runNow.status === C.STATUS.RUN.CAPTCHA || runNow.status === C.STATUS.RUN.PAUSED;
+    // v1.21.37 (طلب المستخدم: «الزرار مش شغال»): الرفض كان بيتم لأي شارة RUNNING حتى
+    // لو الرن واقف أو الشارة بايتة من crashed run — بقى رفض بس لو الكلمة دي فعلًا
+    // تحت التنفيذ الحّي الآن؛ غير كده الزرار يشتغل ويطير
+    if (live && (k.status === C.STATUS.KW.RUNNING || k.status === C.STATUS.KW.CAPTCHA)) {
       return { ok: false, reason: 'running' };
     }
     await state.updateKeyword(k.id, { status: C.STATUS.KW.PENDING, needsReview: false, priority: true, recheckAt: Date.now() });
     for (const other of keywords) {
       if (other && other.id !== k.id && other.priority) { await state.updateKeyword(other.id, { priority: false }); }
     }
-    const run = await state.getRun();
-    const live = run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA;
     await logger.info('queue', live
       ? `🎯 "${k.keyword}" — إعادة فحص بأولوية: هتتنقل لها أول ما الكلمة الحالية تخلص`
-      : `🎯 "${k.keyword}" — اتحطّت في أول الطابور — الرن الجاي هيديها العينة الأول`);
+      : `🎯 "${k.keyword}" — الرن واقف؟ تمام، بينطلق حالًا منها وبس`);
     this.broadcast();
+    if (!live) {
+      // ⚡ v1.21.37: idle/متوقف = الزرار نفسه يشغّل الرن من الكلمة دي (start
+      // بيصطاد أول PENDING تحمل priority)، مش تستنى «الرن الجاي» اللي ما يجيش
+      Promise.resolve(this.start()).catch((e) => { logger.error('queue', 'إطلاق الرن من الزرار تعثر: ' + (e && e.message ? e.message : e)); });
+      return { ok: true, started: true };
+    }
     return { ok: true, live: !!live };
   }
 

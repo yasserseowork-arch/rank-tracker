@@ -41,7 +41,7 @@ function compareTimestamp(a, b) {
 
 const knownPlacesTemplate = Handlebars.templates.knownplaces;
 function getKnownPlaces() {
-  chrome.storage.sync.get("knownPlaces", function(result) {
+  chrome.storage.local.get("knownPlaces", function(result) {
     if (result.knownPlaces) {
       result.knownPlaces.sort(compareTimestamp);
       document.getElementById('knownplaces').innerHTML = knownPlacesTemplate(result);
@@ -51,11 +51,11 @@ function getKnownPlaces() {
         var removedPlace = result.knownPlaces.splice(index, 1);
         if (background.settings.placeId == removedPlace[0].placeId) {
           background.settings.enabled = false;
-          chrome.storage.sync.set({settings: background.settings});
+          chrome.storage.local.set({settings: background.settings});
         }
         background.knownPlaces = result.knownPlaces;
         background.settings.timestamp = new Date().getTime();
-        chrome.storage.sync.set({knownPlaces: background.knownPlaces}, function () {
+        chrome.storage.local.set({knownPlaces: background.knownPlaces}, function () {
           getKnownPlaces();
         });
       });
@@ -65,10 +65,10 @@ function getKnownPlaces() {
 getKnownPlaces();
 
 function getOptions() {
-  chrome.storage.sync.get("options", function(result) {
+  chrome.storage.local.get("options", function(result) {
     if (Object.keys(result).length === 0) {
       result['options'] = background.options;
-      chrome.storage.sync.set(result);
+      chrome.storage.local.set(result);
     }
     $('#input-contextnumber').val(result['options']['contextnumber']);
     $('#input-maxplaces').val(result['options']['maxplaces']);
@@ -77,22 +77,22 @@ function getOptions() {
 
     $('#checkbox-use-google').on('change', function() {
       result['options']['useGoogleEndpoint'] = $(this).prop('checked');
-      chrome.storage.sync.set(result);
+      chrome.storage.local.set(result);
     });
 
     $('#button-contextnumber').on('click', function() {
       result['options']['contextnumber'] = parseInt($('#input-contextnumber').val()) || 3;
-      chrome.storage.sync.set(result);
+      chrome.storage.local.set(result);
     });
 
     $('#button-maxplaces').on('click', function() {
       result['options']['maxplaces'] = parseInt($('#input-maxplaces').val()) || 100;
-      chrome.storage.sync.set(result);
+      chrome.storage.local.set(result);
     });
 
     $('#button-consent').on('click', function() {
       result['options']['consent'] = $('#input-consent').val() || '';
-      chrome.storage.sync.set(result);
+      chrome.storage.local.set(result);
       background.options.consent = result['options']['consent'];
     });
   });

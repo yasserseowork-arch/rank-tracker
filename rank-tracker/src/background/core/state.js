@@ -5,7 +5,7 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const K = {
   CONFIG: 'srt.config',
@@ -32,8 +32,8 @@ export const DEFAULT_CONFIG = {
   delayMs: 4000,                // مهلة إلزامية قبل كل كلمة (طلب المستخدم: 4 ثوانٍ)
   jitterMs: 1500,
   cooldownEvery: 8,             // كل N كلمات خذ استراحة طويلة
-  cooldownMs: 25000,           // v1.21.36 (طلب السرعة): 30←25 — الاستراحة كل 8 كلمات لسه درع، بس طولها كان زائد
-  cooldownJitterMs: 15000,
+  cooldownMs: 10000,           // v1.21.37 (طلب المستخدم: «راحات ثابتة»): كل 8 كلمات = 10 ثواني بالظبط، مفيش عشوائية ولا تمطيط
+  cooldownJitterMs: 0,
   // الكابتشا
   captchaMaxAttempts: 2,
   captchaAttemptTimeoutMs: 35000,
@@ -55,7 +55,7 @@ export const DEFAULT_CONFIG = {
   keywordRetries: 5,            // أي مشكلة؟ ريفرش + نفس الكلمة — عدد مرات إعادة المحاولة
   captchaClearRetries: 3,       // كابتشا؟ مسح بيانات المتصفح + تاب جديد — عدد المرات لكل كلمة
   // دورة العمل الكاملة (مثل السيناريو اليدوي)
-  clearBeforeRun: true,         // مسح بيانات التصفح (كل الوقت) قبل بدء الجولة
+  clearBeforeRun: false,        // 🎯 v1.21.37 (طلب المستخدم: دقة التتبع): مفيش مسح قبل الرن — الجلسة الدافية هي مطابقة بحثك اليدوي بالظبط؛ المسح بقى سلاح تصعيد للكابتشا وبس
   clearEveryN: 8,               // مسح دوري متزامن مع الاستراحة: كل 8 كلمات (0 = معطّل) — بصمة أقل وكابتشا أقل
   sheetUrl: '',                 // رابط شيت جوجل للمزامنة والكتابة
   sheetWriteBack: false,        // كتابة عمود الترتيب في الشيت عند انتهاء الجولة
@@ -372,10 +372,17 @@ export async function migrate() {
     // أي رقم عدّله المستخدم بإيده محمي زي ما هو
     const cfg9 = await getConfig();
     const patch9 = {};
-    if (parseInt(cfg9.cooldownMs, 10) === 30000 && parseInt(cfg9.cooldownJitterMs, 10) === 20000) {
-      patch9.cooldownMs = 25000; patch9.cooldownJitterMs = 15000;
+    if (parseInt(cfg9.cooldownMs, 10) === 30000 || parseInt(cfg9.cooldownMs, 10) === 25000) {
+      patch9.cooldownMs = 10000; patch9.cooldownJitterMs = 0; // 1.21.37: اللي سيبها على الافتراضي ياخد الثابتة القصيرة
     }
     if (Object.keys(patch9).length) { await setConfig(patch9); }
+  }
+  if (version < 10) {
+    // 🎯 1.21.37: المسح قبل الرن كان بيفصل نتيجة الأداة عن نتيجة بحثك الإيد (برفيلك
+    // مسجّل دخولك وتاريخك، والأداة كانت بتبدأ مجهول) — اللي سيبوه على الافتراضي يتحول
+    // للجلسة الدافية؛ المسح لسه موجود في كل مسارات تصعيد الكابتشا زي ما هو
+    const cfgA = await getConfig();
+    if (cfgA.clearBeforeRun === true) { await setConfig({ clearBeforeRun: false }); }
   }
   await local.set(K.SCHEMA, SCHEMA_VERSION);
   return SCHEMA_VERSION;

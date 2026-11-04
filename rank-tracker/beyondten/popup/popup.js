@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     statusText.textContent = `Currently showing ${val} results`;
   }
 
-  chrome.storage.sync.get(['resultsCount', 'extensionEnabled'], (d) => {
+  chrome.storage.local.get(['resultsCount', 'extensionEnabled'], (d) => {
     const count = d.resultsCount || '100';
     const enabled = d.extensionEnabled !== false;
     select.value = count;
@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   applyBtn.addEventListener('click', () => {
     const selected = select.value;
-    chrome.storage.sync.set({
+    chrome.storage.local.set({
       resultsCount: selected,
       extensionEnabled: toggle.checked
     }, () => {
@@ -40,6 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   toggle.addEventListener('change', () => {
-    chrome.storage.sync.set({ extensionEnabled: toggle.checked });
+    chrome.storage.local.set({ extensionEnabled: toggle.checked });
   });
 });

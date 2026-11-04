@@ -23,14 +23,30 @@ try {
   }, () => void chrome.runtime.lastError);
 
   // gs location changer: الوضع الداكن (بهوية اللوحة) كافتراضي أول تشغيل — والمستخدم يقدر يرجّعه فاتح من زراره
-  chrome.storage.sync.get('theme', (r) => {
-    if (!r || !r.theme) { chrome.storage.sync.set({ theme: 'dark' }); }
+  // v1.21.37 (عزل البروفيلات): كل حاجة بقت local — مفيش مراية سحابية مشتركة
+  // بين بروفيلات نفس حساب جوجل. الجسر ده بيقرأ SYNC مرة واحدة بس لو البروفيل
+  // ده لسه ماخدتش إعدادات محليته (ترقية بدون خسارة إعدادات المستخدم القديم).
+  const K2 = 'srt_theme_v2';
+  chrome.storage.local.get(['theme', 'settings'], (loc) => {
+    if (loc && loc.settings && loc.theme) { return; }
+    chrome.storage.sync.get(K2, (r2) => {
+      const old2 = r2 && r2[K2];
+      if (old2 && typeof old2 === 'object') {
+        const carry = {};
+        if (old2.theme && !loc.theme) { carry.theme = old2.theme; }
+        if (old2.settings && !loc.settings) { carry.settings = old2.settings; }
+        if (Object.keys(carry).length) { chrome.storage.local.set(carry, () => location.reload()); }
+      }
+    });
+  });
+  chrome.storage.local.get('theme', (r) => {
+    if (!r || !r.theme) { chrome.storage.local.set({ theme: 'dark' }); }
   });
 
   // gs location changer: ديفولت الموقع = السعودية كلها — بلد بس من غير تحديد مدينة
   // (gl=SA، hl=ar) مفعّل تلقائياً. يُزرع أول تشغيل فقط، ولو المستخدم غيّر الموقع بعدها
   // لا يُستبدل اختياره أبداً — وديفولت الرياض مدينة-بُعيد يُرقّى تلقائياً للنسخة القطرية
-  chrome.storage.sync.get('settings', (r) => {
+  chrome.storage.local.get('settings', (r) => {
     const s = r && r.settings;
     const saudiDefaults = {
       // مركز المملكة الجغرافي (نقطة عامة في عرض الجزيرة — مش نقطة مدينة) + قطر
@@ -48,16 +64,16 @@ try {
       timestamp: 0
     };
     // لا يوجد إعداد إطلاقاً → ازرع السعودية مفعّلة
-    if (!s) { chrome.storage.sync.set({ settings: saudiDefaults }); return; }
+    if (!s) { chrome.storage.local.set({ settings: saudiDefaults }); return; }
     // نسخة قديمة من الديفولت الأمريكي اللي كنا بنزرعه → حدّثها للسعودية مفعّلة
     if (s.name === 'Google Building 40' && s.gl === 'US') {
-      chrome.storage.sync.set({ settings: saudiDefaults });
+      chrome.storage.local.set({ settings: saudiDefaults });
       return;
     }
     // v1.21.6: ديفولت الرياض القديم (زرعته إديتنا، مش اختيار من Places) → رقٍّ للقطري.
     // أي حاجة تانية — اختيار مستخدم من البحث أو مدينة كتبها بنفسه أو وضع معطّل — بتتساب زي ما هي
     if (s.name === 'Riyadh' && s.location === 'Riyadh, Saudi Arabia' && s.enabled !== false) {
-      chrome.storage.sync.set({ settings: Object.assign({}, s, saudiDefaults) });
+      chrome.storage.local.set({ settings: Object.assign({}, s, saudiDefaults) });
     }
   });
 

@@ -76,7 +76,7 @@ export function drawPositionChart(canvas, points, opts) {
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'right';
   for (let i = 0; i <= 4; i++) {
-    const value = Math.round(maxY - ((maxY - minY) / 4) * i);
+    const value = Math.round(minY + ((maxY - minY) / 4) * i); // v1.21.37 (طلب المستخدم): #1 فوق والغلط تحت — التسميات بتتبع المنحنى، مش معاكسله
     const y = pad.top + (h / 4) * i;
     ctx.fillText('#' + value, pad.left - 5, y + 3);
   }

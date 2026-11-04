@@ -31,7 +31,7 @@
     } catch { return u; }
   }
   function boot() {
-    chrome.storage.sync.get(['resultsCount', 'extensionEnabled', 'autoLoad', 'pureMode'], (d) => {
+    chrome.storage.local.get(['resultsCount', 'extensionEnabled', 'autoLoad', 'pureMode'], (d) => {
       state.settings.target = Number(d.resultsCount || '100');
       state.settings.enabled = d.extensionEnabled !== false;
       state.settings.autoLoad = d.autoLoad !== false;
