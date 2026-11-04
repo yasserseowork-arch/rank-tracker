@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>النتائج</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="serp-popup">
+    <div class="header">
+      <div class="logo-title">
+        <span class="tool-title">إعدادات النتائج</span>
+      </div>
+      <label class="top-toggle">
+        <input type="checkbox" id="extToggle" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <p class="subtitle">اختار عدد نتائج البحث في كل صفحة:</p>
+
+    <div class="selector">
+      <label for="resultCount">Results per page</label>
+      <select id="resultCount">
+        <option value="10">10 results</option>
+        <option value="20">20 results</option>
+        <option value="50">50 results</option>
+        <option value="100">100 results</option>
+      </select>
+    </div>
+
+    <p id="statusText" class="status-line">Currently showing 100 results</p>
+
+    <button id="applyNow">Apply Now</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

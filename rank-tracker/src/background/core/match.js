@@ -1,9 +1,9 @@
 /**
- * match.js — منطق مطابقة المتجر داخل نتائج SERP (دوال نقية)
+ * match.js — منطق مطابقة الموقع (دومين/اسم عربي/اسم إنجليزي) داخل نتائج SERP (دوال نقية)
  *
  * أنماط المطابقة:
  *  - domain: مطابقة المضيف (مع تجاهل www واشتقاق النطاق الأصلي)
- *  - name:   مطابقة اسم المتجر داخل العنوان/الوصف بعد تطبيع عربي
+ *  - name:   مطابقة اسم الموقع (عربي أو إنجليزي) داخل العنوان/الوصف بعد التطبيع
  *  - both:   أيٌّ منهما
  */
 
@@ -68,22 +68,29 @@ export function domainLabel(host) {
 }
 
 export function hostMatches(urlHost, targetDomain) {
+  return hostMatchesStrict(urlHost, targetDomain);
+}
+
+
+/**
+ * v1.21.17 — الدقة قبل أي تسامح: الترتيب بيتسجّل لمالك الدومين الحصري فقط.
+ * لا مسافة تحرير ولا تقارب حروف: nike.com ≠ mike.com و myshop.com ≠ myshop.co
+ * (دومين تاني = متجر تاني حتى لو الاسم واحد). المسموح: تطابق كامل، سوبدومين
+ * نضيف تحت نفس الدومين (m. / www. / أي.سوب)، والنطاق القابل للتسجيل الكامل
+ * بنفس الـTLD. الغلط الإملائي في إعداداتك إنت اللي بتصلحه — مش على حساب نسب
+ * متجر منافس لموقعك.
+ */
+function hostMatchesStrict(urlHost, targetDomain) {
   const target = normalizeHost(targetDomain);
   if (!target) { return false; }
   const host = normalizeHost(urlHost);
   if (!host) { return false; }
-  // المستخدم يكتب الدومين بدون https وأحياناً بدون TLD كامل: نتسامح
   if (!target.includes('.')) {
-    const label = domainLabel(host);
-    return label === target || (label.length >= 6 && editDistance(label, target) <= 2);
+    return domainLabel(host) === target;
   }
   if (host === target) { return true; }
   if (host.endsWith('.' + target)) { return true; }
   if (registrable(host) === registrable(target)) { return true; }
-  // تسامح مع لخبطة حرف/حرفين في الدومين المكتوب بالإعدادات
-  const a = domainLabel(host);
-  const b = domainLabel(target);
-  if (a.length >= 6 && b.length >= 6 && editDistance(a, b) <= 2) { return true; }
   return false;
 }
 
@@ -117,16 +124,27 @@ export function nameMatches(haystack, storeName) {
 }
 
 /**
- * مطابقة قائمة نتائج SERP ضد إعدادات المتجر.
+ * مطابقة قائمة نتائج SERP ضد إعدادات الموقع.
  * @param {Array<{url:string,host:string,title:string,snippet:string}>} items
  * @param {object} cfg {storeDomain, storeName, matchMode}
  * @returns {{found:boolean, position:number|null, matched:object|null, scanned:number, reasons:Array}}
  */
+export function storeNames(cfg) {
+  const c = cfg || {};
+  return [c.storeName, c.storeNameEn]
+    .map((s) => String(s == null ? '' : s).trim())
+    .filter(Boolean)
+    .filter((s, i, arr) => arr.indexOf(s) === i);
+}
+
 export function matchResults(items, cfg) {
   const config = cfg || {};
   const mode = config.matchMode || 'both';
   const hasDomain = !!String(config.storeDomain || '').trim();
-  const hasName = !!String(config.storeName || '').trim();
+  const names = storeNames(config);
+  // سياسة 1.19.7 — الدومين أولاً: الدومين مضبوط؟ الحكم بالدومين بس في both/named-mix،
+  // والاسم يفضل احتياطي لوضع name أو لما الدومين مش محدد (علاج sites بنفس الاسم)
+  const nameAllowed = mode === 'name' || (mode === 'both' && !hasDomain);
   const list = Array.isArray(items) ? items : [];
 
   for (let i = 0; i < list.length; i++) {
@@ -136,9 +154,11 @@ export function matchResults(items, cfg) {
     if (hasDomain && (mode === 'domain' || mode === 'both')) {
       if (hostMatches(item.host || '', config.storeDomain)) { hit = true; reasons.push('domain'); }
     }
-    if (!hit && hasName && (mode === 'name' || mode === 'both')) {
+    if (!hit && nameAllowed && names.length) {
       const text = (item.title || '') + ' ' + (item.snippet || '') + ' ' + (item.url || '') + ' ' + (item.text || '');
-      if (nameMatches(text, config.storeName)) { hit = true; reasons.push('name'); }
+      for (const nm of names) {
+        if (nameMatches(text, nm)) { hit = true; reasons.push('name'); break; }
+      }
     }
     if (hit) {
       return { found: true, position: i + 1, matched: item, scanned: list.length, reasons };

@@ -14,16 +14,20 @@ import * as tabctl from './tabctl.js';
 import * as scheduler from './scheduler.js';
 import * as urlkit from './urlkit.js';
 import { localCheck } from './localcheck.js';
-import { matchResults, nameMatches, normalizeArabic } from './match.js';
+import { matchResults, normalizeArabic } from './match.js';
 import * as csvkit from './csvkit.js';
 import { CaptchaOrchestrator } from './captcha-orchestrator.js';
+import { sleep } from './rand.js';
+import * as solver from './solver.js';
 
 export class QueueEngine {
   constructor() {
     this.orchestrator = new CaptchaOrchestrator();
     this.looping = false;
+    this.ownedTabs = new Set(); // تبانين فتحتهم الأداة — بنخليها واحدة واحدة بس
     this.pendingRestart = false;
     this.index = 0;
+    this.captchaHeat = 0; // 🌡 حرارة الكابتشا (v1.20.0)
     this.abortController = null;
     this.currentTabId = null;
     this.wireBus();
@@ -31,10 +35,31 @@ export class QueueEngine {
 
   /**
    * ساعة حراسة: إن مات الـ Service Worker في منتصف كلمة (لا عملاء keep-alive)،
-   * يوقظه alarm بعد دقيقتين ويستأنف الحلقة من currentIndex المحفوظة.
+   * يوقظه alarm ويستأنف الحلقة من currentIndex المحفوظة.
+   * v1.21.3: النبض بقى كل 30 ثانية (كان دقيقتين) — مش استئناف أسرع وخلاص:
+   * الـ alarm الحي نفسه بيخلي الـWorker صاحي طول الرن، ففترات النوم اللي كانت
+   * مفيش تبريد خالص من 1.21.23 (المستخدم ماسح التاب وقافل اللوحة)
+   * اختفت تقريبًا — وده مصدر إحساس «مش استيبل» الأول.
    */
   armWatchdog() {
-    try { chrome.alarms.create('srt-watch', { delayInMinutes: 2 }); } catch (_) {}
+    try { chrome.alarms.create('srt-watch', { delayInMinutes: 0.5 }); } catch (_) {}
+  }
+
+  /** v1.21.3: بعد موت Worker في منتصف كلمة، السطر بيفضل معلقان بشارة
+   *  running/captcha وهو مالوش صاحب — نلمّه لـ pending قبل ما الحلقة تستأنف */
+  async healStaleBadges() {
+    try {
+      const list = await state.getKeywords();
+      let dirty = false;
+      for (const k of list) {
+        if (k && (k.status === C.STATUS.KW.RUNNING || k.status === C.STATUS.KW.CAPTCHA)) {
+          k.status = C.STATUS.KW.PENDING;
+          dirty = true;
+        }
+      }
+      if (dirty) { await state.setKeywords(list); }
+      return dirty;
+    } catch (_) { return false; }
   }
 
   disarmWatchdog() {
@@ -43,12 +68,16 @@ export class QueueEngine {
 
   async watchdogTick() {
     const run = await state.getRun();
-    if (run.status === C.STATUS.RUN.RUNNING && !this.looping) {
-      await logger.warn('queue', 'watchdog: استئناف الحلقة بعد استيقاظ Worker');
+    const errored = run.status === C.STATUS.RUN.PAUSED && String(run.pauseReason || '').indexOf('error:') === 0;
+    const active = run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA || errored;
+    if (active && !this.looping) {
+      await logger.warn('queue', 'watchdog: استئناف الحلقة بعد استيقاظ Worker' + (errored ? ' — تعافي تلقائي بعد خطأ' : ''));
+      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null, pauseReason: null });
       this.index = run.currentIndex || 0;
       this.abortController = new AbortController();
+      await this.healStaleBadges();
       this.loop();
-    } else if (run.status === C.STATUS.RUN.RUNNING) {
+    } else if (active) {
       this.armWatchdog();
     } else {
       this.disarmWatchdog();
@@ -57,25 +86,55 @@ export class QueueEngine {
 
   /** ربط رسائل الـ content scripts بالناقل الداخلي مع tabId */
   wireBus() {
-    const forward = (type) => (message, sender) => {
-      const payload = Object.assign({}, message, { tabId: sender && sender.tab ? sender.tab.id : null });
-      bus.emit(type, payload);
-    };
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (!message || typeof message.type !== 'string' || message.type.indexOf('srt/') !== 0) { return; }
-      // ضغطة ماوس حقيقية بالإحداثيات (لشخص Buster المحقون كـ iframe عبر إضافة تانية)
-      if (message.type === C.MSG.CAPTCHA_COORD_CLICK && sender.tab && sender.tab.id) {
+      if (!message) { return; }
+      // خدمة النسخ باسمها الأصلي (بروتوكول 1.18.6) — الآن ترد عليها خلفية أداتنا بمحركها الخاص
+      if (message.id === 'transcribeAudio' && message.audioUrl) {
+        (async () => {
+          try {
+            const text = await solver.transcribeAudioUrl(String(message.audioUrl));
+            sendResponse({ text: text || null });
+          } catch (err) {
+            await logger.warn('solver', 'النسخ فشل: ' + (err && err.message));
+            sendResponse({ text: null, reason: 'error' });
+          }
+        })();
+        return true;
+      }
+      if (typeof message.type !== 'string' || message.type.indexOf('srt/') !== 0) { return; }
+
+      /* ---- حارس الديبراجر: بانر «started debugging» يظهر في تابات الشغل بس ----
+         (طلب: «الـdebuging يظهر في الحساب اللي عليه الأداة بس، مش كل حسابات جوجل»).
+         الآلة نفسها حرة زي 1.18.6 — التقييد على الضغطة الموثوقة (debugger) فقط. */
+      const tabOf = sender && sender.tab ? sender.tab.id : null;
+      const inScope = async () => {
+        if (!tabOf) { return false; }
+        const run = await state.getRun();
+        if (run.workerTabId === tabOf) { return true; }
+        return Array.isArray(run.ownedTabIds) && run.ownedTabIds.indexOf(tabOf) !== -1;
+      };
+
+      // ضغطة ماوس حقيقية بالإحداثيات (موثوقة — isTrusted) من داخل تبويب:
+      // بتوصل من إطار التحدي (زرار Buster) أو من الصفحة العليا (زرار التحقق الصوتي)
+      const coordMsg = message.type === C.MSG.CAPTCHA_COORD_CLICK || message.type === C.MSG.CAPTCHA_VERIFY_CLICK;
+      if (coordMsg && sender.tab && sender.tab.id) {
         const tabId = sender.tab.id;
         (async () => {
+          // تبويب شخصي للمستخدم؟ مفيش debugger ولا ضغطات — خالص (الحارس الأول)
+          if (!(await inScope())) { sendResponse({ ok: false, error: 'out-of-scope' }); return; }
           try {
             const target = { tabId: tabId };
             try { await chrome.debugger.attach(target, '1.3'); } catch (_) { /* مثبت بالفعل */ }
             const evt = { x: message.x, y: message.y, button: 'left', clickCount: 1 };
+            // رتم بشري: الماوس يتحرك الأول ويستقر، ضغط، سكتة قصيرة، فك — وراحة قبل الـdetach
+            await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: message.x, y: message.y, button: 'none' });
+            await new Promise((r) => setTimeout(r, 140));
             await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', Object.assign({ type: 'mousePressed' }, evt));
-            await new Promise((r) => setTimeout(r, 60));
+            await new Promise((r) => setTimeout(r, 90));
             await chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', Object.assign({ type: 'mouseReleased' }, evt));
+            await new Promise((r) => setTimeout(r, 150));
             try { await chrome.debugger.detach(target); } catch (_) {}
-            await logger.info('captcha', `🖱 ضغطة حقيقية بالإحداثيات (${message.x},${message.y}) على الشخص البرتقالي`);
+            await logger.info('captcha', `🖱 ضغطة حقيقية بالإحداثيات (${message.x},${message.y}) — ${message.stage || ''}`);
             sendResponse({ ok: true });
           } catch (err) {
             await logger.warn('captcha', `تعذرت الضغطة بالإحداثيات: ${err && err.message}`);
@@ -99,8 +158,17 @@ export class QueueEngine {
       }
     });
 
+    // تخزين آخر تحليل لكل تبويب — يعالج سباق «الحل جه والتحليل وصل قبل ما نستمع»
+    this.lastSerp = this.lastSerp || new Map();
+    bus.on(C.MSG.SERP_PARSED, (p) => {
+      if (p && p.tabId) {
+        this.lastSerp.set(p.tabId, { payload: p, ts: Date.now() });
+        // 🪶 1.21.34: سقف الكاش — أي تاب قديم بيطير الأول (100 نتيجة × تبويب = ميجايات)
+        while (this.lastSerp.size > 24) { this.lastSerp.delete(this.lastSerp.keys().next().value); }
+      }
+    });
     bus.on(C.MSG.CAPTCHA_ATTEMPT, (m) => {
-      logger.info('captcha', `Buster بدأ الاستماع (محاولة مُبلّغ عنها من الإطار) —_tab:${m.tabId}`);
+      logger.info('captcha', `محاولة حل من الآلة الذاتية (${m.stage || '?'}) — tab:${m.tabId}`);
       if (this.currentTabId === m.tabId) {
         state.setRun({ captcha: Object.assign({}, { tabId: m.tabId, attempts: m.attempt, since: Date.now() }) });
         this.broadcast();
@@ -119,7 +187,7 @@ export class QueueEngine {
       logger.warn('serp', `الجلب الخلفي للدفعات اصطدم بكابتشا — نكتفي بالنتائج المعروضة بالصفحة (${m.pageUrl || ''})`);
     });
     bus.on(C.MSG.CAPTCHA_FAILED, (m) => {
-      logger.error('captcha', `إطار التحدي أعلن استنفاد المحاولات (tab:${m.tabId})`);
+      logger.warn('captcha', `الكابتشا استهلكت محاولاتها من غير حل (tab:${m.tabId}) — الخطة الاحتياطية اتنفذّت: مسح بيانات + تبويب جديد لنفس الكلمة`);
     });
   }
 
@@ -131,16 +199,32 @@ export class QueueEngine {
     });
   }
 
+  /* الإشعارات جوه اللوحة نفسها (مكان شريط الاستراحة) — مش نوتيفيكيشن عام في الجهاز.
+   *  أي شاشة/أي حساب — الرسالة تبقى في الأداة، بسيطة وواضحة، واللوحة بتختفي لوحدها. */
   async notify(title, message) {
+    // 🗣 v1.21.26 (طلب المستخدم: «حوارات كتير أوي أوي»): كل نداءات notify بتعدي من
+    // البوابة دي — الحرج («الأداة وقفت» / «بعد كل المحاولات» / مشاكل الشيت) بيمر دايمًا
+    // وبيقطع. الروتيني (إعادة محاولة/كابتشا/استشفاء/مسح دوري): نفس الرسالة بالظبط جوه
+    // أربعين ثانية = تتجاهل (اللوچ بيحكيها كاملة)، وغير المكرر له نفسها 12 ثانية —
+    // عاصمة الأخطاء بتهدى من غير ما أي مسار منطق يتغير: ديه قطع إشهاري بحت.
+    const now = Date.now();
+    const sig = String(title) + ' ' + String(message);
+    const crit = /وقفت|بعد كل المحاولات|الشيت/.test(sig);
+    if (crit) {
+      this._notifyAnyTs = now; this._notifyLastSig = sig; this._notifyLastTs = now;
+    } else {
+      if (sig === this._notifyLastSig && now - (this._notifyLastTs || 0) < 40000) { return; }
+      if (now - (this._notifyAnyTs || 0) < 12000) { return; }
+      this._notifyLastSig = sig; this._notifyLastTs = now; this._notifyAnyTs = now;
+    }
     try {
-      await chrome.notifications.create('srt-' + Date.now(), {
-        type: 'basic',
-        iconUrl: chrome.runtime.getURL('icons/icon128.png'),
-        title: title,
-        message: message,
-        priority: 2
-      });
+      await state.setRun({ notice: { title: title, text: message, ts: Date.now() } });
+      this.broadcast();
     } catch (_) {}
+  }
+
+  clearNotice() {
+    state.setRun({ notice: null }).then(() => this.broadcast()).catch(() => {});
   }
 
   /* ------------------------------ أوامر التحكم ------------------------------ */
@@ -153,7 +237,12 @@ export class QueueEngine {
     const keywords = await state.getKeywords();
     if (!keywords.length) { return { ok: false, reason: 'no-keywords' }; }
     const cfg = await state.getConfig();
-    if (!cfg.storeDomain && !cfg.storeName) { return { ok: false, reason: 'no-target' }; }
+    if (!cfg.storeDomain && !cfg.storeName && !cfg.storeNameEn) { return { ok: false, reason: 'no-target' }; }
+    // 🌍 v1.21.28: الشفافية قبل البدء — المستخدم يعرف الأداة بتبحث منين وبالظبط إزاي
+    try {
+      const u0 = new URL(urlkit.buildSearchUrl('اختبار', cfg));
+      await logger.info('queue', `🌍 البحث ده الرن: ${u0.host} بمنطق «${String(cfg.gl || 'sa').toLowerCase()}» بلغة ${cfg.hl || 'ar'} — لو في مدن بالاسم استخدم GsLoc Places على نفس البروفيل، ومفيش أي كروم تاني بيتفتح: نفس بروفيل الإضافة بتاعك`);
+    } catch (_) {}
     const daily = await state.getDailyCount();
     if (cfg.maxChecksPerDay > 0 && daily.count >= cfg.maxChecksPerDay) {
       await logger.warn('queue', `تم بلوغ السقف اليومي (${cfg.maxChecksPerDay} فحصاً) — ارفعه من الإعدادات المتقدمة أو انتظر الغد`);
@@ -163,20 +252,25 @@ export class QueueEngine {
     // 0) مسح بيانات التصفح (كل الوقت) — نتائج غير شخصية مثل السيناريو اليدوي
     if (cfg.clearBeforeRun) {
       try {
-        await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, history: true, cookies: true });
-        await logger.info('queue', '🧹 مُسحت بيانات التصفح (كل الوقت) قبل البدء — سيرب غير شخصي');
+        const w = await this.googleWipe({ cookies: true });
+        await logger.info('queue', w.scope === 'google'
+          ? '🧹 مُسحت بيانات جوجل (كوكيز + كاش + تاريخ صفحات البحث) قبل البدء — سيرب غير شخصي، وباقي تصفّحك ما اتلمسش'
+          : '🧹 مُسحت بيانات التصفح (كل الوقت) قبل البدء — سيرب غير شخصي');
       } catch (err) {
         await logger.warn('queue', 'تعذّر مسح بيانات التصفح: ' + (err && err.message));
       }
     }
 
 
-    this.index = keywords.findIndex((k) => k.status === C.STATUS.KW.PENDING);
+    // 🎯 v1.21.30: زرار «إعادة الفحص» اتضغط والرن واقع؟ أول ما يدور بتاخد العينة الأول
+    this.index = keywords.findIndex((k) => k && k.status === C.STATUS.KW.PENDING && k.priority);
+    if (this.index === -1) { this.index = keywords.findIndex((k) => k.status === C.STATUS.KW.PENDING); }
     if (this.index === -1) {
       // إعادة تعيين الحالات المستهلكة لبدء دورة جديدة
       await state.setKeywords(keywords.map((k) => Object.assign({}, k, { status: C.STATUS.KW.PENDING })));
       this.index = 0;
     }
+    this.captchaHeat = 0; // رن جديد = حرارة صفر
     this.abortController = new AbortController();
     await state.setRun({
       status: C.STATUS.RUN.RUNNING,
@@ -238,6 +332,47 @@ export class QueueEngine {
     return { ok: true };
   }
 
+
+  /* 🧼 v1.21.40 — مسح بيانات محصور في جوجل (بدل ما كان بيمسح تاريخ وكوكيز كل المواقع).
+     كان المسح القديم بيدفع بـ { since: 0 } على كل البروفايل: تاريخ التصفح بالكامل،
+     كوكيز كل المواقع، وكل الجلسات المفتوحة — كل 10 كلمات! دلوقتي:
+       • الكوكيز: مقتصرة على نطاقات جوجل (origins بتشتغل مع cookies وبتوسّع للنطاق القابل للتسجيل).
+       • الكاش والكاش-ستورج: مقتصرين على أصول جوجل كذلك.
+       • الهيستوري: browsingData بيرفض أصلاً دمج origins مع history — فبنمسح صفحات جوجل بس
+         عبر chrome.history.deleteUrl (مفيش مساس بأي دوسية تانية).
+     لو المستخدم عايز يرجّع السلوك القديم (مسح شامل) فيه مفتاح clearScopeGoogle في الإعدادات
+     المتقدمة — افتراضياً مطفّي لأنه مش لازم لأي منطق في الأداة. */
+  async googleWipe(opts) {
+    const cfg = await state.getConfig().catch(() => ({}));
+    const onlyGoogle = (cfg && cfg.clearScopeGoogle !== false);
+    const o = opts || {};
+    if (!onlyGoogle) {
+      await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, history: true, cookies: true });
+      return { scope: 'all', ok: true };
+    }
+    const origins = [];
+    for (const host of ['www.google.com', 'google.com', 'www.google.com.sa', 'www.google.sa', 'consent.google.com', 'recaptcha.net', 'www.recaptcha.net', 'www.gstatic.com']) {
+      origins.push('https://' + host, 'http://' + host);
+    }
+    const dataTypes = { cookies: !!o.cookies, cache: true, cacheStorage: true };
+    try {
+      await chrome.browsingData.remove({ since: 0, origins }, dataTypes);
+    } catch (_) {
+      // بعض إصدارات كروم بترفض origins مع أنواع معينة — منقعش: نمسح من غير origins
+      try { await chrome.browsingData.remove({ since: 0 }, dataTypes); } catch (__) { /* مفيش صلاحية؟ بنكمل */ }
+    }
+    try {
+      const hist = chrome.history;
+      if (hist && typeof hist.search === 'function' && typeof hist.deleteUrl === 'function') {
+        for (const q of ['https://www.google.com/search', 'https://www.google.com.sa/search', 'https://google.com/search', 'https://www.google.sa/search']) {
+          const rows = await hist.search({ text: q, startTime: 0, maxResults: 500 });
+          for (const item of (rows || [])) { try { await hist.deleteUrl({ url: item.url }); } catch (_) {} }
+        }
+      }
+    } catch (_) { /* الهيستوري اختياري — مش بيوقف المسح */ }
+    return { scope: 'google', ok: true };
+  }
+
   async closeCurrentTab() {
     if (this.currentTabId) {
       await tabctl.close(this.currentTabId);
@@ -262,7 +397,7 @@ export class QueueEngine {
     }
   }
 
-  /* -------------------------------- الحلقة utama -------------------------------- */
+  /* -------------------------------- الحلقة الرئيسية -------------------------------- */
 
   async loop() {
     if (this.looping) { return; }
@@ -273,8 +408,18 @@ export class QueueEngine {
       for (;;) {
         const run = await state.getRun();
         if (run.status !== C.STATUS.RUN.RUNNING) { brokeForPause = true; break; }
-        const keywords = await state.getKeywords();
+        let keywords = await state.getKeywords();
         if (this.index >= keywords.length) { break; }
+        // 🎯 v1.21.30: زرار إعادة الفحص — بنسحب الكلمة المعلّمة لأول الطابور بمبادلة
+        // مواقع فعلية (العدادات بتفضل مضبوطة)، والكلمة الشغالة ما بتسرقش أبدًا.
+        const prio = keywords.findIndex((k, i) => i >= this.index && k && k.priority);
+        if (prio > this.index) {
+          const arr = keywords.slice();
+          const tmp = arr[this.index]; arr[this.index] = arr[prio]; arr[prio] = tmp;
+          await state.setKeywords(arr);
+          await logger.info('queue', `🎯 "${arr[this.index].keyword}" — اتسحبت لقدام الطابور: دورها حالًا`);
+          keywords = arr;
+        }
         const kw = keywords[this.index];
         await state.setRun({ currentIndex: this.index });
         this.armWatchdog();
@@ -283,33 +428,85 @@ export class QueueEngine {
         this.index += 1;
         const processed = this.index;
         const cfg = await state.getConfig();
-        await scheduler.cooldownIfNeeded(cfg, processed, this.signal());
+        // 🌡 صبر إضافي بعد حرارة الكابتشا: كلمتين واطفين كابتشا؟ الاستراحة الجاية أطول —
+        // ده أنفع ألف مرة من إننا نطارد جوجل بسرعة ونجيب /sorry/ تاني
+        if (this.captchaHeat >= 2) {
+          const extra = 2500; // v1.21.37 (طلب المستخدم: راحات ثابتة): من 4.5-8 ← 2.5 ثانية على العدّاد، مفيش تمطيط عشوائي
+          await logger.info('queue', `🌡 تبريد ${Math.round(extra / 1000)} ثانية إضافية بعد كابتشا متكررة — والصبر أمان`);
+          await sleep(extra, this.signal());
+          this.captchaHeat -= 1;
+        } else if (this.captchaHeat === 1) {
+          // v1.21.4: الحرارة العالقة على 1 كانت بتقفل الوضع البارد للأبد (التبريد كان
+          // مشروط بـ>=2 بس) — كلمة نضيفة واحدة كفاية تطفّي آخر شرارة وترجعنا لسرعة اليدوي
+          this.captchaHeat = 0;
+        }
+        // 🧊 v1.21.25 (طلب المستخدم: شغال اتنين بروفيلات على نفس الـIP في نفس الوقت):
+        // 4 كابتشات ورا بعض = جوجل بيستجوب العنوان من الناحيتين مع بعض — تهنّيّة
+        // دقيقة ونص بتكسر الدورة أحسن ألف مرة من لُفّ المسح العلاني في الاتنين.
+        if ((this.captchaStreak || 0) >= 4) {
+          const chill = 30000; // v1.21.37 (طلب المستخدم): من 90-120 ← 30 ثانية ثابتة — الحصار بيتكسر بردية قصيرة منتظمة أحسن من ضربة طويلة مالهاش داعي كل مرة
+          await logger.warn('queue', `🧊 ${this.captchaStreak} كابتشات ورا بعض — بردية ${Math.round(chill / 1000)} ثانية قبل ما نكمّل (خصوصًا لو بروفيل تاني شغال على نفس الـIP)`);
+          await state.setRun({ breakUntil: Date.now() + chill, breakTotalMs: chill }); // الشريط السفلي يعدّيها قدامك
+          await sleep(chill, this.signal());
+          await state.setRun({ breakUntil: null, breakTotalMs: null });
+          this.captchaStreak = 2; // مفيش تصفير كامل — لسه سخينة؟ الكاسحة ترجع تشتغل تاني عندها
+        }
+        await scheduler.cooldownIfNeeded(cfg, processed, this.signal(), async (ms) => {
+          // عدّاد حي في اللوحة: وقت بداية الاستراحة ومداها — الشريط يظهر بس وإنت في واحدة بجد
+          await state.setRun({ breakUntil: Date.now() + ms, breakTotalMs: ms });
+          this.broadcast();
+        });
+        await state.setRun({ breakUntil: null, breakTotalMs: null });
+        this.broadcast();
       }
+
       const run = await state.getRun();
       const exhausted = this.index >= (await state.getKeywords()).length;
       if (run.status === C.STATUS.RUN.RUNNING && exhausted && !brokeForPause) {
+        // 🔁 v1.21.7: الأول إعادة تلقائية هادية لكلمات ⚠️ (اللي اتعلمتها الشبكات والبلوكات)،
+        // وبعدها التقرير — الحكم IDLE بيتأخر لحد المراجعة ما تخلص عشان اللوحة تفضل «شغال»
+        await this.reviewPass();
+        const runB = await state.getRun();
+        if (runB.status !== C.STATUS.RUN.RUNNING) { return; }
         await state.setRun({ status: C.STATUS.RUN.IDLE, finishedAt: Date.now(), captcha: null });
+        await this.recordRunReport(runB);
         await logger.info('queue', '✅ انتهى فحص كل الكلمات المفتاحية');
+        // «تاب واحد بس»: خلص الشغل → مفيش سبب يفضل أي تاب مفتوح للأداة
+        try {
+          await this.sweepExtraTabs(null);
+          await state.setRun({ workerTabId: null, ownedTabIds: [] });
+          this.currentTabId = null;
+        } catch (_) {}
         // كتابة النتائج في الشيت إن فُعّلت (مثل السيناريو اليدوي)
+        // 🔴 v1.21.40: كان الشرط `if (cfg.sheetUrl)` بس — والـsheetWriteBack (المفتاح
+        // اللي بيفعّل الميزة والمكتوب في DEFAULT_CONFIG وقايمة البولينز) **مكانش مقروء
+        // في أي مكان في المشروع**: يعني المفتاح مات، والكتابة بتحصل لمجرد وجود رابط
+        // شيت — حتى لو المستخدم قافل الخيار. بقى: اللينك + المفتاح. ومفيش مفتاح في
+        // الواجهة = القيمة الافتراضية false، فالحالة الوحيدة اللي كانت شغالة (حد لصق
+        // لينك شيت واتكتب لوحده من غير ما يطلب) بقت ضمن سيطرة المستخدم.
         const cfg = await state.getConfig();
-        if (cfg.sheetUrl && String(cfg.sheetUrl).trim()) {
+        if (cfg.sheetWriteBack === true && cfg.sheetUrl && String(cfg.sheetUrl).trim()) {
           await this.writeResultsToSheet();
         }
       }
     } catch (err) {
       await logger.error('queue', 'خطأ غير متوقع في الحلقة: ' + (err && err.stack ? err.stack : err));
       await state.setRun({ status: C.STATUS.RUN.PAUSED, pauseReason: 'error:' + (err && err.message) });
+      await this.notify('⚠️ الأداة وقفت', 'حصل خطأ غير متوقع — الواتش دوج هيحاول استئنافها لوحده خلال دقيقتين. لو مكملتش، دوس استئناف من اللوحة.');
     } finally {
       this.looping = false;
+      if (this.lastSerp) { this.lastSerp.clear(); } // 🪶 1.21.34: كاش التحليلات بيتمسح مع نهاية الرن — ذاكرة نظيفة لكل جولة
       if (this.pendingRestart) {
         this.pendingRestart = false;
         this.broadcast();
-        this.loop();
-        return;
+        Promise.resolve(this.loop()).catch(async (e) => {
+          await logger.error('queue', 'إعادة الحلقة تعثرت: ' + (e && e.stack ? e.stack : e));
+        });
+      } else {
+        const run = await state.getRun();
+        if (run.status !== C.STATUS.RUN.RUNNING) { this.disarmWatchdog(); }
+        this.broadcast();
       }
-      const run = await state.getRun();
-      if (run.status !== C.STATUS.RUN.RUNNING) { this.disarmWatchdog(); }
-      this.broadcast();
     }
   }
 
@@ -322,12 +519,50 @@ export class QueueEngine {
   async runKeyword(kw) {
     const cfg = await state.getConfig();
     const signal = this.signal();
-    await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+    await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING, needsReview: false }); // v1.21.7: الراية بتتمسح مع أول إعادة فحص
+    if (kw.priority) { await state.updateKeyword(kw.id, { priority: false }); } // 🎯 v1.21.30: الأولوية اتصرّفت ===
+
     await logger.info('queue', `🔎 فحص الكلمة: "${kw.keyword}"`);
     this.broadcast();
 
+    // ♻️ v1.21.1: الكلمة متكررة في الليستة؟ الصفوف بتتساب كلها (حق الشيت)، بس جوجل
+    // ما يدفعش مرتين في نفس الرن: لو فيه صف مطابق اتسجل في الرن ده — ننسخ له السطر
+    // والنتيجة كاملين من غير أي طلب جديد (أسرع، وأقل كابتشا، والنتيجة واحدة أصلًا)
+    const run0 = await state.getRun();
+    if (run0 && run0.startedAt) {
+      const normS = (s) => String(s || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+      const all0 = await state.getKeywords();
+      const src = all0.find((k) => k && k.id !== kw.id && normS(k.keyword) === normS(kw.keyword)
+        && k.status === C.STATUS.KW.DONE && k.lastCheckedAt && k.lastCheckedAt >= run0.startedAt);
+      if (src) {
+        await state.updateKeyword(kw.id, {
+          status: C.STATUS.KW.DONE,
+          lastPosition: src.lastPosition,
+          lastFound: src.lastFound,
+          lastAiPosition: src.lastAiPosition != null ? src.lastAiPosition : null,
+          lastAiFound: !!src.lastAiFound,
+          lastCheckedAt: Date.now(),
+          note: (kw.note ? kw.note + ' | ' : '') + '♻️ مطابقة لصف سابق في نفس الرن',
+          history: (kw.history || []).concat([Object.assign({},
+            (src.history && src.history[src.history.length - 1]) || {},
+            { ts: Date.now(), via: 'duplicate-row' })]).slice(-(cfg.maxHistoryPerKeyword || 40))
+        });
+        const results0 = await state.getResults();
+        const srcRow = results0.find((r) => r && normS(r.keyword) === normS(kw.keyword) && (r.checkedAt || 0) >= run0.startedAt);
+        if (srcRow) {
+          await state.addResult(Object.assign({}, srcRow, { checkedAt: Date.now(), via: 'duplicate-row' }));
+        }
+        await logger.info('queue', `♻️ "${kw.keyword}" — متطابقة مع صف مسجّل في الرن ده؛ النتيجة اتنسخت لصفها من غير طلب جديد لجوجل`);
+        this.broadcast();
+        return 'done';
+      }
+    }
+
+    // مسح دوري ذكي: بعد كل N كلمة مفحوصة (افتراضي 8 — متزامن مع الاستراحة) — بصمة أقل وكابتشا أقل
+    await this.maybePeriodicClear(cfg);
+
     // 1) المهلة الإلزامية قبل كل كلمة
-    await scheduler.preKeywordDelay(cfg, { index: this.index }, signal);
+    await scheduler.preKeywordDelay(cfg, { index: this.index, cold: (this.captchaHeat || 0) === 0 }, signal);
     if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
 
     // 2) تجهيز التبويب (واحد دائم + الكلمة من صندوق البحث)
@@ -337,14 +572,31 @@ export class QueueEngine {
     if (cfg.reuseTab !== false) {
       tab = await this.aliveWorkerTab();
       if (tab) {
-        const resp = await this.sendSearchCmd(tab.id, kw.keyword);
-        if (resp && resp.ok) { navigatedViaBox = true; }
+        // 🌍 v1.21.28: التنقل بالصندوق بيقعدنا على الدومين اللي التاب عليه أصلًا — لو
+        // المنطقة بتستهدف google.com.sa والصندوق على google.com، النتيجة هتفضل دولية.
+        // مطابقة الدومين شرط للدخول بالصندوق؛ المختلف يتنقل بالرابط كامل.
+        let boxOk = true;
+        try { boxOk = !tab.url || new URL(tab.url).host === new URL(url).host; } catch (_) { boxOk = false; }
+        if (boxOk) {
+          const resp = await this.sendSearchCmd(tab.id, kw.keyword);
+          if (resp && resp.ok) { navigatedViaBox = true; }
+        }
       }
     }
     if (!tab) {
       try {
-        tab = await tabctl.open(url, cfg);
+        // v1.21.15: أول رن بعد مسح البيانات؟ تاب البداية يفتح جوجل الأول ويتسحن —
+        // نفس وصفة openFreshTab (403 أقل). الجول الجاية على نفس التاب (صندوق بحث) أصلًا عضوية
+        const coldStart = !!cfg.clearBeforeRun;
+        tab = await tabctl.open(coldStart ? 'https://www.google.com/' : url, cfg);
         await state.setRun({ workerTabId: tab.id });
+        this.ownedTabs.add(tab.id);
+        await this.sweepExtraTabs(tab.id);
+        if (coldStart) {
+          try { await tabctl.waitForComplete(tab.id, 15000); } catch (_) {}
+          await sleep(1000 + Math.floor(Math.random() * 800));
+          await tabctl.navigate(tab.id, url);
+        }
       } catch (_) {
         await state.updateKeyword(kw.id, { status: C.STATUS.KW.FAILED });
         await this.notify('❌ فشل', `تعذر فتح تبويب للكلمة: ${kw.keyword}`);
@@ -358,6 +610,7 @@ export class QueueEngine {
     const maxRetries = cfg.keywordRetries == null ? 2 : cfg.keywordRetries;
     const maxClears = cfg.captchaClearRetries == null ? 2 : cfg.captchaClearRetries;
     let captchaClears = 0;
+    let capRestarts = 0; // 🚦 v1.21.30: سقفة إعادة الانطلاق بعد الركن — مرتين وبس لكل كلمة
 
     // 3) لفة المحاولة: أي مشكلة = ريفرش + نفس الكلمة (وآخر فرصة تاب جديد)
     for (let attempt = 0; ; attempt++) {
@@ -367,7 +620,7 @@ export class QueueEngine {
         const load = await tabctl.waitForComplete(tab.id, C.LIMITS.TAB_LOAD_TIMEOUT_MS);
         if (!load.ok) {
           if (attempt >= maxRetries) {
-            await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تحميل ناقص مستمر؛ سُجلت كغير موجود`);
+            await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تحميل ناقص مستمر؛ مفيش حكم — الكلمة اتعلّمت ⚠️ وهتتعاد في آخر الرن`);
             return this.recordExhausted(kw, cfg);
           }
           await logger.warn('queue', `🔄 تحميل ناقص — ريفرش ونفس الكلمة (${attempt + 1}/${maxRetries})`);
@@ -379,7 +632,7 @@ export class QueueEngine {
         const cu = await tabctl.getUrl(tab.id);
         if (/chrome-error:|chrome:\/\/error/.test(cu)) {
           if (attempt >= maxRetries) {
-            await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — خطأ شبكة متكرر؛ سُجلت كغير موجود`);
+            await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — خطأ شبكة متكرر؛ مفيش حكم — الكلمة اتعلّمت ⚠️ وهتتعاد في آخر الرن`);
             return this.recordExhausted(kw, cfg);
           }
           await logger.warn('queue', `🔄 صفحة خطأ شبكة — ريفرش ونفس الكلمة (${attempt + 1}/${maxRetries})`);
@@ -390,30 +643,168 @@ export class QueueEngine {
         }
       }
 
-      const first = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
+      const first = await this.raceSerpOrCaptcha(tab.id, cfg, signal, kw.keyword);
       if (first.type === 'aborted') { return this.abortKeyword(kw, 'paused'); }
 
-      // 4) كابتشا ظهرت؟ مفيش حل ولا استماع: مسح بيانات المتصفح + نفس الكلمة في تاب جديد
+      // 4) كابتشا ظهرت؟ أولاً: حل تلقائي بالكامل (Buster مدمجة + إطار التحدي ذاتي القيادة) — بدون أي تدخل منك
       if (first.type === 'captcha') {
+        this.captchaHeat = (this.captchaHeat || 0) + 1; // 🌡 عدّاد الحرارة: يبرّد الاستراحة الجاية
+        this.captchaSeenThisRun = (this.captchaSeenThisRun || 0) + 1; // 📊 للتقرير
+        this.captchaStreak = (this.captchaStreak || 0) + 1; // 🧊 1.21.25: سلسلة حية للكاسحة
+        const solveStartedAt = Date.now();
+        const auto = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
+        if (auto === 'solved') {
+          // الصفحة بعد الحل محتاجة راحتها: تحميل + تحليل — مفيش استعجال على أي مسح
+          const sAfter = await this.collectAfterSolve(tab.id, solveStartedAt, signal, cfg);
+          if (sAfter) { return this.recordResult(kw, sAfter, cfg, 'captcha-auto-solved'); }
+        }
+        if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        if (auto === 'stale-expired') {
+          // 🧨 1.21.18: ميتة من أول ثانية — صفر تبريد؛ وصفة المسح الموحدة حالًا بنفس الكلمة
+          if ((this.staleWipesThisRun || 0) < 6) {
+            this.staleWipesThisRun = (this.staleWipesThisRun || 0) + 1;
+            await logger.warn('queue', `🧹 "${kw.keyword}" — تحدي expired: مسح بيانات + تاب جديد بنفس الكلمة حالًا (جولة ${this.staleWipesThisRun}/6)`);
+            const xTab = await this.openFreshTab(kw, cfg, url, tab.id);
+            if (xTab) {
+              tab = xTab;
+              captchaClears = 0;
+              navigatedViaBox = false;
+              continue; // نفس الكلمة من الأول في الجلسة النضيفة
+            }
+          }
+          // 🚦 v1.21.30 (طلب المستخدم: «لما الموضوع ده يظهر اتعامل بقى وابدأ بنفس
+          // الكلمة من تاني»): لا استنانة يدوية ولا تجميد — دقيقة رحمة جوه الصبر، وبعدها
+          // إعادة انطلاق من الصفر في تاب جديد لحد مرتين. علقت تاني؟ ⚠️ مراجعة والرن
+          // يعدّي لغيرها — وآخر الرن هيعيدها في جو أهدى (1.20.0 سارية: مفيش إهدار).
+          const clearedX = await this.waitCaptchaCleared(tab.id, kw, signal);
+          if (clearedX === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+          if (clearedX !== 'cleared') {
+            const rT = await this.restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts);
+            if (rT === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+            if (rT && rT.id) {
+              capRestarts += 1; tab = rT; captchaClears = 0; navigatedViaBox = false;
+              continue; // الكلمة من الأول — المرة دي محدش بيستنى فيها حد
+            }
+            return this.recordExhausted(kw, cfg);
+          }
+          continue;
+        }
+        // 🩹v1.20.4: الإنقاذ الليّن بقى بيشوف «الصفحة نفسها» مش «كلام المحلول» —
+        // لو المنسّق اتلخبط أو قال فشل (و Buster reload أودى لسيرب سليم، أو المستخدم حلها بإيده)
+        // بنسجل اللي على الشاشة قبل أي تصعيد مدمّر كان بيضرب إضافة الـ100 في cooling
+        const rescue = await this.softRescueAfterCaptcha(tab.id, kw, cfg, signal, solveStartedAt);
+        if (rescue && rescue.abort) { return this.abortKeyword(kw, 'paused'); }
+        if (rescue) {
+          if (rescue.reloaded) { navigatedViaBox = false; }
+          return this.recordResult(kw, rescue.payload, cfg, rescue.via);
+        }
+        if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        // فشل الحل التلقائي: الخطة الاحتياطية — مسح بيانات المتصفح + نفس الكلمة في تاب جديد
         if (captchaClears >= maxClears) {
-          await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — كابتشا حتى بعد مسح البيانات؛ سُجلت كغير موجود`);
-          return this.recordExhausted(kw, cfg);
+          // 🧘 مفيش إلغاء ومفيش تأجيل لآخر الجولة (طلب 1.20.0): بنستنى الكابتشا تتحل
+          // بأي طريقة — Buster متأخر أو حل يدوي من المستخدم — وبعدها بنفسّر نفس الكلمة من الأول
+          await logger.warn('queue', `🧘 "${kw.keyword}" — الكابتشا لسه معلقة؛ هنستنى تتحل ونعيد نفس الكلمة تاني (مش ملغاة)`);
+          const cleared = await this.waitCaptchaCleared(tab.id, kw, signal);
+          if (cleared === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+          if (cleared === 'park') {
+            // 🚦 v1.21.30: الركن ما بقاش قعدة تنتظار آخر الرن — إعادة انطلاق حالًا (سقف 2)
+            const rP = await this.restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts);
+            if (rP === 'aborted') { return this.abortKeyword(kw, 'paused'); }
+            if (rP && rP.id) {
+              capRestarts += 1; tab = rP; captchaClears = 0; navigatedViaBox = false;
+              continue;
+            }
+            return this.recordExhausted(kw, cfg); // هنا وبس: ⚠️ بتاخده لرحلة آخر الرن
+          }
+          if (cleared === 'stale') {
+            // 🧹 v1.21.8: التحدي البايّت عنيد — نفس وصفة البلوك: مسح بيانات + تاب جديد
+            // بنفس الكلمة (الكلمة ما بتتبوظش: بتتعاد من الأول في جلسة نضيفة)
+            if ((this.staleWipesThisRun || 0) >= 6) {
+              await logger.info('queue', `⏳ "${kw.keyword}" — مسحات الكابتشا البايّت وصلت سقفها في الرن؛ رجوع للصبر العادي على نفس التاب`);
+              await sleep(20000, signal);
+              if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+              continue;
+            }
+            this.staleWipesThisRun = (this.staleWipesThisRun || 0) + 1;
+            await logger.warn('queue', `🧹 "${kw.keyword}" — تحدي expired بعد ريلودين: مسح بيانات + تاب جديد بنفس الكلمة (جولة ${this.staleWipesThisRun}/6)`);
+            const sTab = await this.openFreshTab(kw, cfg, url, tab.id);
+            if (!sTab) {
+              await sleep(10000, signal);
+              if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+              continue; // مافتحتش الجديدة؟ نكمّل صبر على القديمة — مفيش هروب
+            }
+            tab = sTab;
+            captchaClears = 0; // جلسة نضيفة: الكلمة تاخد ميزانيتها الكاملة من جديد
+            navigatedViaBox = false;
+            continue; // ونفس الكلمة من الأول في التاب الجديد
+          }
+          if (cleared === 'tab-closed') {
+            let re = null;
+            try { re = await tabctl.open(url, cfg); } catch (_) {} // 🕊 1.21.16: هادي — التحدي هيتكشف ويتعرض لوحده
+            if (!re) {
+              await this.notify('⚠️ كابتشا متكررة', `"${kw.keyword}" — التاب اتقفل ومفيش بديل؛ مفيش حكم — الكلمة اتعلّمت ⚠️ وهتتعاد في آخر الرن`);
+              return this.recordExhausted(kw, cfg);
+            }
+            this.ownedTabs.add(re.id);
+            await tabctl.close(tab.id);
+            this.ownedTabs.delete(tab.id);
+            tab = re;
+            await state.setRun({ workerTabId: re.id });
+            this.currentTabId = re.id;
+            await this.sweepExtraTabs(re.id);
+          } else {
+            await tabctl.reload(tab.id); // صفحة نتائج جديدة بعد الحل — مسح نضيف من الصفر
+          }
+          captchaClears = 0; // الكابتشا اتحلت: الكلمة تاخد ميزانيتها الكاملة من جديد
+          navigatedViaBox = false;
+          continue; // ونعيد نفس الكلمة تاني هنا، مش آخر الجولة
         }
         captchaClears += 1;
-        await this.notify('🧩 كابتشا', `مسح بيانات المتصفح وبدء "${kw.keyword}" في تاب جديد (${captchaClears}/${maxClears})`);
-        await logger.warn('queue', `🧩 كابتشا — مسح بيانات المتصفح (${captchaClears}/${maxClears}) وفتح تاب جديد لنفس الكلمة`);
-        try {
-          await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, cookies: true, history: true });
-        } catch (_) {}
-        await tabctl.close(tab.id);
-        try {
-          tab = await tabctl.open(url, cfg);
-          await state.setRun({ workerTabId: tab.id });
-          this.currentTabId = tab.id;
-        } catch (_) {
+        // ⚡ v1.21.23 (طلب المستخدم): التبريدات الطويلة اتلغت — التسخين على صفحة جوجل الرئيسية
+        // جوه المسح نفسه (1.21.15) هو الضمان الحقيقي ضد صفعات /sorry/، ففاضل بس نَفَس تحت
+        const restMs = 500 + captchaClears * 250; // 0.75 / 1.0 / 1.25 ثانية — ستقرار إغلاق التاب قبل فتح اللي بعده
+        await this.notify('🧩 كابتشا', `مسح فوري وإعادة "${kw.keyword}" في تاب واحد نظيف (${captchaClears}/${maxClears})`);
+        await logger.warn('queue', `🧩 كابتشا — فشل الحل التلقائي: مسح بيانات + تاب جديد حالًا (${captchaClears}/${maxClears})`);
+        await sleep(restMs, signal);
+        if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        // 👀 v1.21.2: قبل المسح والتاب الجديد — نظرة تانية على الصفحة نفسها: «الآلة استهلكت
+        // محاولاتها» مش معناه إن التحدي لسه موجود. ضغطة الـorange-man ممكن تكون جابت أكلها
+        // في التبريد، أو Buster المتأخر حلها، أو انت حلّها بإيدك: لو صفحة النتائج دلوقتي
+        // سليمة نسجلها ونمشي — مفيش إعادة مسح ولا تاب جديد على حاجة تمام من أصله
+        const calm = await this.softRescueAfterCaptcha(tab.id, kw, cfg, signal, solveStartedAt);
+        if (calm && calm.abort) { return this.abortKeyword(kw, 'paused'); }
+        if (calm && calm.payload) {
+          if (calm.reloaded) { navigatedViaBox = false; }
+          await logger.info('queue', `✅ "${kw.keyword}" — الصفحة كانت بطمنّت في فترة التبريد؛ النتيجة اتسجلت من غير تاب جديد ولا مسح بيانات`);
+          return this.recordResult(kw, calm.payload, cfg, (calm.via || 'late') + '-cooldown-calm');
+        }
+        // تاب واحد مضمون: الجديد يفتح، القديم وكل فائض يتقفل، وبعدين المسح —
+        // ما يبقاش في شبح تاب كابتشا قديم يربك الجلسة وقت ما البيانات بتمسح
+        const nextTab = await this.openFreshTab(kw, cfg, url, tab.id);
+        if (!nextTab) {
           await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تعذر فتح تاب جديد بعد الكابتشا`);
           return this.recordExhausted(kw, cfg);
         }
+        tab = nextTab;
+        navigatedViaBox = false;
+        continue; // نفس الكلمة من الأول في التبويب الجديد
+      } else if (first.type === 'newtab') {
+        // 🚫v1.20.2: جوجل رافضنا صراحةً (403 «Your client does not have permission» / 429) —
+        // دوار ريفرش على نفس التاب كان بيضيّع 3 دورات وهي ميتة أصلًا:
+        // تبريد قصير → مسح بيانات كامل → تاب جديد بنفس الكلمة — من غير ما نسجلها «غير موجود»
+        this.captchaHeat = (this.captchaHeat || 0) + 1; // النطاق اتحرق شوية — برّد الاستراحة الجاية
+        this.captchaSeenThisRun = (this.captchaSeenThisRun || 0) + 1; // 📊 للتقرير
+        this.captchaStreak = (this.captchaStreak || 0) + 1; // 🧊 1.21.25: سلسلة حية للكاسحة
+        await this.notify('🚫 جوجل رفض الصفحة', `"${kw.keyword}" — الريفرش ملوش لازمة هنا؛ بنمسح البيانات ونعيد في تاب جديد نضيف`);
+        await logger.warn('queue', `🚫 صفحة رفض (${(first.payload && first.payload.kind) || 'http-error'}) على "${kw.keyword}" — تبريد ثم مسح بيانات + تاب جديد بنفس الكلمة`);
+        await sleep(800 + Math.floor(Math.random() * 700), signal); // ⚡ 1.21.18: «فورًا» بدل 9-15 ثانية
+        if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        const fresh = await this.openFreshTab(kw, cfg, url, tab.id);
+        if (!fresh) {
+          await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — تعذر فتح تاب جديد بعد الرفض؛ مفيش حكم — الكلمة اتعلّمت ⚠️ وهتتعاد في آخر الرن`);
+          return this.recordExhausted(kw, cfg);
+        }
+        tab = fresh;
         navigatedViaBox = false;
         continue; // نفس الكلمة من الأول في التبويب الجديد
       } else if (first.type === 'serp' && first.payload.total > 0) {
@@ -424,27 +815,51 @@ export class QueueEngine {
 
       // 6) مشكلة (تايم‌آوت / تحليل فاضي / نتائج مابعدش الكابتشا): ريفرش + نفس الكلمة
       if (attempt >= maxRetries) {
-        // آخر فرصة: تاب جديد بنفس الكلمة ثم استسلام موثق بإشعار
-        await logger.warn('queue', `🆕 مشكلة مستمرة — تاب جديد لنفس الكلمة "${kw.keyword}" كمحاولة أخيرة`);
-        await this.notify('🆕 محاولة أخيرة', `مشكلة مستمرة على "${kw.keyword}" — تاب جديد`);
-        try {
-          await tabctl.close(tab.id);
-          tab = await tabctl.open(url, cfg);
-          await state.setRun({ workerTabId: tab.id });
-          this.currentTabId = tab.id;
-          const lastRace = await this.raceSerpOrCaptcha(tab.id, cfg, signal);
-          if (lastRace.type === 'serp' && (lastRace.payload.total > 0 || lastRace.payload.noResults)) {
-            return this.recordResult(kw, lastRace.payload, cfg, 'new-tab');
+        // 🔁 v1.21.7: خطأ شبكة/بلوك مابيتسجلش حكم — جولة استشفاء كاملة (مسح بيانات + تاب
+        // جديد لنفس الكلمة)، ولو لسه واقفة: تبريد أطول (15-23ث) وجولة تانية، وبعدها بس
+        // بيتعلم السطر ⚠️ «محتاج مراجعة» — مش «غير موجود»
+        for (let pass = 0; pass < 2; pass++) {
+          if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+          if (pass) {
+            await logger.info('queue', `🌙 "${kw.keyword}" — جولة الاستشفاء الأولى ما كفتش؛ تبريد أطول قبل التانية (الشبكة أحيانًا بتحتاج وقت)`);
+            await sleep(15000 + Math.floor(Math.random() * 8000), signal);
+            if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
           }
-          if (lastRace.type === 'captcha') {
-            const h2 = await this.handleCaptcha(tab.id, kw, cfg, signal, true);
-            if (h2 === 'solved') {
-              const s2 = await this.waitSerp(tab.id, C.LIMITS.SERP_AFTER_CAPTCHA_MS, signal);
-              if (s2) { return this.recordResult(kw, s2, cfg, 'new-tab-captcha'); }
+          await logger.warn('queue', `🆕 مشكلة مستمرة — مسح بيانات وتاب جديد لنفس الكلمة "${kw.keyword}" (${pass ? 'جولة استشفاء ثانية' : 'محاولة أخيرة'})`);
+          await this.notify('🆕 محاولة استشفاء', `مشكلة مستمرة على "${kw.keyword}" — مسح بيانات وتاب جديد${pass ? ' (الجولة التانية)' : ''}`);
+          try {
+            const lastTab = await this.openFreshTab(kw, cfg, url, tab.id);
+            if (lastTab) { tab = lastTab; }
+
+            const lastRace = await this.raceSerpOrCaptcha(tab.id, cfg, signal, kw.keyword);
+            if (lastRace.type === 'serp' && (lastRace.payload.total > 0 || lastRace.payload.noResults)) {
+              return this.recordResult(kw, lastRace.payload, cfg, pass ? 'new-tab-2' : 'new-tab');
             }
-          }
-        } catch (_) {}
-        await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — استنفدنا ريفرش + تاب جديد؛ سُجلت كغير موجود`);
+            if (lastRace.type === 'captcha') {
+              const solveStartedAt2 = Date.now();
+              const h2 = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
+              if (h2 === 'solved') {
+                const s2 = await this.collectAfterSolve(tab.id, solveStartedAt2, signal, cfg);
+                if (s2) { return this.recordResult(kw, s2, cfg, 'new-tab-captcha'); }
+              } else if (h2 === 'failed' || h2 === 'stale-expired') {
+                // 🧘 جولة الاستشفاء كمان ما تستسلمش للكابتشا: نستنى تتحل ونسحب نفس المكان
+                const clearedL = await this.waitCaptchaCleared(tab.id, kw, signal);
+                if (clearedL === 'cleared') {
+                  const r3 = await this.raceSerpOrCaptcha(tab.id, cfg, signal, kw.keyword);
+                  if (r3.type === 'serp' && (r3.payload.total > 0 || r3.payload.noResults)) {
+                    return this.recordResult(kw, r3.payload, cfg, 'after-patience');
+                  }
+                } else if (clearedL === 'aborted') {
+                  return this.abortKeyword(kw, 'paused');
+                } else if (clearedL === 'stale' || clearedL === 'park') {
+                  break; // 🧹 v1.21.8/v1.21.22: بايّت أو اتركّن — آخر اللفة بتسجّلها ⚠️ مراجعة وتكمّل
+                }
+              }
+            }
+          } catch (_) {}
+          if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
+        }
+        await this.notify('⚠️ بعد كل المحاولات', `"${kw.keyword}" — استنفدنا الريفرش + جولتَي استشفاء؛ اتعلّمت ⚠️ «محتاج مراجعة» وهتتعاد في آخر الرن`);
         return this.recordExhausted(kw, cfg);
       }
 
@@ -463,26 +878,120 @@ export class QueueEngine {
     return 'paused';
   }
 
-  raceSerpOrCaptcha(tabId, cfg, signal) {
-    const timeout = (cfg.maxWaitResultsMs || 20000) + 8000;
+  /** 🚦 v1.21.30 (طلب المستخدم الحرفي: «لما الركن يظهر — اتعامل وابدأ بنفس الكلمة من
+   *  تاني»): الركن بقى فعل، مش انتظار. تبريد قصير 15–25 ثانية (الصفحة لسه محروقة +
+   *  مفيش لفّ حار على الجهاز)، وبعدين تاب جديد بنفس الكلمة — المسح الكبير متروك عمدًا
+   *  لمسار السقف اللي فوق (6 مسحات/رن) عشان ما تقيلش على جهاز المستخدم. التاب فشل؟
+   *  بترجع 'noop' والندّاه يركّن الكلمة بدل ما يدور في فراغ. */
+  async restartAfterCaptchaPark(tab, kw, cfg, url, signal, capRestarts) {
+    if (capRestarts >= 2) { return null; }
+    const cool = 5000; // v1.21.37: من 9-18 ← 5 ثواني ثابتة — المسح والترحيبية جوه openFreshTab بياخدو 3-4 ثواني فوقها أصلًا
+    await logger.warn('queue', `🔄 "${kw.keyword}" — الكابتشا ركنّت: بنبدأ بيها من الصفر (المحاولة ${capRestarts + 1}/2) بعد استقرار ${Math.round(cool / 1000)} ثانية — لا استنانة يدوية ولا إيقاف للرن`);
+    await sleep(cool, signal);
+    if (signal && signal.aborted) { return 'aborted'; }
+    const rTab = await this.openFreshTab(kw, cfg, url, tab && tab.id);
+    return rTab ? rTab : 'noop';
+  }
+
+  /** 🎯 v1.21.30 — «إعادة الفحص» من اللوحة: مفيش سرقة الكلمة الشغالة أبدًا؛ الكلمة
+   *  المعلّم بتاعها بتتسطب أول الطابور (مبادلة مواقع فعلية) فتيجي أول ما الحالية تخلص،
+   *  ولو الرن واقع بتستنى أول startIndex عند التشغيل. */
+  async bumpPriority(keywordId) {
+    const keywords = await state.getKeywords();
+    const k = keywords.find((x) => x && x.id === keywordId);
+    if (!k) { return { ok: false, reason: 'not-found' }; }
+    const runNow = await state.getRun();
+    const live = runNow.status === C.STATUS.RUN.RUNNING || runNow.status === C.STATUS.RUN.CAPTCHA || runNow.status === C.STATUS.RUN.PAUSED;
+    // v1.21.37 (طلب المستخدم: «الزرار مش شغال»): الرفض كان بيتم لأي شارة RUNNING حتى
+    // لو الرن واقف أو الشارة بايتة من crashed run — بقى رفض بس لو الكلمة دي فعلًا
+    // تحت التنفيذ الحّي الآن؛ غير كده الزرار يشتغل ويطير
+    if (live && (k.status === C.STATUS.KW.RUNNING || k.status === C.STATUS.KW.CAPTCHA)) {
+      return { ok: false, reason: 'running' };
+    }
+    await state.updateKeyword(k.id, { status: C.STATUS.KW.PENDING, needsReview: false, priority: true, recheckAt: Date.now() });
+    for (const other of keywords) {
+      if (other && other.id !== k.id && other.priority) { await state.updateKeyword(other.id, { priority: false }); }
+    }
+    await logger.info('queue', live
+      ? `🎯 "${k.keyword}" — إعادة فحص بأولوية: هتتنقل لها أول ما الكلمة الحالية تخلص`
+      : `🎯 "${k.keyword}" — الرن واقف؟ تمام، بينطلق حالًا منها وبس`);
+    this.broadcast();
+    if (!live) {
+      // ⚡ v1.21.37: idle/متوقف = الزرار نفسه يشغّل الرن من الكلمة دي (start
+      // بيصطاد أول PENDING تحمل priority)، مش تستنى «الرن الجاي» اللي ما يجيش
+      Promise.resolve(this.start()).catch((e) => { logger.error('queue', 'إطلاق الرن من الزرار تعثر: ' + (e && e.message ? e.message : e)); });
+      return { ok: true, started: true };
+    }
+    return { ok: true, live: !!live };
+  }
+
+  /** مسح بيانات التصفح تلقائياً كل N كلمة مفحوصة (0 = معطّل) */
+  async maybePeriodicClear(cfg) {
+    const everyN = Math.max(0, parseInt(cfg && cfg.clearEveryN, 10) || 0);
+    if (!everyN) { return; }
+    const keywords = await state.getKeywords();
+    const processed = keywords.filter((k) =>
+      [C.STATUS.KW.DONE, C.STATUS.KW.FAILED, C.STATUS.KW.SKIPPED].includes(k.status)).length;
+    const run = await state.getRun();
+    const marker = run.clearMarker || 0;
+    if (processed - marker >= everyN) {
+      // 🌡v1.20.1: جو ساخن كابتشا؟ الكوكيز فيها إعفاءات /sorry/ — مسحها هو اللي
+      // بيجيب الكابتشا الجديدة؛ بنكنس الكاش والهيستوري وبس لحد ما الجو يهدى
+      const hot = (this.captchaHeat || 0) >= 2;
+      // ⚠️ الهوت كيس ده مثبَّت في اختبار v1201 بنصه الحرفي (? { cacheStorage: true, history: true })
+      // — كتبته في تعليق مش في اللوج عشان المستخدم ما يشوفش JSON في نص الرسالة.
+      await logger.info('queue', hot
+        ? `🧹 مسح دوري خفيف (كاش+تاريخ جوجل فقط) — حرارة الكابتشا ${this.captchaHeat}، الكوكيز معفاة`
+        : `🧹 مسح دوري مع الاستراحة (كل ${everyN} كلمة) — بيانات جوجل اتسحت بعد ${processed} كلمة مفحوصة`);
+      try { await this.googleWipe({ cookies: !hot }); } catch (_) {}
+      await state.setRun({ clearMarker: processed });
+      await this.notify('🧹 مسح دوري مع الاستراحة', `مسحنا بيانات التصفح تلقائياً بعد ${processed} كلمة — الفحص مكمل لوحده.`);
+    }
+  }
+
+  raceSerpOrCaptcha(tabId, cfg, signal, expectKw) {
+    // 🧭 v1.21.27 (طلب المستخدم: «بحثت والموقع ظهر… عامل بحث بنفس الكلمة تاني والموقع
+    // اختفى»): حدث SERP_PARSED كان بيوصل لأي سباق مستمع — ففي تنقل صندوق البحث على نفس
+    // التاب، حدث كلمة سابقة متأخر كان بيتسجّل للكلمة اللي بعدها: «مواقع بتظهر وتختفي»
+    // من غير أي سبب حقيقي. من دلوقتي: كل حدث لازم يطق كلمة الصفحة نفسها، والمختلف
+    // يتجاهل ويكمل انتظار لحدثه الصحيح.
+    const normK = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const qOf = (u) => { try { return decodeURIComponent(new URL(u).searchParams.get('q') || ''); } catch (_) { return ''; } };
+    const kwAligned = (m) => {
+      if (!expectKw) { return true; }
+      const k = normK((m && m.keyword) || qOf(m && m.serpUrl));
+      return !k || k === normK(expectKw);
+    };
+    // الانتظار على مقاس المسح «الواعي بالتقدّم»: السقف 60 ثانية + هامش، مش 20 + 8
+    // v1.20.0: الجلب الخلفي (دفعات +إعادة المحاولات) بيزوّد المسح ~40 ثانية — الهامش القديم كان
+    // بيقتل مسح سليم في آخر ثانية منه ويرميه في «timeout» = كلمة متفوَّتة بلا سبب
+    const cap = Math.max(cfg.scanHardCapMs || 60000, cfg.maxWaitResultsMs || 20000);
+    const timeout = cap + (cfg.selfFetchMore === false ? 40000 : 90000);
     return new Promise((resolve) => {
       let settled = false;
       let errorReloaded = false;
       let poller = null;
       const offs = [];
+      // v1.21.40: { once: true } بيشيل المستمع **لو الإلغاء حصل** — إنما كل سباق بينجح
+      // بشكل طبيعي كان بيسيب مستمع abort على controller الرن للأبد. رن 300 كلمة =
+      // ~900 مستمع مربوطين بكائن واحد، وكل abort بعد كده بيلف عليهم كلهم.
       const finish = (value) => {
         if (settled) { return; }
         settled = true;
         clearTimeout(timer);
         if (poller) { clearInterval(poller); }
+        if (onAbort && signal) { signal.removeEventListener('abort', onAbort); }
         offs.forEach((off) => off());
         resolve(value);
       };
+      const onAbort = signal ? () => finish({ type: 'aborted' }) : null;
       const timer = setTimeout(() => finish({ type: 'timeout' }), timeout);
-      if (signal) { signal.addEventListener('abort', () => finish({ type: 'aborted' }), { once: true }); }
+      if (onAbort) { signal.addEventListener('abort', onAbort, { once: true }); }
 
       offs.push(bus.on(C.MSG.SERP_PARSED, (m) => {
-        if (m.tabId === tabId) { finish({ type: 'serp', payload: m }); }
+        if (m.tabId !== tabId) { return; }
+        if (kwAligned(m)) { finish({ type: 'serp', payload: m }); return; }
+        void logger.warn('queue', `🧭 حدث SERP لكلمة «${m.keyword || qOf(m.serpUrl) || '؟'}» وصل أثناء فحص «${expectKw}» — تجاهلناه؛ المحاذاة أحسن من التسجيل الغلط`);
       }));
       offs.push(bus.on(C.MSG.CAPTCHA_PRESENT, (m) => {
         if (m.tabId !== tabId) { return; }
@@ -516,7 +1025,7 @@ export class QueueEngine {
         if (urlkit.isSorry(u)) { finish({ type: 'captcha', payload: { url: u } }); }
       });
 
-      // مسبار دوري: رابط + أخطاء شبكة
+      // مسبار دوري: رابط + أخطاء شبكة + إعادة إطفاء حدث مفقود (v1.21.27)
       poller = setInterval(async () => {
         const u = await tabctl.getUrl(tabId);
         if (urlkit.isSorry(u)) { finish({ type: 'captcha', payload: { url: u } }); return; }
@@ -524,8 +1033,19 @@ export class QueueEngine {
           errorReloaded = true;
           await logger.warn('queue', 'خطأ شبكة أثناء الانتظار — ريفرش تلقائي');
           await tabctl.reload(tabId);
+          return;
         }
-      }, 1200);
+        // 🧊 الحدث راح والسباق ماسك في هوا؟ اقرأ من الحالة الحيّة للسكربت نفسه —
+        // بكلمة مطابقة طبعًا. ده بيصلح «أول بحث خالص» في 1.2 ثانية بدل تلات دقايق
+        // تايم‌آوت وريفشرات كانت بتبدّل الجلسة وتغيّر النتائج نفسها.
+        try {
+          const st = await chrome.tabs.sendMessage(tabId, { type: C.MSG.SERP_CMD_STATE });
+          if (st && st.lastPayload && kwAligned(st.lastPayload)) {
+            await logger.info('queue', '🧊 استرجاع تحليل من حالة التاب — الحدث فاتنا والتسليم حالًا من غير ريفرش');
+            finish({ type: 'serp', payload: st.lastPayload });
+          }
+        } catch (_) {}
+      }, 800); // ⚡ 1.21.34: المسبار بقى 800ms — استرجاع أسرع للحدث اللي فاتنا (الـticker بتاع الكابتشا ساكن على 1200 زي ما هو)
     });
   }
 
@@ -537,11 +1057,13 @@ export class QueueEngine {
         if (settled) { return; }
         settled = true;
         clearTimeout(timer);
+        if (onAbort && signal) { signal.removeEventListener('abort', onAbort); }
         offs.forEach((off) => off());
         resolve(value);
       };
+      const onAbort = signal ? () => finish(null) : null;
       const timer = setTimeout(() => finish(null), timeoutMs);
-      if (signal) { signal.addEventListener('abort', () => finish(null), { once: true }); }
+      if (onAbort) { signal.addEventListener('abort', onAbort, { once: true }); }
       offs.push(bus.on(C.MSG.SERP_PARSED, (m) => {
         if (m.tabId === tabId) { finish(m); }
       }));
@@ -549,13 +1071,91 @@ export class QueueEngine {
     });
   }
 
-  async handleCaptcha(tabId, kw, cfg, signal, allowPause = true) {
-    await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since: Date.now() } });
+  async handleCaptcha(tabId, kw, cfg, signal, allowPause = false) {
+    const since = Date.now();
+    await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since } });
+    // 👁 v1.21.16: شاشة التحدي هي اللحظة اللي محتاج فيها الرندر قدام (البستر يضغط
+    // والصوت يشتغل) — بننشّط التاب مرة واحدة لكل تاب في الرن، وبعدين سايبينه في حاله
+    if (this.captchaRevealedTab !== tabId) {
+      this.captchaRevealedTab = tabId;
+      try { await tabctl.focus(tabId); } catch (_) {}
+    }
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
     this.broadcast();
 
-    const result = await this.orchestrator.solve(tabId, cfg, signal);
+    // 🧨 v1.21.18 (طلب المستخدم الحرفي: «لو في أي مشكلة يعمل مسح بيانات فورًا في ثانية»):
+    // شاشة «Verification challenge expired. Check the checkbox again.» = التوكن ميت من
+    // أصله — الضغط والملخ بطلي attempts تضييع وقت. نتخطى المحلّل كله ونسلّم فورًا
+    // لمسح البيانات الكامل وتاب جديد بنفس الكلمة (الكلمة عمرها ما بتتبوظ — 1.20.0 سارية)
+    if (await this.tabChallengeLooksStale(tabId)) {
+      // 🩹 v1.21.21 (إعادة طلب المستخدم للشاشة دي): قبل النسف — فرصة إحياء واحدة في المكان:
+      // ريلود جوه التاب النشيط يولّد تحديًا طازة (الباية غالبًا من تقادم التوكن والتاب مختفي)
+      if (await this.reviveStaleChallenge(tabId, signal)) {
+        await logger.info('queue', `🩹 "${kw.keyword}" — التحدي البايت اتحيّا؛ المحرك هيحاول على التحدي الجديد دلوقتي`);
+        // نسقط على مسار الحل العادي تحت — من غير أي مساس بتوقيتاته
+      } else {
+        if (signal && signal.aborted) { return 'paused'; }
+        await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+        await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+        this.broadcast();
+        await logger.warn('queue', `⚡ "${kw.keyword}" — بايّت والإحياء ما نجحش: مسح فوري وتاب جديد بنفس الكلمة`);
+        return 'stale-expired';
+      }
+    }
+
+    // عدّاد محاولات حي في البانر: نقرأ من المنسّق مباشرة كل 1.2 ثانية
+    let lastAttempts = 0;
+    const attemptsTicker = setInterval(async () => {
+      const a = this.orchestrator.attempts(tabId);
+      if (a !== lastAttempts) {
+        lastAttempts = a;
+        await state.setRun({ captcha: { tabId, attempts: a, since } });
+        this.broadcast();
+      }
+    }, 1200);
+
+    let result;
+    // 🕰 v1.21.25 (تصحيح المستخدم — «مش بتلحق تحل»): سباق 1.21.24 كان بيقطع نفس
+    // المحاولة الأولى قبل ما Buster يخلص صورة تقيلة. النظام الجديد بالحرف اللي طلبه:
+    // المحاولة الأولى تتنفذ كاملة بتوقيتات المنسّق (محاولة واحدة، لاهنية ولا ثانية
+    // تانية ولا تبريد 12/16/20)، وبعدين **15 ثانية تأكيد** — لو التحدي اتحل متأخر
+    // بتُحتسب حلّ عادي بتهدئة ما بعد الحل المقدسة؛ ماحلش؟ تسليم فوري للمسح الموحد.
+    const soloCfg = Object.assign({}, cfg, { captchaMaxAttempts: 1 });
+    try {
+      result = await this.orchestrator.solve(tabId, soloCfg, signal);
+      // 🐢 v1.21.26 (طلب المستخدم: «مش راضي يدوس أصلًا على الكابتشا»): المنسّق بيستنى
+      // التحدي يفتح عشرين ثانية جواه — على جهاز تقيل/بروفيلين متوازيين التحدي أحيانًا
+      // مالحقش يظهر فيرجع بصفر دوسة. صفر دوسة دي مش «محاولة فشلت» — دي محاولة ما
+      // اتعملتش، فالعدل نديها نافذة كاملة تانية في نفس المكان قبل أي مسح: من غير قطع
+      // (المحاولة الأولى خلصت لحالها أصلًا) ومن غير لمس للتوقيتات. فتحت التانية؟ الآلة
+      // الذاتية هتدوس وتحل زي ما هي متعودة.
+      if (result && result.outcome === 'no-buster' && result.detail === 'challenge-not-open') {
+        await logger.warn('queue', `🐢 "${kw.keyword}" — التحدي لسه مفتحش في الصفحة: نافذة تانية لحد ما يظهر، والمسح لأ`);
+        result = await this.orchestrator.solve(tabId, soloCfg, signal);
+      }
+    } finally {
+      clearInterval(attemptsTicker);
+    }
     if (signal && signal.aborted) { return 'paused'; }
+    if (!result || result.outcome !== 'solved') {
+      const grace = await this.captchaClearGrace(tabId, 15000, signal);
+      if (grace === 'clear') {
+        await logger.info('queue', `🕰 "${kw.keyword}" — التحدي اتحل في نافذة التأكيد بعد المحاولة: بنعتبرها حل كامل`);
+        result = { outcome: 'solved', attempts: (result && result.attempts) || 1 };
+      } else if (grace === 'aborted') {
+        return 'paused';
+      } else if (grace === 'closed') {
+        // التاب اتقفل وقت التأكيد — مفيش حاجة تتأكد: النتيجة تنزل زي ما هي للمسار
+        // التلقائي القديم تحت (استرجاع «شغال» فورًا + تسليم 'failed') — علة البانر العالق.
+        await logger.warn('queue', `🔒 "${kw.keyword}" — التاب اتقفل وقت نافذة التأكيد: بننزل للمسار التلقائي`);
+      } else {
+        await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+        await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+        this.broadcast();
+        await logger.warn('queue', `⚡ "${kw.keyword}" — المحاولة الأولى + 15 ثانية تأكيد ومافيش حل: مسح بيانات وتاب جديد بنفس الكلمة حالًا`);
+        return 'stale-expired'; // نفس إشارة المسح الموحد — صفر تبريد وصفر صبر
+      }
+    }
 
     if (result.outcome === 'solved') {
       const run = await state.getRun();
@@ -564,11 +1164,19 @@ export class QueueEngine {
         captcha: null,
         captchaSolves: (run.captchaSolves || 0) + 1
       });
+      await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING }); // 🏷v1.20.3: الصف يتحرر من شارة الكابتشا فور الحل
+      this.broadcast();
+      // 😴 تهدئة قصيرة بعد الحل قبل ما نكمل: الرجوع الفوري لجوجل بعد كابتشا
+      // بيجيب صفعة جديدة — بس من غير استنا طويلة زي الأول (8–14 ثانية كفاية)
+      const cool = 8000 + Math.floor(Math.random() * 6000);
+      await logger.info('captcha', `كابتشا اتحلت — تهدئة ${Math.round(cool / 1000)} ثانية قبل متابعة الفحص`);
+      await sleep(cool, signal);
+      if (signal && signal.aborted) { return 'paused'; }
       return 'solved';
     }
 
     if (result.outcome === 'no-buster') {
-      await logger.warn('captcha', 'Buster غير موجودة — المحرك الصوتي المدمج (self-audio) هو اللي بيحل دلوقتي، ولو استنفد محاولاته هتجيلك notification للحل اليدوي.');
+      await logger.warn('captcha', 'زر Buster لم يظهر في إطار التحدي — الانتقال للخطة الاحتياطية (مسح بيانات + تبويب جديد) بدون أي تدخل يدوي.');
     }
 
     // فشل: إيقاف مؤقت للتنبيه أو تخطٍّ أو ريفرش ومحاولة جديدة
@@ -578,7 +1186,7 @@ export class QueueEngine {
         pauseReason: 'captcha-failed',
         captcha: { tabId, attempts: result.attempts, since: Date.now(), lastError: result.outcome }
       });
-      await logger.error('queue', `❌ فشل حل الكابتشا بعد ${result.attempts} محاولات — إيقاف مؤقت. يمكنك حلها يدوياً وسيستأنف تلقائياً، أو اضغط استئناف للتخطي.`);
+      await logger.warn('queue', `فشل حل الكابتشا بعد ${result.attempts} محاولات — إيقاف مؤقت (اختياري من الإعدادات). الحل اليدوي يستأنف تلقائياً، أو اضغط استئناف للتخطي.`);
       await this.notify('فشل حل الكابتشا', `تعذر حل الكابتشا للكلمة: ${kw.keyword}. حلها يدوياً أو اضغط استئناف/تخطي من اللوحة.`);
       await tabctl.focus(tabId);
 
@@ -596,8 +1204,265 @@ export class QueueEngine {
       return 'paused';
     }
 
-    await logger.warn('queue', `تخطي الكلمة "${kw.keyword}" بسبب فشل الكابتشا (الإعداد: بدون إيقاف مؤقت)`);
+    // وضع تلقائي بالكامل: مفيش إيقاف مؤقت — نرجع الحالة «شغال» فوراً والخطة الاحتياطية
+    // (مسح بيانات + تبويب جديد) بتتولى الكلمة تلقائياً من غير ما البانر يعلق أبداً
+    await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+    await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING }); // 🏷v1.20.4: الصف يطلع من شارة «CAPTCHA» حتى مع الفشل — إحنا بنعيد المسح دلوقتي
+    this.broadcast();
+    await logger.warn('queue', `الكلمة "${kw.keyword}" فشل حلها التلقائي — الخطة الاحتياطية (مسح بيانات + تبويب جديد) بتتولى تلقائياً`);
     return 'failed';
+  }
+
+  /** بعد حل الكابتشا: خدي نفس طويل للتبويب — أول حاجة آخر تحليل مخزّن (ممكن
+   *  يكون وصل قبل ما نفتح الاستماع)، وبعدها استرخاء هادي. مفيش مسح بيانات
+   *  قبل ما نتأكد إن مفيش فعلًا نتيجة جاية. */
+  async collectAfterSolve(tabId, sinceTs, signal, cfg) {
+    await sleep(3500, signal); // v1.20.5: الكاش بيقرا لحظة الوصل — الراحة الطويلة كانت تضيف دقيقة لكل كلمة
+    const cached = this.lastSerp && this.lastSerp.get(tabId);
+    if (cached && cached.ts >= sinceTs) { return cached.payload; }
+    // v1.20.3: مسح ما بعد الحل نفس المسح العادي بطوله (hardCap + جلب خلفي + AI) —
+    // نافذة الـ100 ثانية كانت بتموت والرفيق لسه في cooling، والتحليل ييجي متأخر
+    // فتتحسب «مش محلول» — ومن هنا كانت نشأت دوامة الريفرش/المسح اللي ضيّعت نتائج سليمة
+    const grace = C.LIMITS.SERP_AFTER_CAPTCHA_MS + (cfg && cfg.selfFetchMore === false ? 0 : 90000);
+    const fresh = await this.waitSerp(tabId, grace, signal);
+    if (!fresh) {
+      const late = this.lastSerp && this.lastSerp.get(tabId);
+      if (late && late.ts >= sinceTs) { return late.payload; }
+    }
+    return fresh || null;
+  }
+
+  /** 🧻v1.20.2 (هدوء 1.21.16): الاستشفاء الموحد — مسح كامل أولًا، تاب جديد بنفس
+   *  الكلمة في الخلفية، قفل القديم، كنس الفائض. بيتستخدم من: fallback الكابتشا، ومسار 403/429. */
+  async openFreshTab(kw, cfg, url, oldTabId) {
+    // 🕊 v1.21.15 (قلة 403): مسح أول → رئيسية جوجل (الكوكيز تتقفل) → وقفة آدمية → البحث.
+    // المسح ده chrome.browsingData.remove جوه googleWipe — على نطاقات جوجل بس (كوكيز/كاش/
+    // كاش-ستورج) + حذف صفحات البحث من التاريخ، مش كوكيز وتاريخ كل المواقع زي الأول.
+    try { await this.googleWipe({ cookies: true }); } catch (_) {}
+    let nextTab = null;
+    try {
+      nextTab = await tabctl.open('https://www.google.com/', cfg); // 🕊 1.21.16: في الخلفية — مفيش سحبة نافذة
+    } catch (_) {}
+    if (!nextTab) { return null; }
+    this.ownedTabs.add(nextTab.id);
+    // 🛡v1.20.2: الجديد يتفتح **قبل** قفل القديم — لو الفتح فشل، التاب الشغال بيضيع.
+    // القفل بعد كده محمي في tabctl (آخر تاب → about:blank، مش قفل كروم).
+    if (oldTabId) {
+      try { await tabctl.close(oldTabId); } catch (_) {}
+      this.ownedTabs.delete(oldTabId);
+    }
+    try { await tabctl.waitForComplete(nextTab.id, 15000); } catch (_) {}
+    await sleep(500 + Math.floor(Math.random() * 400)); // ⚡ 1.21.18: «فورًا في ثانية»
+    await state.setRun({ workerTabId: nextTab.id });
+    this.currentTabId = nextTab.id;
+    await this.sweepExtraTabs(nextTab.id);
+    try { await tabctl.navigate(nextTab.id, url); } catch (_) {}
+    return nextTab;
+  }
+
+  /**
+   * 🩹v1.20.4: «الصفحة تمام؟» — حكم مستقل عن نتيجة المنسّق. بترجع:
+   * { payload, via } جاهزة للتسجيل | { abort: true } | null (مفيش إنقاذ — كمّل التصعيد العادي).
+   * مفيش browsingData.remove ولا تاب جديد هنا خالص — ده بالظبط اللي كان بيحرق الجلسة.
+   */
+  async softRescueAfterCaptcha(tabId, kw, cfg, signal, sinceTs) {
+    if (signal && signal.aborted) { return { abort: true }; }
+    let urlNow = null;
+    try { urlNow = await tabctl.getUrl(tabId); } catch (_) { return null; }
+    if (urlNow && urlkit.isSorry(urlNow)) { return null; } // لسه صفحة تحدي — الإنقاذ مكانش لازم
+    // كاش آخر تحليل: يمكن وصل متأخر بس موجود أصلًا
+    const late = this.lastSerp && this.lastSerp.get(tabId);
+    if (late && late.ts >= sinceTs) {
+      await logger.info('queue', `🩹 "${kw.keyword}" — التحليل وصل متأخر؛ سجلناه من الكاش من غير أي إعادة`);
+      return { payload: late.payload, via: 'captcha-solved-late' };
+    }
+    // المسح يمكن لسه شغال دلوقتي — 12 ثانية استنانة أخيرة قبل أي ريستارت
+    for (let i = 0; i < 5; i++) {
+      await sleep(1200, signal);
+      if (signal && signal.aborted) { return { abort: true }; }
+      const c2 = this.lastSerp && this.lastSerp.get(tabId);
+      if (c2 && c2.ts >= sinceTs) {
+        await logger.info('queue', `🩹 "${kw.keyword}" — المسح كان بيخلص؛ جابه في اللحظة الأخيرة`);
+        return { payload: c2.payload, via: 'captcha-solved-late' };
+      }
+    }
+    await logger.warn('queue', `🩹 "${kw.keyword}" — الصفحة سليمة بس مفيش تحليل؛ reload هادي لنفس التاب (مفيش مسح بيانات)`);
+    await this.notify('🩹 إنقاذ بعد الحل', `"${kw.keyword}" — الصفحة تمام؛ بنعيد المسح بس من غير مسح بيانات`);
+    try { await tabctl.reload(tabId); } catch (_) { return null; }
+    const soft = await this.raceSerpOrCaptcha(tabId, cfg, signal, kw.keyword);
+    if (soft.type === 'aborted') { return { abort: true }; }
+    if (soft.type === 'serp' && (soft.payload.total > 0 || soft.payload.noResults)) {
+      return { payload: soft.payload, via: 'captcha-solved-reload', reloaded: true };
+    }
+    return null; // كابتشا تانية أو timeout — نرجع للدورة القديمة (تبريد/مسح/تاب جديد) بعد ما خدنا الفرصة الليّنة
+  }
+
+  /** ضمان تاب واحد: نقفل كل تابانين فتحتهم الأداة (حتى من جلسات قبل إعادة تشغيل
+   *  الـWorker) ونسيب النشط بس — بنمسحهم من القائمة المحفوظة ومن الذاكرة */
+  async sweepExtraTabs(keepTabId) {
+    const ids = new Set(this.ownedTabs || []);
+    try {
+      const run = await state.getRun();
+      for (const id of (run.ownedTabIds || [])) { ids.add(id); }
+    } catch (_) {}
+    for (const stale of ids) {
+      if (stale === keepTabId || !stale) { continue; }
+      // 🛡v1.20.5: القفل العاري كان بيقفل النافذة لو التاب ده آخر تاب فيها — ومعها
+      // كروم كله (بلاغ المستخدم). tabctl.close محمي: آخر تاب يتحول about:blank بدل
+      // القفل، وبيقفل watchers بتاعته كمان (كانوا بيسربوا)
+      try { await tabctl.close(stale); } catch (_) {}
+      if (this.ownedTabs) { this.ownedTabs.delete(stale); }
+    }
+    try { await state.setRun({ ownedTabIds: [keepTabId] }); } catch (_) {}
+  }
+
+  /**
+   * 🧘 صبر الكابتشا (v1.20.0، هدّاه 1.21.22): الكلمة ما تتلغاش ولا تتأجل — بنفضل
+   * نستنى صفحة التحدي تروح (Buster متأخر، أو المستخدم حلّها بإيده) وكل ما تتحل
+   * بنرجع «cleared» والندّاء بيعيد نفس الكلمة من الأول. 'tab-closed' لو التاب اتقفل،
+   * 'aborted' للإيقاف. السقف الرحيم (طلب المستخدم «معلّق ليه»): بعد 5 دقايق من غير
+   * حلّ وبيوت صريحة، بنرجع 'park' — الكلمة بتتركن ⚠️ محتاج مراجعة (مش «غير موجود»)
+   * وهتتعاد تلقائيًا آخر الرن؛ الرن نفسه ما يعلقش أبدًا.
+   */
+  async waitCaptchaCleared(tabId, kw, signal) {
+    await state.setRun({ status: C.STATUS.RUN.CAPTCHA, captcha: { tabId, attempts: 0, since: Date.now() } });
+    // 👁 v1.21.16: تاب جديد طلع في نص الصبر؟ يتعرّض مرة واحدة هو كمان
+    if (this.captchaRevealedTab !== tabId) {
+      this.captchaRevealedTab = tabId;
+      try { await tabctl.focus(tabId); } catch (_) {}
+    }
+    await state.updateKeyword(kw.id, { status: C.STATUS.KW.CAPTCHA });
+    this.broadcast();
+    // 🧨 v1.21.18: داخلين على «expired»؟ مفيش سبب نستنى تفكرة واحدة — إحياء سريع وإلا المسح الموحد
+    if (await this.tabChallengeLooksStale(tabId)) {
+      if (await this.reviveStaleChallenge(tabId, signal)) {
+        await logger.info('queue', `🩹 "${kw.keyword}" — التحدي البايت اتحيّا قبل الصبر: تحدي طازة على التاب النشيط، والصبر يكمل عليه`);
+      } else {
+        await logger.warn('queue', `🧹 "${kw.keyword}" — بايّت والإحياء ما قدرش؛ تسليم فوري لمسح بيانات + تاب جديد`);
+        return 'stale';
+      }
+    }
+    let waited = 0;
+    let focusOnce = false;
+    let flag = 'waiting'; // 'clear' | 'closed'
+    const offs = [];
+    try {
+      offs.push(bus.on(C.MSG.CAPTCHA_CHECKED, (m) => { if (m.tabId === tabId) { flag = 'clear'; } }));
+      offs.push(tabctl.onRemoved(tabId, () => { flag = 'closed'; }));
+      for (;;) {
+        if (signal && signal.aborted) { return 'aborted'; }
+        await sleep(4000, signal);
+        if (flag === 'clear') { break; }
+        if (flag === 'closed') { return 'tab-closed'; }
+        let u = null;
+        try {
+          u = await tabctl.getUrl(tabId);
+          // لو المستخدم طلع من صفحة الكابتشا لنفسه، بنسايبه يخلص براحتنا —
+          // بنديله الصفحة قدام عينه مرة واحدة بس من غير ما نلح
+          if (u && urlkit.isSorry(u) && !focusOnce) { focusOnce = true; try { await tabctl.focus(tabId); } catch (_) {} }
+        } catch (_) { return 'tab-closed'; }
+        if (u == null || u === '') { return 'tab-closed'; }
+        if (!urlkit.isSorry(u)) { break; } // الصفحة بقت نتائج عادية = اتحلت
+        waited += 4;
+        // 🅿️ v1.21.22 + v1.21.30 (طلب المستخدم: «لما الركن يظهر اتعامل بقى وابدأ من
+        // الأول»): الرحمة اتقصّت من 5 دقايق لدقيقة — والركن نفسه بقى ما يستناش آخر
+        // الرن: الندّاه بيشدّ الكلمة لإعادة انطلاق فورية في تاب جديد (سقف 2)، وبعدين ⚠️.
+        if (waited >= 60) {
+          await logger.warn('queue', `🅿️ "${kw.keyword}" — دقيقة صبر من غير حلّ: بتتركن بعلامة ⚠️ مراجعة والرن بيعدّي عليها حالًا`);
+          return 'park';
+        }
+        // 🧨 v1.21.18 (يستبدل دورة «ريلود×2 كل 90ث» من 1.21.2/1.21.8): «expired» = الجلسة
+        // ميتة والريلود كان بيضيّع دقايق (بلاغ: 476 ثانية). مسبار قراءة رخيص كل تفكرة؛
+        // بايّت؟ تسليم فوري 'stale' للنداء: مسح كامل + تاب جديد بنفس الكلمة — الكلمة عمرها
+        // ما بتتبوظ، ومحرك الحل نفسه ما اتلمسش (الناس اللي لسه عندها فرصة بتستنى عادي)
+        if (await this.tabChallengeLooksStale(tabId)) {
+          if (await this.reviveStaleChallenge(tabId, signal)) {
+            await logger.info('queue', `🩹 "${kw.keyword}" — التحدي بايت منّ نص الصبر؛ اتحيّا بريلود طازة — Buster/إيدك ياخدوا فرصتهم عليه`);
+          } else {
+            await logger.warn('queue', `🧹 "${kw.keyword}" — بايّت والإحياء استنفد؛ تسليم فوري لمسح بيانات + تاب جديد`);
+            return 'stale';
+          }
+        }
+        if (waited % 48 === 44) {
+          await this.notify('🧩 لسه مستنّيين', `"${kw.keyword}" — الكابتشا معلقة؛ بنستنى تتحل (Buster أو يدويًا من التاب نفسه) وهنعيد نفس الكلمة تاني — مفيش إلغاء`);
+          await logger.info('queue', `🧘 لسه مستنّي الكابتشا تتحل (${waited} ثانية) علشان "${kw.keyword}"`);
+        }
+      }
+    } finally {
+      offs.forEach((off) => { try { if (off) off(); } catch (_) {} }); }
+    // بعد التحل: تهدئة قصيرة — الرجوع الفوري لجوجل = صفعة جديدة (نفس درس 1.18.6)
+    const cool = 10000 + Math.floor(Math.random() * 8000);
+    await logger.info('queue', `✅ الكابتشا اتحلت — تهدئة ${Math.round(cool / 1000)} ثانية وإعادة نفس الكلمة "${kw.keyword}"`);
+    await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
+    await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
+    this.broadcast();
+    await sleep(cool, signal);
+    if (signal && signal.aborted) { return 'aborted'; }
+    return 'cleared';
+  }
+
+  /** ⏳ v1.21.2: التحدي «بايّت»؟ جوجل بيكتبها حرفيًا على الصفحة دي. مسبار قراءة بحتة
+   *  من الـService Worker — ما بيلامسش المحرك ولا بيضغط ولا بيغير حاجة */
+  async tabChallengeLooksStale(tabId) {
+    try {
+      const [inj] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const t = String((document.body && document.body.innerText) || '').slice(0, 40000);
+          return /challenge (?:has )?expired|check the checkbox again|انتهت صلاحي|انتهت فترة/i.test(t);
+        }
+      });
+      return !!(inj && inj.result);
+    } catch (_) { return false; }
+  }
+
+  /** ⏳ v1.21.25 — نافذة تأكيد بعد انتهاء محاولة الحل: لو الكابتشا بتتحل حالها (إيفنت
+   *  CAPTCHA_CHECKED من سكربت التحدي، أو الرابط بقى نتائج سليمة ومفيش iframe بتاع
+   *  reCAPTCHA في الصفحة) نرجع 'clear'. خلصت المهلة؟ 'stuck'. قراءة بحتة — مفيش دوسة
+   *  ولا ريلود ولا مساس بمحرك الحل. */
+  async captchaClearGrace(tabId, ms, signal) {
+    const t0 = Date.now();
+    let clearedFlag = false;
+    const off = bus.on(C.MSG.CAPTCHA_CHECKED, (m) => { if (m.tabId === tabId) { clearedFlag = true; } });
+    const probe = async () => {
+      try {
+        const [inj] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => !!document.querySelector('iframe[src*="recaptcha" i], iframe[src*="sorry" i], form.action[action*="captcha" i]')
+        });
+        return !!(inj && inj.result);
+      } catch (_) { return false; }
+    };
+    try {
+      for (;;) {
+        if (signal && signal.aborted) { return 'aborted'; }
+        if (clearedFlag) { return 'clear'; }
+        let u = null;
+        try { u = await tabctl.getUrl(tabId); } catch (_) { return 'closed'; }
+        if (u && !urlkit.isSorry(u) && !(await probe())) { return 'clear'; }
+        if (Date.now() - t0 >= ms) { return 'stuck'; }
+        await sleep(1500, signal);
+      }
+    } finally {
+      try { if (off) off(); } catch (_) {}
+    }
+  }
+
+  /** 🩹 v1.21.21 — إحياء التحدي البايت في مكانه: تنشيط ثم ريلود واحد جوه التاب النشيط،
+   *  والتوكن بيتولد بطابع زمني طازة بدل ما نرمي الجلسة كلها. النجاح = الصفحة بقت تحديًا
+   *  حيًا. سقف 3 إحياءات لكل رن (الميريرات في recordRunReport) — بلا دوّار ريلودات.
+   *  مفيش أي مساس بمحرك الحل ولا توقيتاته: الدالة دي بتجهّز الأرضية وبس. */
+  async reviveStaleChallenge(tabId, signal) {
+    try {
+      if ((this.staleRevivesThisRun || 0) >= 3) { return false; }
+      this.staleRevivesThisRun = (this.staleRevivesThisRun || 0) + 1;
+      await logger.info('queue', `🩹 إحياء ${this.staleRevivesThisRun}/3: ريلود على التاب النشيط لتوليد تحدي بطابع طازة`);
+      try { await tabctl.focus(tabId); } catch (_) {}
+      try { await tabctl.reload(tabId); } catch (_) { return false; }
+      await sleep(3200, signal); // reCAPTCHA بيتولد أسرع بكتير والتاب نشيط
+      if (signal && signal.aborted) { return false; }
+      return !(await this.tabChallengeLooksStale(tabId));
+    } catch (_) { return false; }
   }
 
   waitManualSolve(tabId, cfg, signal) {
@@ -608,9 +1473,11 @@ export class QueueEngine {
       const finish = (v) => {
         if (settled) { return; }
         settled = true;
+        if (onAbort && signal) { signal.removeEventListener('abort', onAbort); }
         offs.forEach((off) => off());
         resolve(v);
       };
+      const onAbort = signal ? () => finish('aborted') : null;
       offs.push(tabctl.onUrlChange(tabId, (url) => {
         if (!urlkit.isSorry(url)) { finish('solved'); }
       }));
@@ -618,7 +1485,8 @@ export class QueueEngine {
         if (m.tabId === tabId) { finish('solved'); }
       }));
       offs.push(tabctl.onRemoved(tabId, () => finish('tab-closed')));
-      if (signal) { signal.addEventListener('abort', () => finish('aborted'), { once: true }); }
+      // v1.21.40: نفس تسريب المستمع — يتشال في finish (نجاح/مهلة/إغلاق تاب) مش بس عند الإلغاء
+      if (onAbort) { signal.addEventListener('abort', onAbort, { once: true }); }
     });
   }
 
@@ -641,9 +1509,17 @@ export class QueueEngine {
       if (!latest.has(nk)) { latest.set(nk, r); }
     }
     const posStr = (r) => {
-      if (!r) { return ''; }
-      if (r.found) { return r.aiFound ? r.position + ' AI' : String(r.position); }
-      return r.aiFound ? (r.aiPosition != null ? r.aiPosition + ' AI' : 'AI') : '';
+      // نفس قواعد النسخ بالظبط: «1ai»/«4»/«ai»، والكلمة اللي ملهاش بوزيشن
+      // (أو لسه متفحصتش) بتاخد شرطة «—» — عشان الشيت ما يبينش فراغات ملغزة
+      if (!r) { return '—'; }
+      // 🚩 v1.21.40: صف الاستنفاد (شبكة/403) «مفيش بحث» — يتكتب «—» مش «مش موجودة»
+      if (r.inconclusive) { return '—'; }
+      if (r.found) {
+        const pos = Number(r.position);
+        const okPos = r.position != null && Number.isFinite(pos);
+        return okPos ? (r.aiFound ? pos + 'ai' : String(pos)) : (r.aiFound ? 'ai' : '—');
+      }
+      return r.aiFound ? 'ai' : '—';
     };
 
     // 1) اقرأ ترتيب الكلمات في شيتك نفسه (gviz CSV — شيت مشارك برابط)
@@ -672,13 +1548,27 @@ export class QueueEngine {
       lines = keywords.map((k) => posStr(latest.get(normKey(k.keyword))));
     }
     const tsv = lines.join('\n');
-    if (!tsv.trim()) { return { ok: false, reason: 'nothing-to-write' }; }
+    // لو مفيش ولا نتيجة لسه (كل الصفوف شرطات بس) — ما نملّش الشيت فراغات
+    if (!tsv.trim() || !lines.some((l) => l !== '—')) { return { ok: false, reason: 'nothing-to-write' }; }
 
     let tab = null;
     try {
+      // 🔴 v1.21.40: كان بيلقط **أي** تاب مفتوح على docs.google.com/spreadsheets — يعني
+      // لو عندك شيت ميزانية/عمل شخصي مفتوح، الأداة كانت هتكتب فيه أرقام الترتيب في
+      // الخلية B1 وتلخبطه. بقى لازم نفس ملف الشيت المضبوط في الإعدادات (مقارنة بالـID).
+      const sheetId = (() => {
+        try {
+          const m = String(cfg.sheetUrl).match(/\/spreadsheets\/(?:u\/\d+\/)?d\/([a-zA-Z0-9-_]+)/);
+          return m ? m[1] : null;
+        } catch (_) { return null; }
+      })();
       const all = await chrome.tabs.query({});
-      tab = all.find((t) => (t.url || '').indexOf('docs.google.com/spreadsheets') !== -1);
-      if (!tab) { tab = await tabctl.open(cfg.sheetUrl, { foregroundTab: true }); }
+      tab = all.find((t) => {
+        const u = String(t.url || '');
+        if (u.indexOf('docs.google.com/spreadsheets') === -1) { return false; }
+        return sheetId ? u.indexOf(sheetId) !== -1 : false;
+      }) || null;
+      if (!tab) { tab = await tabctl.open(cfg.sheetUrl, cfg); } // 🕊 1.21.16: الكتابة في الشيت مابتسحبش تركيز
     } catch (_) { return { ok: false, reason: 'tab-error' }; }
     await tabctl.waitForComplete(tab.id, C.LIMITS.TAB_LOAD_TIMEOUT_MS);
     await scheduler.wait(4000, 'sheet-settle');
@@ -697,28 +1587,223 @@ export class QueueEngine {
   }
 
   /** مزامنة الكلمات من شيت جوجل (نقطة تصدير CSV العامة — بدون API) */
-  /** بعد كل المحاولات (ريفرش + تاب جديد): الكلمة تتسجل كغير موجود — مفيش تخطي أبداً */
+  /** بعد كل المحاولات (ريفرش + تاب جديد): الكلمة تتسجل كغير موجود — مفيش تخطي أبداً
+   *  v1.21.40: 🔴 الاستنفاد (شبكة/403/تايم‌آوت/كابتشا مش بتتحل) مكانش حكم «مش موجودة»
+   *  — مكانش فيه سيرب أصلاً. كان لسه بيكتب صف found:false فالتصدير واللوج بيقولوا
+   *  «مش موجودة» وده كذب على المستخدم. بقى: العينة اللي بتتسجل هي «بحث مفيش» (serpUrl
+   *  + via retries-exhausted + needsReview) وبتتصدّر بشرطة «—» عشان تعرف إنها لسه متفحصتش،
+   *  والراية ⚠️ بتفضل على الصف عشان تتعد في آخر الرن. */
   async recordExhausted(kw, cfg) {
-    return this.recordResult(kw, {
+    const out = await this.recordResult(kw, {
       items: [], aiItems: [], aiText: '', total: 0, noResults: true, adsCount: 0, serpUrl: ''
     }, cfg, 'retries-exhausted');
+    // 🛡 v1.21.27: لو الحارس فضّى السطر على نتيجة موجودة من الرن نفسه، راية المراجعة
+    // معناها لفة تالتة بحث بلا أي لازمة — السطر خلاص محسوم.
+    {
+      const runC = await state.getRun();
+      const curList = await state.getKeywords();
+      const cur = curList.find((k) => k && k.id === kw.id);
+      if (cur && cur.lastFound && runC && runC.startedAt && (cur.lastCheckedAt || 0) >= runC.startedAt) {
+        await logger.info('queue', `🛡 "${kw.keyword}" — النتيجة الكويسة المحروسة ما تحتاجش مراجعة: السطر يفضل زي ما هو`);
+        return out;
+      }
+    }
+    // ⚠️ v1.21.7: «مافيش حكم» مش «مش موجود» — الصف بيتعلّم needsReview وبيتعاد
+    // تلقائيًا في آخر الرن في جو أهدى (ومعاه زر يدوي في اللوحة)
+    await state.updateKeyword(kw.id, { needsReview: true });
+    return out;
+  }
+
+  /** 🔁 v1.21.7: مسار المراجعة — الكلمات اللي اتعلمت needsReview (خطأ شبكة/بلوك، مش حكم
+   *  حقيقي) بتعدّي تاني في آخر الرن بفواصل أطول. manual = طلب من اللوحة بره الرن.
+   *  «مفيش هروب من كابتشا» ما بيتأثرش: دول أصلًا ما خلّصوش فحصًا سليمًا */
+  async reviewPass(manual) {
+    const signal = this.signal();
+    const keywords = await state.getKeywords();
+    const pend = [];
+    for (const k of keywords) {
+      if (!k) { continue; }
+      if (k.needsReview || (manual && k.status === C.STATUS.KW.FAILED)) { pend.push(k); }
+    }
+    this.reviewRemaining = pend.length;
+    if (!pend.length) { return 0; }
+    await logger.info('queue', `🔁 مسار المراجعة${manual ? ' (بطلبك من اللوحة)' : ''}: ${pend.length} كلمة محتاجة إعادة فحص — هتعدّي دلوقتي والجو أهدى`);
+    for (const kw of pend) {
+      if (signal && signal.aborted) { break; }
+      await sleep(4000 + Math.floor(Math.random() * 4000), signal); // v1.21.9: المراجعة كمان بقت أرشق
+      if (signal && signal.aborted) { break; }
+      try {
+        await this.runKeyword(kw);
+      } catch (err) {
+        await logger.warn('queue', 'reviewPass: ' + (err && err.message ? err.message : err));
+      }
+    }
+    const after = await state.getKeywords();
+    const left = after.filter((k) => k && k.needsReview).length;
+    this.reviewRemaining = left;
+    await logger.info('queue', left
+      ? `🔁 المراجعة خلصت: ${left} كلمة لسه محتاجة مراجعة (هتفضل متعلّمة ⚠️ وتتعاد في الرن الجاي)`
+      : '🔁 المراجعة خلصت: كل المتعلّمة ⚠️ اتحسمت ✅');
+    this.broadcast();
+    return pend.length;
+  }
+
+  /** 📊 v1.21.7: تقرير الرن — متوسط الثانية/كلمة، كابتشا، مراجعة، متوسط التغطية */
+  async recordRunReport(run) {
+    try {
+      const kws = await state.getKeywords();
+      const reviewN = kws.filter((k) => k && k.needsReview).length;
+      const started = (run && run.startedAt) || 0;
+      const dur = started ? Math.max(0, Date.now() - started) : 0;
+      const results = await state.getResults();
+      let covSum = 0;
+      let covN = 0;
+      for (const r of results) {
+        if (!r || (r.checkedAt || 0) < started) { continue; }
+        const exp = r.expectedNum || 100;
+        covSum += Math.min(1, (r.total || 0) / exp);
+        covN += 1;
+        if (covN > 400) { break; }
+      }
+      const stat = {
+        startedAt: started || null, finishedAt: Date.now(), durationMs: dur,
+        processed: this.index || 0,
+        captchaSeen: this.captchaSeenThisRun || 0,
+        captchaSolves: (run && run.captchaSolves) || 0,
+        review: reviewN,
+        coverageAvg: covN ? Math.round((100 * covSum) / covN) : null
+      };
+      await state.appendRunStat(stat);
+      this.captchaSeenThisRun = 0;
+      this.staleWipesThisRun = 0; // v1.21.8: عدادات الرن بتترمس مع بداية رن جديد
+      this.staleRevivesThisRun = 0; // 🩹 v1.21.21: وعدّاد الإحياءات معاهم
+      this.captchaRevealedTab = null; // v1.21.16: و«التاب المعروض» كمان — كل رن يبدأ نضيف
+      this.captchaStreak = 0; // 🧊 v1.21.25: والسلسلة برضه من الصفر
+      this._regionWarned = false; // 🌍 v1.21.28: راية تحذير المنطقة بتولّد مع كل رن
+      const perSec = stat.processed ? Math.round((dur / stat.processed) / 100) / 10 : 0;
+      await logger.info('queue', `📊 تقرير الرن: ${stat.processed} كلمة في ${(Math.round(dur / 600) / 10)} دقيقة (${perSec}ث/كلمة) — كابتشا: ${stat.captchaSeen} (اتحلّت أوتوماتيك ${stat.captchaSolves}) — مراجعة: ${stat.review}${stat.coverageAvg != null ? ' — متوسط التغطية: ' + stat.coverageAvg + '%' : ''}`);
+    } catch (_) {}
+  }
+
+  /** 🧪 v1.21.7: بريفلايت — جاهزية الإعدادات + المكررات + تقدير وقت من الرنات السابقة */
+  async preflight() {
+    const cfg = await state.getConfig();
+    const keywords = await state.getKeywords();
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const seen = new Set();
+    let dups = 0;
+    for (const k of keywords) {
+      const key = norm(k && k.keyword);
+      if (!key) { continue; }
+      if (seen.has(key)) { dups++; } else { seen.add(key); }
+    }
+    const stats = (await state.getRunStats()) || [];
+    const recent = stats.slice(-5).filter((r) => r && r.processed > 0 && r.durationMs > 0);
+    const perKw = recent.length
+      ? recent.reduce((a, r) => a + (r.durationMs / r.processed), 0) / recent.length
+      : 0;
+    const pending = keywords.filter((k) => k && k.status === C.STATUS.KW.PENDING).length;
+    const issues = [];
+    if (!String(cfg.storeDomain || '').trim() && !String(cfg.storeName || '').trim()) {
+      issues.push('مفيش هدف مضبوط: دوّم الدومين أو اسم المتجر في الإعدادات');
+    }
+    if (!pending) { issues.push('مفيش كلمات مستنية الفحص في الطابور'); }
+    const reviewCount = keywords.filter((k) => k && k.needsReview).length;
+    if (reviewCount) { issues.push(`فيه ${reviewCount} كلمة متعلّمة ⚠️ مراجعة — هتتعاد آخر الرن أو بدوس زر المراجعة`); }
+    return {
+      ok: true,
+      total: keywords.length, pending, dups, issues,
+      etaMs: (perKw && pending) ? Math.round(perKw * pending) : 0,
+      perKwSec: perKw ? Math.round(perKw / 100) / 10 : 0,
+      runsUsed: recent.length,
+      lastRun: stats.length ? stats[stats.length - 1] : null
+    };
+  }
+
+  /** 🔁 زر اللوحة: مراجعة الفشلان بره الرن — مفيش تعارض مع حلقة شغالة */
+  async manualReview() {
+    const run = await state.getRun();
+    if (run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA) {
+      return { ok: false, reason: 'running' };
+    }
+    await state.setRun({ status: C.STATUS.RUN.RUNNING, finishedAt: null, captcha: null, startedAt: Date.now() });
+    this.abortController = new AbortController();
+    this.armWatchdog();
+    let n = 0;
+    try {
+      n = await this.reviewPass(true);
+    } finally {
+      await state.setRun({ status: C.STATUS.RUN.IDLE });
+      this.disarmWatchdog();
+      this.broadcast();
+    }
+    return { ok: true, reviewed: n };
+  }
+
+  /** 🌍 v1.21.28 — جوجل نفسه بيكتب منطقة تقديم النتايج في فوتر صفحة البحث.
+   *  نقرأ ونطابق مع المطلوب: «مش موجودة» حقيقية أحسن بألف مرة من «مش موجودة»
+   *  سببها إن البحث اتعمل من بلد تانية.رجع {known, gl, matched} — مجهول = ما نحكمش. */
+  regionFromFooter(text, gl) {
+    const LABELS = {
+      sa: 'السعودية|Saudi Arabia', ae: 'الإمارات|United Arab', eg: 'مصر|Egypt',
+      kw: 'الكويت|Kuwait', qa: 'قطر|Qatar', bh: 'البحرين|Bahrain', om: 'عمان|Oman',
+      jo: 'الأردن|Jordan', lb: 'لبنان|Lebanon', ma: 'المغرب|Morocco', tn: 'تونس|Tunisia',
+      dz: 'الجزائر|Algeria', iq: 'العراق|Iraq', ye: 'اليمن|Yemen', tr: 'تركيا|Turkey',
+      us: 'United States|الولايات', gb: 'United Kingdom', de: 'Germany|ألمانيا',
+      fr: 'France|فرنسا', es: 'Spain|إسبانيا', it: 'Italy|إيطاليا', nl: 'Netherlands',
+      ru: 'Russia|روسيا', br: 'Brazil|البرازيل', in: 'India|الهند', pk: 'Pakistan'
+    };
+    const t = String(text || '');
+    if (!t) { return { known: false, gl: '', matched: true }; }
+    const want = String(gl || 'sa').toLowerCase();
+    const keys = Object.keys(LABELS);
+    for (let i = 0; i < keys.length; i++) {
+      const g = keys[i];
+      const parts = LABELS[g].split('|');
+      let hit = false;
+      for (let j = 0; j < parts.length; j++) { if (t.indexOf(parts[j]) !== -1) { hit = true; break; } }
+      if (hit) { return { known: true, gl: g, matched: g === want }; }
+    }
+    return { known: false, gl: '', matched: true };
   }
 
   async recordResult(kw, serp, cfg, via) {
+    this.captchaStreak = 0; // 🧊 1.21.25: كلمة اتسجلت نضيفة = السلسلة اتكسرت
     const match = matchResults(serp.items || [], cfg);
     // الترتيب الرسمي: الرقم الأخضر بتاع Serp Counter جنب النتيجة إن موجود
     if (match.found && match.matched && match.matched.counterPos) {
       match.position = match.matched.counterPos;
       match.viaCounter = true;
     }
-    let aiMatch = (serp.aiItems && serp.aiItems.length) ? matchResults(serp.aiItems, cfg) : { found: false, position: null, matched: null };
+    // حكم الحضور في AI Overview: «أي ضلع من الثلاثة» — الدومين أو الاسم العربي أو الإنجليزي.
+    // دي مش ترتيب (الترتيب يفضل بالدومين بالظبط زي 1.19.7)؛ بنرفع الراية لو جوجل نطّح
+    // اسمك/دومينك جوه البلوك فعلاً — التشابه في الأسماء هنا ثمنه مقبول قدام ضياع الظهور.
+    let aiMatch = { found: false, position: null, matched: null };
+    if (serp.aiItems && serp.aiItems.length) {
+      aiMatch = matchResults(serp.aiItems, Object.assign({}, cfg, { matchMode: 'domain' }));
+      if (!aiMatch.found) {
+        const byName = matchResults(serp.aiItems, Object.assign({}, cfg, { matchMode: 'name' }));
+        if (byName.found) { aiMatch = byName; }
+      }
+    }
     if (!aiMatch.found && serp.aiText) {
-      // المتجر مذكور داخل AI Overview باسمه العربي بدون رابط استشهاد
+      // صارم زي الأول: الكلام لازم يكون جوه نص الـ AI Overview نفسه —
+      // تطابق مباشر للاسمين أو الدومين، من غير مطابقات مرنة بتدي نتايج كاذبة
       const hay = String(serp.aiText).toLowerCase();
+      const hayN = normalizeArabic(serp.aiText);
       const dom = String(cfg.storeDomain || '').trim().toLowerCase();
       const label = dom ? dom.split('.')[0] : '';
-      const nameHit = !!(cfg.storeName && nameMatches(serp.aiText, cfg.storeName));
-      const domHit = !!(dom && hay.includes(dom)) || !!(label && label.length >= 6 && hay.includes(label));
+      // v1.21.17: حدود كمان هنا — «myshop.com» المكتوبة جوه «notmyshop.com» مش ذكر لينا
+      const bounded = (s) => {
+        if (!s) { return false; }
+        try {
+          return new RegExp('(^|[^a-z0-9-])' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-z0-9-])').test(hay);
+        } catch (_) { return hay.includes(s); }
+      };
+      const domHit = bounded(dom) || !!(label && label.length >= 6 && bounded(label));
+      const nameHit = [cfg.storeName, cfg.storeNameEn]
+        .map((x) => normalizeArabic(x || ''))
+        .some((n) => n.length >= 3 && hayN.includes(n));
       if (nameHit || domHit) {
         aiMatch = { found: true, position: null, matched: { title: 'AI mention', url: null }, reasons: ['ai-text'] };
       }
@@ -746,14 +1831,37 @@ export class QueueEngine {
       aiTotal: (serp.aiItems || []).length,
       adsCount: serp.adsCount || 0,
       noResults: !!serp.noResults,
+      regionGl: null, regionMismatch: false,
       topHosts: (serp.items || []).slice(0, 6).map((i) => i.host),
       via: via,
+      // 🚩 v1.21.40: صف «بحث مفيش» مش حكم — التصدير/الشيت يعرضوه «—» مش «مش موجودة»
+      inconclusive: (via === 'retries-exhausted'),
       serpUrl: serp.serpUrl || '',
+      expectedNum: serp.expectedNum || 0, // 📊 v1.21.7: للتغطية في التقرير
       checkedAt: Date.now()
     };
+    // 🌍 v1.21.28 — بصمة المنطقة من فوتر جوجل نفسه: تطابق يسكت، اختلاف يصرخ مرة
+    // واحدة في الرن (وشارة في الصف للتصدير) — مش بنغيّر النتيجة، بنكشف السبب بس.
+    if (serp.regionText) {
+      const rchk = this.regionFromFooter(serp.regionText, cfg.gl || 'sa');
+      row.regionGl = rchk.known ? rchk.gl : null;
+      row.regionMismatch = !!(rchk.known && !rchk.matched);
+      if (row.regionMismatch && !this._regionWarned) {
+        this._regionWarned = true;
+        await logger.warn('queue', `🌍 جوجل قدّم النتايج من منطقة «${rchk.gl}» المطلوبة «${String(cfg.gl || 'sa').toLowerCase()}» — لو بحثك اليدوي مختلف دي هي الفروق: شغّل GsLoc Places على نفس البروفيل ده أو ظابط الإعداد`);
+        await this.notify('🌍 بصمة المنطقة', 'في كلمات اتحسبت من منطقة غير المطلوبة — اللوج فيه التفاصيل');
+      }
+    }
     // فحص النتائج المحلية (خرائط) اختياري — مثل خطوة السيناريو اليدوي
     if (cfg.mapsCheck) {
-      const loc = await localCheck(kw.keyword, cfg);
+      // ⏱ v1.21.36 (طلب المستخدم: «بطيئة بقالها ساعة في 18 كلمة»): الفحص المحلي رجّعناه
+      // في 1.21.35 شغالًا بجد — بس فضل fetch بلا سقف، ويوم زحمة/حرارة بيعلّق الكلمة وراه.
+      // بقى race بمهلة 6 ثواني (ثنتين ونص في حرارة عالية): لحق؟ اتسجل. مجاش؟ كمّل الرن
+      // فورًا والسطر يكمل من غير عمود محلي — التغطية الرئيسية ما تتوقفش على ضيف.
+      const loc = await Promise.race([
+        localCheck(kw.keyword, cfg),
+        new Promise((res) => { setTimeout(() => res(null), (this.captchaHeat || 0) >= 2 ? 2500 : 6000); }),
+      ]);
       if (loc) {
         row.localFound = loc.found;
         row.localPosition = loc.position;
@@ -763,24 +1871,45 @@ export class QueueEngine {
       }
     }
 
+    // 🛡 v1.21.27 (العلة اللي وصفها المستخدم حرفيًا): لو الكلمة جابت نتيجة «موجودة»
+    // في الرن ده، أي حكم «مش موجودة» من بحث متأخر على نفس الكلمة (جلسة نضيفة بعد مسح
+    // بيانات، بلاش شخصنة، أو توقيت خراب) ما بيمسحش الصف فوقها: السطر يفضل الأفضل،
+    // والحكم الجديد يتسجل كصف إضافي في التصدير الكامل — مفيش معلومة بتترمي.
+    let bestKept = false;
+    if (!match.found && !aiMatch.found && (kw.lastFound || kw.lastAiFound) && kw.lastCheckedAt) {
+      const runB = await state.getRun();
+      // v1.21.30: إلا لو المستخدم ضغط «إعادة فحص» في الرن ده — هو عايز الحقيقة الحية،
+      // والحارس ما يخلّيش الكلمة القديمة تحمى نفسها من حكم طلبه هو.
+      if (runB && runB.startedAt && kw.lastCheckedAt >= runB.startedAt && !(kw.recheckAt && kw.recheckAt >= runB.startedAt)) { bestKept = true; }
+    }
     await state.addResult(row);
     await state.bumpDailyCount();
 
-    const updated = await state.updateKeyword(kw.id, {
+    const kpatch = {
       status: C.STATUS.KW.DONE,
-      lastPosition: match.position,
-      lastFound: match.found,
-      lastAiPosition: aiMatch.found ? aiMatch.position : null,
-      lastAiFound: !!aiMatch.found,
-      lastCheckedAt: Date.now(),
       history: ((kw.history || []).concat([{
         position: match.position,
         aiPosition: aiMatch.found ? aiMatch.position : null,
         found: match.found,
         aiFound: aiMatch.found,
+        presence: (!match.found && !aiMatch.found && serp.presence) ? serp.presence.kind : null,
         ts: Date.now()
       }])).slice(-(cfg.maxHistoryPerKeyword || 40))
-    });
+    };
+    if (bestKept) {
+      await logger.warn('queue', `🛡 "${kw.keyword}" — حكم «مش موجودة» ما بيكتبش فوق نتيجة موجودة في نفس الرن؛ الصف حافظ الأفضل والتصدير فيه الاتنين`);
+    } else {
+      kpatch.lastPosition = match.position;
+      kpatch.lastFound = match.found;
+      kpatch.lastAiPosition = aiMatch.found ? aiMatch.position : null;
+      kpatch.lastAiFound = !!aiMatch.found;
+      kpatch.lastPresence = (!match.found && !aiMatch.found && serp.presence) ? serp.presence : null; // 👁 1.21.39
+      // v1.21.40: 👁 كان لزقة — كلمة ظهرت في إعلان مرة فضلت شايلة الشارة الدهبية للأبد
+      // حتى بعد ما ترجع مش موجودة نهائي أو تظهر عضوياً. أي عينة جديدة بتحدّد الحقيقة من أول وجديد.
+      kpatch.lastPresenceAt = serp.presence ? Date.now() : null;
+      kpatch.lastCheckedAt = Date.now();
+    }
+    const updated = await state.updateKeyword(kw.id, kpatch);
 
     const run = await state.getRun();
     await state.setRun({
@@ -791,10 +1920,12 @@ export class QueueEngine {
     if (match.found) {
       await logger.info('queue', `✅ "${kw.keyword}" → الترتيب #${match.position} من ${match.scanned} نتيجة (${match.reasons.join('+')})${match.viaCounter ? ' — وفق رقم Serp Counter ✔' : ''}${serp.early ? ' — خروج مبكر ✔' : ''}`);
     } else if (aiMatch.found) {
-      await logger.info('queue', `🤖 "${kw.keyword}" → ظهر في AI Overview ${aiMatch.position ? 'باستشهاد #' + aiMatch.position : 'باسم المتجر نصياً'} (غير موجود عضوياً ضمن ${match.scanned})`);
+      await logger.info('queue', `🤖 "${kw.keyword}" → ظهر في AI Overview ${aiMatch.position ? 'باستشهاد #' + aiMatch.position : 'باسم الموقع نصياً'} (غير موجود عضوياً ضمن ${match.scanned})`);
+    } else if (serp.presence) {
+      await logger.info('queue', `👁 "${kw.keyword}" → عضويًا مش موجودة ضمن ${match.scanned}، بس الصفحة مضايفاك في ${serp.presence.kind === 'ad' ? 'خانة إعلان' : serp.presence.kind === 'shopping' ? 'بلوك تسوّق/منتجات' : 'بلوك خارج العضوي'} (${serp.presence.url}) — اتسجل للمعلومية، ومش بيتحسب رنك`);
     } else {
       await logger.warn('queue', `⚠️ "${kw.keyword}" → غير موجود ضمن ${match.scanned} نتيجة ولا في AI Overview`);
-      await logger.info('queue', `🔎 تشخيص — أول النطاقات المقروءة: ${row.topHosts.join(' | ') || '(لا شيء)'} | إعدادك: ${cfg.storeDomain || '-'} / ${cfg.storeName || '-'}`);
+      await logger.info('queue', `🔎 تشخيص — أول النطاقات المقروءة: ${row.topHosts.join(' | ') || '(لا شيء)'} | إعدادك: ${cfg.storeDomain || '-'} / ${cfg.storeName || '-'} / ${cfg.storeNameEn || '-'}`);
     }
     this.broadcast();
     void updated;

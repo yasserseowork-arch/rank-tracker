@@ -38,8 +38,11 @@ test('matchlib: مضيفون فرعيون ومتغيرات www', () => {
   assert.equal(classic.hostMatches('mystore.com.sa.evil.io', 'mystore.com.sa'), false);
 });
 
-test('matchlib: نفس التسامح المرن مثل الـ module', () => {
-  assert.equal(classic.hostMatches('store.berhatyater.org.sa', 'berhatayer.org.sa'), true);
+test('matchlib: نفس صرامة الـ module حرفيًا (v1.21.17)', () => {
+  assert.equal(classic.hostMatches('store.berhatyater.org.sa', 'berhatayer.org.sa'), false, 'نسخة الحقن لازم تبقى صارمة زي المحرك');
+  assert.equal(classic.hostMatches('m.myshop.com', 'myshop.com'), true);
+  assert.equal(classic.hostMatches('notmyshop.com', 'myshop.com'), false);
+  assert.equal(classic.hostMatches('myshop.co', 'myshop.com'), false);
   assert.equal(classic.nameMatches('كيف تكفل يتيماً؟ جمعية البر الخيرية بحائل', 'جمعية البر الخيرية بالبحائط'), true);
   assert.equal(classic.nameMatches('جمعية البر فقط', 'جمعية البر الخيرية بالبحائط'), false);
 });

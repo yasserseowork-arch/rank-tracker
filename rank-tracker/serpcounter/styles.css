@@ -1,0 +1,40 @@
+/* v1.21.0: استيراد Bootstrap الخارجي محجوب في MV3 — كان بيرمي خطأ كونسول على كل صفحة */
+
+.countme-serp-counter {
+    position: absolute;
+    left: -46px;
+    top: 24px;
+    color: #27c93f;
+    font-weight: 700;
+    font-family: 'Google Sans';
+    font-size: 20px;
+}
+.countme-serp-counter span {
+    color: #27c93f;
+}
+.g {
+    position: relative;
+}
+.XN9cAe {
+    position: relative;
+}
+.MjjYud {
+    position: relative;
+}
+.c2xzTb {
+    overflow: visible !important;
+}
+.jtfYYd,
+.kWxLod {
+    overflow: inherit !important;
+    contain: inherit !important;
+}
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+

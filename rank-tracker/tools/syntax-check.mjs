@@ -9,18 +9,9 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = path.resolve(process.cwd());
-const MODULE_DIRS = ['src/background', 'src/sidepanel'];
-const CLASSIC_FILES = [
-  'src/lib/constants.js',
-  'src/lib/messaging.js',
-  'src/lib/dom.js',
-  'src/lib/url.js',
-  'src/lib/csv.js',
-  'src/content/serp.js',
-  'src/content/captcha.js',
-  'src/content/consent.js',
-  'src/options/options.js'
-];
+// المسح آلي على src/ كلها — القوائم اليدوية كانت بتفلت ملفات زي i18n-ui.js (علة 1.18.8)
+const ROOT_WALKS = ['src'];
+const MODULE_PREFIXES = ['src/background', 'src/sidepanel'];
 
 function walk(dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -50,13 +41,18 @@ function check(file, asModule) {
   }
 }
 
-console.log('== classic scripts ==');
-for (const rel of CLASSIC_FILES) { check(path.join(ROOT, rel), false); }
-
-console.log('== ES modules ==');
-for (const dir of MODULE_DIRS) {
-  for (const file of walk(path.join(ROOT, dir))) { check(file, true); }
+console.log('== كل ملفات src/ — modules وclassic بالمسح الآلي ==');
+const seen = new Set();
+for (const dir of ROOT_WALKS) {
+  for (const file of walk(path.join(ROOT, dir))) {
+    if (seen.has(file)) { continue; }
+    seen.add(file);
+    const rel = path.relative(ROOT, file).split(path.sep).join('/');
+    const isModule = MODULE_PREFIXES.some((pre) => rel.indexOf(pre) === 0);
+    check(file, isModule);
+  }
 }
+if (!seen.size) { console.error('المسح لقاش أي ملفات!'); failed++; }
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(failed ? `\n${failed} file(s) FAILED` : '\nAll files passed syntax check');

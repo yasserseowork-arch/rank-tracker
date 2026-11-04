@@ -9,11 +9,20 @@ import * as scheduler from './scheduler.js';
 export function createRouter(engine) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!message || typeof message.type !== 'string') { return; }
+    // اللوحة بتلمّس إشعارها — من غير ما نلمس بقية جدول الأنواع
+    if (message.type === 'srt/notice-clear') {
+      engine.clearNotice();
+      sendResponse({ ok: true });
+      return;
+    }
     const isExtensionPage = !sender.tab; // رسائل اللوحة/الخيارات بلا تبويب
-    if (!isExtensionPage) { return; }    // رسائل التبويبات يعالجها ناقل الطابور
 
     const type = message.type;
-    // رسائل محتوى التبويبات يعالجها ناقل الطابور، عدا قراءة الإعدادات فهي للجميع
+    // v1.21.40 — 🔴 العلة الأم: رسائل التبويبات كانت بتترمي كلها من غير رد، وserp.js
+    // وcaptcha.js بيسألوا `srt/config/get` أول حاجة عند الإقلاع. النتيجة كانت:
+    // كل فحص بيشتغل بإعدادات فاضية = صفر بلوكات أول شاشة، صفر مصلحة من هدف، صفر
+    // حدود كابتشا… إلخ. دلوقتي القراءة والسلام (GET_CONFIG/PING) متاحة للمحتوى،
+    // وباقي الأنواع الحسّاسة (تشغيل/إيقاف/إعدادات/كلمات) لصفحات الإضافة بس.
     const allowedForContent = [C.MSG.GET_CONFIG, C.MSG.PING];
     if (!isExtensionPage && !allowedForContent.includes(type)) { return; }
 
@@ -21,7 +30,8 @@ export function createRouter(engine) {
       C.MSG.PING, C.MSG.GET_CONFIG, C.MSG.SET_CONFIG, C.MSG.GET_STATE,
       C.MSG.QUEUE_START, C.MSG.QUEUE_PAUSE, C.MSG.QUEUE_RESUME, C.MSG.QUEUE_STOP,
       C.MSG.KEYWORDS_SET, C.MSG.KEYWORDS_ADD, C.MSG.KEYWORDS_REMOVE, C.MSG.KEYWORDS_CLEAR,
-      C.MSG.RESULTS_CLEAR, C.MSG.SHEETS_WRITE_NOW
+      C.MSG.RESULTS_CLEAR, C.MSG.SHEETS_WRITE_NOW,
+      C.MSG.PREFLIGHT, C.MSG.QUEUE_REVIEW, C.MSG.QUEUE_RECHECK, C.MSG.CONFIG_RESET
     ];
     if (!handled.includes(type)) { return; }
 
@@ -88,6 +98,31 @@ export function createRouter(engine) {
 
           case C.MSG.SHEETS_WRITE_NOW: {
             return engine.writeResultsToSheet();
+          }
+
+          case C.MSG.PREFLIGHT:
+            return await engine.preflight();
+
+          case C.MSG.QUEUE_REVIEW:
+            return await engine.manualReview();
+
+          case C.MSG.QUEUE_RECHECK:
+            return await engine.bumpPriority(message.id);
+
+          case C.MSG.CONFIG_RESET: {
+            // 🛡 v1.21.13: التصفير الشامل ماليفرش تحت رن شغال — نفس حرس المراجعة
+            const runNow = await state.getRun();
+            if (runNow.status === C.STATUS.RUN.RUNNING || runNow.status === C.STATUS.RUN.CAPTCHA) {
+              return { ok: false, reason: 'running' };
+            }
+            // 🧹 v1.21.13 (طلب المستخدم): تصفير كامل — الإعدادات للمصنع + مسح الكلمات
+            // والنتائج كلها، عشان يبدأ متجر جديد من الصفر. السجلات الادائية (runStats)
+            // بس اللي بتفضل: مفيش فيها بيانات متجر، وهي اللي بتدير تقدير الوقت الجاي
+            await state.resetConfig();
+            await state.clearKeywords();
+            await state.clearResults();
+            engine.broadcast();
+            return { ok: true };
           }
 
           default:

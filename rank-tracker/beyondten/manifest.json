@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "BeyondTen — 100 Results",
+  "version": "1.2.2",
+  "description": "يعرض 100 نتيجة في صفحة بحث جوجل برصيد الطلبات البشري — الرفيق الرسمي لأداة SEO Kw Tracker.",
+  "permissions": [
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "BeyondTen — إعدادات النتائج"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.google.com/search*",
+        "https://www.google.com.sa/search*",
+        "https://www.google.sa/search*",
+        "https://www.google.com.eg/search*",
+        "https://www.google.eg/search*",
+        "https://www.google.ae/search*",
+        "https://www.google.com.ae/search*",
+        "https://www.google.co.uk/search*",
+        "https://www.google.de/search*",
+        "https://www.google.fr/search*",
+        "https://www.google.tr/search*",
+        "https://www.google.co.in/search*",
+        "https://www.google.com.tr/search*",
+        "https://google.com/search*",
+        "https://google.com.sa/search*",
+        "https://google.sa/search*",
+        "https://*.google.co.in/search*",
+        "https://*.google.com.eg/search*",
+        "https://*.google.eg/search*"
+      ],
+      "js": [
+        "content/state.js",
+        "content/params.js",
+        "content/fetch.js",
+        "content/parser.js",
+        "content/purge.js",
+        "content/renderer.js",
+        "content/index.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

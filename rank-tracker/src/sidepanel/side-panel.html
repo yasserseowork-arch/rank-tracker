@@ -4,10 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title data-i18n="panelTitle">لوحة تتبع الترتيب</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="side-panel.css" />
+  <!-- v1.21.7: لينك الخط الخارجي متشال — CSP بتمنعه في MV3 وبيسيب خطأ كونسول مع صفر فرق بصري -->
+    <link rel="stylesheet" href="side-panel.css" />
   <script src="../lib/constants.js"></script>
   <script src="../lib/messaging.js"></script>
   <script src="../lib/csv.js"></script>
@@ -28,35 +26,44 @@
       <button id="btnLang" class="btn btn-ghost btn-sm" title="Language">EN</button>
       <div class="status-pill" id="statusPill" data-status="idle">
         <span class="dot"></span>
-        <span id="statusText">خامل</span>
+        <span id="statusText" data-i18n="statusIdle">خامل</span>
       </div>
     </div>
   </header>
 
-  <section class="controls">
-    <button id="btnStart" class="btn btn-primary" data-i18n="btnStart">▶ بدء الفحص</button>
-    <button id="btnPause" class="btn btn-warn" data-i18n="btnPause" disabled>⏸ إيقاف مؤقت</button>
-    <button id="btnResume" class="btn btn-primary" data-i18n="btnResume" disabled>⏩ استئناف</button>
-    <button id="btnStop" class="btn btn-danger" data-i18n="btnStop" disabled>⏹ إيقاف</button>
-  </section>
+  <nav class="tab-bar" id="tabBar">
+    <button class="tab-btn active" data-pane="paneMain" data-i18n="tabMain">الرئيسية</button>
+    <button class="tab-btn" data-pane="paneGsloc" data-i18n="tabGsloc">الموقع</button>
+    <button class="tab-btn" data-pane="paneBeyondten" data-i18n="tabBeyondten">تصدير النتائج</button>
+  </nav>
 
-  <div id="captchaBanner" class="banner hidden">
-    <div class="banner-icon">🧩</div>
-    <div class="banner-body">
-      <strong id="captchaBannerTitle">كابتشا قيد الحل…</strong>
-      <p id="captchaBannerText">Buster يستمع للتحدي الصوتي ويحاول الحل تلقائياً.</p>
-      <div class="banner-meta">
-        <span id="captchaAttempts">المحاولات: 0</span>
-        <button id="btnFocusCaptcha" class="btn btn-ghost btn-sm" data-i18n="btnShowTab">عرض التبويب</button>
-      </div>
-    </div>
-  </div>
+  <div id="paneMain" class="tab-pane">
+  <section class="controls">
+    <button id="btnStart" class="btn btn-primary" data-i18n="btnStart">بدء الفحص</button>
+    <button id="btnPause" class="btn btn-warn" data-i18n="btnPause" disabled>إيقاف مؤقت</button>
+    <button id="btnResume" class="btn btn-primary" data-i18n="btnResume" disabled>استئناف</button>
+    <button id="btnStop" class="btn btn-danger" data-i18n="btnStop" disabled>إيقاف</button>
+    <button id="btnReset" class="btn btn-ghost btn-reset" title="كل حاجة ترجع للمصنع: الإعدادات والكلمات والنتائج — لبدء موقع تاني" data-i18n="btnResetCfg">إعادة ضبط</button>
+  </section>
 
   <section class="stats-grid">
     <div class="stat-card"><span class="stat-value" id="statChecked">0</span><span class="stat-label" data-i18n="statChecked">كلمات فُحصت</span></div>
-    <div class="stat-card"><span class="stat-value ok" id="statFound">0</span><span class="stat-label" data-i18n="statFound">ظهور المتجر</span></div>
+    <div class="stat-card"><span class="stat-value ok" id="statFound">0</span><span class="stat-label" data-i18n="statFound">ظهور الموقع</span></div>
     <div class="stat-card"><span class="stat-value" id="statAvg">—</span><span class="stat-label" data-i18n="statAvg">متوسط الترتيب</span></div>
     <div class="stat-card"><span class="stat-value warn" id="statCaptcha">0</span><span class="stat-label" data-i18n="statCaptcha">كابتشا محلولة</span></div>
+  </section>
+
+  <!-- إشعارات الأداة جوه اللوحة نفسها (مش نوتيفيكيشن في الجهاز) — مكان شريط الاستراحة -->
+  <section class="srt-notice hidden" id="srtNotice">
+    <span class="srt-notice-dot" id="noticeDot">🔔</span>
+    <span class="srt-notice-body"><b id="noticeTitle"></b><span id="noticeText"></span></span>
+    <button class="icon-btn srt-notice-x" id="noticeClose" title="إخفاء">✕</button>
+  </section>
+
+  <!-- شريط الاستراحة التفاعلي: بيظهر بس لما استراحة بجد جارية، وعدّاد حي زي شريط التحميل -->
+  <section class="rest-strip hidden" id="restStrip">
+    <span id="restText">☕ —</span>
+    <div class="rest-bar"><div class="rest-bar-fill live" id="restFill"></div></div>
   </section>
 
   <section class="card chart-card">
@@ -66,20 +73,24 @@
   </section>
 
   <details class="card" open>
-    <summary data-i18n="targetTitle">🎯 الهدف والاستهداف الجغرافي</summary>
+    <summary data-i18n="targetTitle">الهدف والاستهداف الجغرافي</summary>
     <div class="form-grid">
       <label>
-        <span data-i18n="lblDomain">دومين المتجر</span>
+        <span data-i18n="lblDomain">دومين الموقع</span>
         <input type="text" id="cfgDomain" dir="ltr" placeholder="example.com.sa" />
       </label>
       <label>
-        <span data-i18n="lblName">اسم المتجر</span>
-        <input type="text" id="cfgName" placeholder="متجر مثال" />
+        <span data-i18n="lblName">اسم الموقع بالعربي (إن وُجد)</span>
+        <input type="text" id="cfgName" placeholder="موقع مثال" />
+      </label>
+      <label>
+        <span data-i18n="lblNameEn">اسم الموقع بالإنجليزي (إن وُجد)</span>
+        <input type="text" id="cfgNameEn" dir="ltr" placeholder="Example Store" />
       </label>
       <label style="grid-column: 1 / -1;">
         <span data-i18n="lblMatch">نمط المطابقة</span>
         <select id="cfgMatch">
-          <option value="both" data-i18n="matchBoth">الدومين أو الاسم</option>
+          <option value="both" data-i18n="matchBoth">الدومين بالضبط (والاسم لو مفيش دومين)</option>
           <option value="domain" data-i18n="matchDomain">الدومين فقط</option>
           <option value="name" data-i18n="matchName">الاسم فقط</option>
         </select>
@@ -89,13 +100,13 @@
 
 
   <details class="card" open>
-    <summary data-i18n="kwTitle">🔑 الكلمات المفتاحية</summary>
+    <summary><span data-i18n="kwTitle">الكلمات المفتاحية</span> <span class="kw-count" id="kwCount" title="عدد الكلمات اللي حطيتها">0</span></summary>
     <textarea id="kwInput" rows="4" data-i18n-ph="kwPlaceholder" placeholder="الصق الكلمات هنا (سطر لكل كلمة، أو عمود من الشيت)&#10;مثال:&#10;عبايات نسائية&#10;فساتين سهرة الرياض"></textarea>
     <div class="btn-row">
-      <button id="btnAddKw" class="btn btn-primary btn-sm" data-i18n="btnAddKw">＋ إضافة الكلمات</button>
-      <button id="btnImportCsv" class="btn btn-ghost btn-sm" data-i18n="btnImportCsv">📄 استيراد CSV</button>
+      <button id="btnAddKw" class="btn btn-primary btn-sm" data-i18n="btnAddKw">إضافة الكلمات</button>
+      <button id="btnImportCsv" class="btn btn-ghost btn-sm" data-i18n="btnImportCsv">استيراد CSV</button>
       <input type="file" id="csvFile" accept=".csv,.tsv,.txt" class="hidden" />
-      <button id="btnClearKw" class="btn btn-danger btn-sm" data-i18n="btnClearKw">🗑 مسح الكل</button>
+      <button id="btnClearKw" class="btn btn-danger btn-sm" data-i18n="btnClearKw">مسح الكل</button>
     </div>
     <div class="table-wrap">
       <table class="data-table" id="kwTable">
@@ -113,12 +124,12 @@
   </details>
 
   <details class="card" open>
-    <summary data-i18n="resTitle">📊 النتائج</summary>
+    <summary data-i18n="resTitle">تصدير النتائج</summary>
     <div class="btn-row">
-      <button id="btnMakeXlsx" class="btn btn-primary btn-sm" data-i18n="btnMakeXlsx">📊 اعمل شيت بالترتيب (XLSX)</button>
-      <button id="btnExportCsv" class="btn btn-ghost btn-sm" data-i18n="btnExportCsv">⬇ تصدير CSV</button>
-      <button id="btnCopyTsv" class="btn btn-ghost btn-sm" data-i18n="btnCopyTsv">📋 نسخ للصق في الشيت</button>
-      <button id="btnClearRes" class="btn btn-danger btn-sm" data-i18n="btnClearRes">🗑 مسح النتائج</button>
+      <button id="btnMakeXlsx" class="btn btn-primary btn-sm" data-i18n="btnMakeXlsx">اعمل شيت بالترتيب (XLSX)</button>
+      <button id="btnExportCsv" class="btn btn-ghost btn-sm" data-i18n="btnExportCsv">تصدير CSV</button>
+      <button id="btnCopyTsv" class="btn btn-ghost btn-sm" data-i18n="btnCopyTsv">نسخ للصق في الشيت</button>
+      <button id="btnClearRes" class="btn btn-danger btn-sm" data-i18n="btnClearRes">مسح النتائج</button>
     </div>
     <div class="table-wrap">
       <table class="data-table" id="resTable">
@@ -137,15 +148,45 @@
 
 
   <details class="card">
-    <summary data-i18n="logTitle">🖥 السجل الحي</summary>
+    <summary data-i18n="logTitle">السجل الحي</summary>
     <div id="logConsole" class="log-console"></div>
     <button id="btnClearLogs" class="btn btn-ghost btn-sm" data-i18n="btnClearLogs">مسح السجل</button>
   </details>
 
+  </div><!-- /paneMain -->
+
+  <!-- ⚙️ تبويبات الأدوات المدمجة: واجهة كل أداة محمّلة في إطار -->
+  <div id="paneGsloc" class="tab-pane hidden">
+    <div class="tool-pane-head">
+      <h2 data-i18n="tabGsloc">الموقع</h2>
+      <p data-i18n="paneGslocDesc">اختر المدينة واللغة (gl/hl) لنتائج بحث جوجل</p>
+    </div>
+
+    <iframe id="frameGsloc" src="../../gsloc/popup.html" class="tool-frame" data-tool="gsloc"></iframe>
+  </div>
+  <div id="paneBeyondten" class="tab-pane hidden">
+    <div class="tool-pane-head">
+      <h2 data-i18n="tabBeyondten">تصدير النتائج</h2>
+      <p data-i18n="paneBeyondtenDesc">اختار عدد النتائج في صفحة البحث (10 / 20 / 50 / 100)</p>
+    </div>
+    <iframe id="frameBeyondten" src="../../beyondten/popup/popup.html" class="tool-frame" data-tool="beyondten"></iframe>
+  </div>
+
+  <!-- الفوتر ثابت في كل التابات: بره الـ panes عشان التبديل ما يخفيهوش -->
   <footer class="app-footer">
     <span class="footer-copy" dir="ltr" data-i18n="footerCopy">© 2026 SEO Kw Tracker. جميع الحقوق محفوظة.</span>
     <span class="footer-by" dir="ltr"><a class="li-badge" href="https://www.linkedin.com/in/muhammed-yasser-seo-specialist/" target="_blank" rel="noopener" aria-label="LinkedIn profile of Muhammed Yasser">in</a>&nbsp;By: Muhammed Yasser</span>
   </footer>
+
+  <!-- تحذير يظهر عند كل فتحة للوحة في البداية -->
+  <div id="warnOverlay" class="modal-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="warnTitle">
+    <div class="modal-card">
+      <img id="modalAvatar" class="modal-avatar" src="avatar.jpg" alt="" />
+      <h2 id="warnTitle" data-i18n="warnTitle">تنبيه مهم</h2>
+      <p data-i18n="warnText">الإضافة بتمسح بيانات المتصفح (كوكيز وتاريخ وكاش) قبل كل جولة فحص — استخدمها في بروفايل جيست من غير تسجيل دخول.</p>
+      <button id="btnWarnOk" class="btn btn-primary" data-i18n="btnWarnOk">فهمت</button>
+    </div>
+  </div>
 
   <script type="module" src="side-panel.js"></script>
 </body>

@@ -1,0 +1,183 @@
+.serp-popup {
+  font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+  background: linear-gradient(145deg, rgba(11,114,231,0.08), rgba(0,77,153,0.08));
+  backdrop-filter: blur(4px);
+  color: #333;
+  width: 300px;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.logo-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.serp-popup h1 {
+  font-size: 18px;
+  margin: 0;
+  color: #0B72E7;
+  font-weight: 600;
+}
+
+.top-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+}
+
+.top-toggle input {
+  display: none;
+}
+
+.top-toggle .slider {
+  background-color: #ccc;
+  border-radius: 20px;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transition: 0.3s;
+}
+
+.top-toggle .slider:before {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 2px;
+  left: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.top-toggle input:checked + .slider {
+  background-color: #0B72E7;
+}
+
+.top-toggle input:checked + .slider:before {
+  transform: translateX(16px);
+}
+
+.serp-popup .subtitle {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 14px;
+}
+
+.serp-popup .selector {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.serp-popup label {
+  font-size: 12px;
+  color: #444;
+  display: block;
+  margin-bottom: 5px;
+}
+
+.serp-popup select {
+  width: 100%;
+  padding: 8px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #222;
+  font-weight: 500;
+}
+
+.status-line {
+  font-size: 12px;
+  color: #555;
+  margin: 6px 0 14px;
+  text-align: left;
+}
+
+.serp-popup button {
+  padding: 10px;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background-color: #0B72E7;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.25s ease;
+}
+
+.serp-popup button:hover {
+  background-color: #095ec0;
+}
+
+.serp-popup footer {
+  text-align: center;
+  font-size: 11px;
+  color: #888;
+  margin-top: 12px;
+}
+
+.serp-popup footer a {
+  text-decoration: none;
+  color: #888;
+  font-weight: 600;
+}
+/* ═══ هوية اللوحة الموحدة (كحلي + ذهبي) — تجميل الإضافة المدمجة ═══ */
+html { background: #031c2e; }
+body { background: #031c2e; margin: 0; }
+.serp-popup {
+  background: linear-gradient(160deg, #053960, #06283f 55%, #031c2e);
+  color: #eaf2f8;
+  border: 1px solid #0d4a77;
+  box-shadow: 0 6px 24px rgba(2, 20, 34, .45);
+  font-family: "Cairo", "Segoe UI", Tahoma, sans-serif;
+}
+.serp-popup h1 { color: #e2b67a; }
+.serp-popup .subtitle { color: #9db4c6; }
+.serp-popup label { color: #9db4c6; }
+.serp-popup select {
+  background: #06283f;
+  border: 1px solid #0d4a77;
+  color: #eaf2f8;
+}
+.serp-popup select:focus { border-color: #c2924d; outline: none; }
+.status-line { color: #9db4c6; }
+.serp-popup button {
+  background: linear-gradient(135deg, #e2b67a, #c2924d);
+  color: #06283f;
+  font-weight: 700;
+}
+.serp-popup button:hover { background: linear-gradient(135deg, #f0c88e, #c2924d); }
+.serp-popup footer, .serp-popup footer a { color: #9db4c6; }
+.serp-popup footer a:hover { color: #e2b67a; }
+.top-toggle .slider { background-color: #0d4a77; }
+.top-toggle input:checked + .slider { background-color: #c2924d; }
+.tool-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2b67a;
+}
+
+/* توسيط كارت الإعدادات في نص الإطار */
+html, body { height: 100%; }
+body {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12px 0;
+  box-sizing: border-box;
+}
+.serp-popup { margin: 0 auto; max-width: 100%; }

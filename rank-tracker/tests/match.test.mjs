@@ -61,9 +61,33 @@ test('matchResults: مطابقة بالاسم داخل الوصف', () => {
   assert.equal(res.position, 1);
 });
 
-test('hostMatches: تسامح مع حرف متلخبط في الدومين', () => {
-  assert.equal(hostMatches('store.berhatyater.org.sa', 'berhatayer.org.sa'), true);
-  assert.equal(hostMatches('berhatayer.org.sa', 'berhatyater.org.sa'), true);
+test('hostMatches: صفر تسامح أحرف — DOMEXACT للملكية (v1.21.17)', () => {
+  assert.equal(hostMatches('store.berhatyater.org.sa', 'berhatayer.org.sa'), false);
+  assert.equal(hostMatches('berhatayer.org.sa', 'berhatyater.org.sa'), false);
+});
+
+test('hostMatches: متجر بنفس الاسم على TLD تاني = مش إحنا', () => {
+  assert.equal(hostMatches('myshop.co', 'myshop.com'), false);
+  assert.equal(hostMatches('myshop.com.sa', 'myshop.com'), false);
+  assert.equal(hostMatches('nike.com', 'mike.com'), false);
+});
+
+test('hostMatches: سوبدومين ملكنا يقبل، ولا substring ولا دومين ملغوم', () => {
+  assert.equal(hostMatches('m.myshop.com', 'myshop.com'), true);
+  assert.equal(hostMatches('ar.store.myshop.com', 'myshop.com'), true);
+  assert.equal(hostMatches('notmyshop.com', 'myshop.com'), false);
+  assert.equal(hostMatches('myshop.com.evil.net', 'myshop.com'), false);
+  assert.equal(hostMatches('evilmyshop.net', 'myshop.com'), false);
+});
+
+test('matchResults: نتيجة متجر تاني في النص ما تسرقش البوزيشن', () => {
+  const items = [
+    { url: 'https://amazon.com/dp/myshop-cream', host: 'amazon.com', title: 'MyShop Cream على أمازون', snippet: 'متجر myshop.com غير متوفر' },
+    { url: 'https://myshop.com/', host: 'myshop.com', title: 'متجري', snippet: '' }
+  ];
+  const res = matchResults(items, { storeDomain: 'myshop.com', matchMode: 'domain' });
+  assert.equal(res.found, true);
+  assert.equal(res.position, 2, 'الصفرة بتاعت أمازون ما بتسرقش المركز الأول');
 });
 
 test('hostMatches: لا تسامح مع اختلاف كبير', () => {

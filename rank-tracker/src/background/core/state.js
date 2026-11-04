@@ -5,12 +5,13 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 11; // v1.21.38: دورة المسح الجديدة (قبل الرن + كل 10 كلمات)
 
 export const K = {
   CONFIG: 'srt.config',
   KEYWORDS: 'srt.keywords',
   RESULTS: 'srt.results',
+  RUN_STATS: 'srt.runStats',
   RUN: 'srt.run',
   LOGS: 'srt.logs',
   SCHEMA: 'srt.schemaVersion'
@@ -21,6 +22,7 @@ export const DEFAULT_CONFIG = {
   // الهوية المستهدفة
   storeDomain: '',
   storeName: '',
+  storeNameEn: '',
   matchMode: 'both',            // domain | name | both
   // استهداف جغرافي ولغة SERP
   gl: '',   // المنطقة اختيارية تماماً — سيبتها فاضية = إعداد جوجل الافتراضي
@@ -29,37 +31,40 @@ export const DEFAULT_CONFIG = {
   // الإيقاع البشري
   delayMs: 4000,                // مهلة إلزامية قبل كل كلمة (طلب المستخدم: 4 ثوانٍ)
   jitterMs: 1500,
-  cooldownEvery: 8,             // كل N كلمات خذ استراحة طويلة
-  cooldownMs: 45000,
-  cooldownJitterMs: 20000,
+  cooldownEvery: 10,            // كل N كلمات خذ استراحة طويلة — v1.21.38: اتظبطت على 10 مع دورة المسح عُدّاد واحد يدير الاتنين
+  cooldownMs: 10000,           // v1.21.37 (طلب المستخدم: «راحات ثابتة»): كل 10 كلمات = 10 ثواني بالظبط، مفيش عشوائية ولا تمطيط
+  cooldownJitterMs: 0,
   // الكابتشا
-  captchaMaxAttempts: 4,
+  captchaMaxAttempts: 2,
   captchaAttemptTimeoutMs: 35000,
   captchaGapMs: 2500,
   captchaRefreshRetries: 2,   // ريفرش صفحة الكابتشا ومحاولات جديدة عند الفشل
   pauseOnCaptchaFail: true,
   autoResumeOnManualSolve: true,
   // قراءة SERP
-  settleMs: 1800,
+  settleMs: 1100,               // ⚡ 1.21.20 (طلب السرعة): الصفحة سيرفر-سايد من 1.21.4 — مفيش مبرر 1.8 ثانية
   scrollStepMs: 320,
-  maxWaitResultsMs: 20000,      // قاعدة الـ20 ثانية: بعدها الكلمة تُعتبر غير موجودة
-  batchSettleMs: 5000,          // ثبات العدّاد هذه المدة = الأداة المساعدة خلّصت
-  rescanMs: 1800,               // فترة المسح الدوري (مثل Ctrl+F متكرر)
-  selfFetchMore: false,         // جلب خلفي اختياري (متقدم) — الافتراضي الاعتماد على التمرير
-  selfFetchMaxBatches: 6,       // أقصى دفعات خلفية (كل دفعة 10 نتائج)
+  maxWaitResultsMs: 20000,      // قاعدة الـ20 ثانية: تُطبَّق بس لما العدّاد يوقف (مفيش نتائج جديدة)
+  scanHardCapMs: 60000,         // السقف المطلق لمسح كلمة واحدة — لسه فيه تقدم؟ كمّل لحد هنا
+  batchSettleMs: 2600,          // ⚡ 1.21.20: كانت 6500 من عصر ما قبل num=100 سيرفر-سايد — الدفعات الخلفية (selfFetchMore) ضهرة أمان، فالثبات اتقصّر
+  rescanMs: 800,                // ⚡ 1.21.20:Ctrl+F دوري خفيف — نفس فولو-باك serp من 1.21.9
+  selfFetchMore: true,          // الجلب الخلفي بقى افتراضي: مكمّل الدفعات لحد expectedNum لو السكرول وقف نص الطريق
+  selfFetchMaxBatches: 9,       // أقصى دفعات خلفية (كل دفعة 10 نتائج) — تغطي 20→100
   maxChecksPerDay: 150,         // سقف يومي احتراماً لقواعد جوجل (0 = بدون سقف)
   errorReloadMax: 2,            // ريفرش تلقائي لصفحات الخطأ (عدد المرات)
   keywordRetries: 5,            // أي مشكلة؟ ريفرش + نفس الكلمة — عدد مرات إعادة المحاولة
-  captchaClearRetries: 2,       // كابتشا؟ مسح بيانات المتصفح + تاب جديد — عدد المرات لكل كلمة
+  captchaClearRetries: 3,       // كابتشا؟ مسح بيانات المتصفح + تاب جديد — عدد المرات لكل كلمة
   // دورة العمل الكاملة (مثل السيناريو اليدوي)
-  clearBeforeRun: true,         // مسح بيانات التصفح (كل الوقت) قبل بدء الجولة
+  clearBeforeRun: true,         // 🧼 v1.21.38 (طلب المستخدم الصريح): مسح كامل لبيانات التصفح قبل كل رن — أساس مجهول نضيف من أول ثانية؛ المفتاح يفضل اختياريًا للي عايز الجلسة الدافية
+  clearScopeGoogle: true,       // 🛡 v1.21.40: المسح محصور في جوجل (كوكيز/كاش/تاريخ جوجل بس) — عمرنا ما نمسح تاريخ أو كوكيز باقي مواقعك أو تسجيلات دخولك وحساباتك؛ القيمة عمرها ما بتتحفظ إلا لو المستخدم بنفسه شال الحصر
+  clearEveryN: 10,              // v1.21.38 (طلب المستخدم): مسح دوري كامل كل 10 كلمات — متزامن مع الاستراحة (0 = معطّل)
   sheetUrl: '',                 // رابط شيت جوجل للمزامنة والكتابة
   sheetWriteBack: false,        // كتابة عمود الترتيب في الشيت عند انتهاء الجولة
   sheetStartCell: 'B1',         // خلية بداية لصق عمود الترتيب
   mapsCheck: true,              // فحص النتائج المحلية (خرائط) لكل كلمة — مثل السيناريو
   autoXlsx: true,               // تنزيل شيت Excel بالترتيب تلقائياً عند انتهاء الجولة
   // التبويبات
-  foregroundTab: true,
+  foregroundTab: false,          // 🕊 v1.21.16 (طلب المستخدم): التبويبات بتفتح في الخلفية بهدوة — النافذة ماتبترفعش نفسها؛ التنشيط بيحصل لحظة ما عينه مطلوبة بس (شاشة التحدي)
   reuseTab: true,               // تبويب واحد دائم + تغيير الكلمة من صندوق البحث
   // متفرقات
   verbose: true,
@@ -105,6 +110,12 @@ export async function getConfig() {
   return Object.assign({}, DEFAULT_CONFIG, stored || {});
 }
 
+/** 🔄 v1.21.9: رجوع لإعدادات المصنع — الكلمات والنتائج بره الحساب تمامًا */
+export async function resetConfig() {
+  await local.set(K.CONFIG, Object.assign({}, DEFAULT_CONFIG));
+  return DEFAULT_CONFIG;
+}
+
 export async function setConfig(patch) {
   const current = await getConfig();
   const next = Object.assign({}, current, patch || {});
@@ -112,12 +123,13 @@ export async function setConfig(patch) {
   const numeric = ['num', 'delayMs', 'jitterMs', 'cooldownEvery', 'cooldownMs', 'cooldownJitterMs',
     'captchaMaxAttempts', 'captchaAttemptTimeoutMs', 'captchaGapMs', 'captchaRefreshRetries', 'keywordRetries', 'captchaClearRetries', 'settleMs', 'scrollStepMs',
     'maxWaitResultsMs', 'maxHistoryPerKeyword', 'maxChecksPerDay', 'errorReloadMax',
-    'batchSettleMs', 'rescanMs', 'selfFetchMaxBatches'];
+    'batchSettleMs', 'rescanMs', 'selfFetchMaxBatches', 'scanHardCapMs', 'clearEveryN',
+];
   for (const key of numeric) {
     const n = parseInt(next[key], 10);
     if (!Number.isNaN(n)) { next[key] = n; }
   }
-  const booleans = ['pauseOnCaptchaFail', 'autoResumeOnManualSolve', 'foregroundTab', 'reuseTab', 'verbose', 'selfFetchMore', 'clearBeforeRun', 'sheetWriteBack', 'mapsCheck', 'autoXlsx'];
+  const booleans = ['pauseOnCaptchaFail', 'autoResumeOnManualSolve', 'foregroundTab', 'reuseTab', 'verbose', 'selfFetchMore', 'clearBeforeRun', 'clearScopeGoogle', 'sheetWriteBack', 'mapsCheck', 'autoXlsx'];
   for (const key of booleans) { next[key] = !!next[key]; }
   if (!['domain', 'name', 'both'].includes(next.matchMode)) { next.matchMode = 'both'; }
   // تنظيف الدومين: المستخدم يكتبه بدون https وأحياناً بمسار أو www
@@ -127,6 +139,10 @@ export async function setConfig(patch) {
       .replace(/[\/?#].*$/, '')
       .replace(/^www\./i, '')
       .toLowerCase();
+  }
+  // الاسمان (عربي/إنجليزي): trim وخفة، والسقف 80 حرف — من غير تغيير في المحتوى
+  for (const nameKey of ['storeName', 'storeNameEn']) {
+    if (typeof next[nameKey] === 'string') { next[nameKey] = next[nameKey].trim().slice(0, 80); }
   }
   next.delayMs = Math.max(1000, next.delayMs);
   next.num = Math.min(100, Math.max(10, next.num));
@@ -161,18 +177,12 @@ export async function updateKeyword(id, patch) {
 export async function addKeywords(keywords, note) {
   const list = await getKeywords();
   const added = [];
-  let reset = 0;
   for (const raw of keywords || []) {
-    const kw = String(raw || '').trim();
+    const kw = String(raw || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
     if (!kw) { continue; }
-    const key = kw.toLowerCase();
-    const idx = list.findIndex((k) => String(k.keyword || '').trim().toLowerCase() === key);
-    if (idx >= 0) {
-      // موجودة من قبل؟ رجّعها لطابور الانتظار بدل تجاهلها الصامت
-      list[idx] = Object.assign({}, list[idx], { status: C.STATUS.KW.PENDING });
-      reset += 1;
-      continue;
-    }
+    // v1.21.1: المكررات مالهاش حذف ولا دمج — المستخدم بيشيل عمود الترتيب ويلصقه في
+    // شيته سطر بسطر: أي سطر ناقص بيبلّط الشيت كله. نفس الكلمة مرتين = صفّين في مكانّين،
+    // والفحص الذكي في queue بيخلي التاني مسخّرة من الأول من غير طلب تاني لجوجل
     const item = {
       id: makeKeywordId(kw),
       keyword: kw,
@@ -187,7 +197,7 @@ export async function addKeywords(keywords, note) {
     added.push(item);
   }
   await setKeywords(list);
-  return { added: added, reset: reset };
+  return { added: added, reset: 0 };
 }
 
 export async function removeKeyword(id) {
@@ -215,6 +225,20 @@ export async function addResult(row) {
   await local.set(K.RESULTS, list);
   void cfg;
   return row;
+}
+
+/* 📊 v1.21.7: إحصاءات الرنات — أساس تقدير الوقت وتقرير آخر رن (آخر 20) */
+export async function getRunStats() {
+  const list = await local.get(K.RUN_STATS, []);
+  return Array.isArray(list) ? list : [];
+}
+
+export async function appendRunStat(entry) {
+  const list = await getRunStats();
+  list.push(entry);
+  if (list.length > 20) { list.splice(0, list.length - 20); }
+  await local.set(K.RUN_STATS, list);
+  return entry;
 }
 
 export async function clearResults() {
@@ -268,9 +292,13 @@ export async function clearLogs() {
 
 /* --------------------------------- الهجرة --------------------------------- */
 
-/** عدّاد الفحوصات اليومي (سقف احتراماً لقواعد جوجل) */
+/** عدّاد الفحوصات اليومي (سقف احتراماً لقواعد جوجل)
+ *  v1.21.40: كان بيحسب «اليوم» بـUTC — والمستخدم في القاهرة UTC+2/UTC+3، فالسقف
+ *  اليومي كان بيترجع (أو يتقفل) الساعة 2/3 صباحًا بالتوقيت المحلي: «اتقفل السقف»
+ *  واليوم لسه بدري، أو يوم جديد يفتح قبل نص الليل. بقى التاريخ محلي. */
 export async function getDailyCount() {
-  const today = new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   const stored = await local.get('srt.dailyCount', { date: today, count: 0 });
   if (stored.date !== today) { return { date: today, count: 0 }; }
   return stored;
@@ -301,6 +329,72 @@ export async function migrate() {
     }));
     await setKeywords(fixed);
   }
+  if (version < 4) {
+    // عادات جديدة: الكابتشا محاولتين بس، والمسح الدوري بقى متزامن مع الاستراحة (كل 10 من 1.21.38)
+    const cfg = await getConfig();
+    const patchCfg = {};
+    const att = parseInt(cfg.captchaMaxAttempts, 10);
+    if (!Number.isFinite(att) || att > 2) { patchCfg.captchaMaxAttempts = 2; }
+    const cn = parseInt(cfg.clearEveryN, 10);
+    if (!Number.isFinite(cn) || cn === 10) { patchCfg.clearEveryN = 8; }
+    if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
+  }
+  if (version < 6) {
+    // تسريع 1.20.5: الافتراضي القديم 45000 يتنقل لـ30000 — أي قيمة عدّلها المستخدم بيديها بتفضل
+    const cfg = await getConfig();
+    const patchCfg = {};
+    if (parseInt(cfg.cooldownMs, 10) === 45000) { patchCfg.cooldownMs = 30000; }
+    if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
+  }
+  if (version < 7) {
+    // 🕊 v1.21.16: الوضع الهادي بقى هو_norm — الافتراضي القديم (true) المحفوظ بيتقلب
+    // لـfalse. مفيش حاجة تانية في الإعدادات بتتحرك، والمسار الآلي للسكرول زي ما هو
+    const cfg7 = await getConfig();
+    if (cfg7.foregroundTab === true) { await setConfig({ foregroundTab: false }); }
+  }
+  if (version < 5) {
+    // صبر المراكز الغويط: اللي راضي بقيم 1.19 الافتراضية ياخد القيم الجديدة؛
+    // أي قيمة عدّلها المستخدم بنفسه بتفضل زي ما هي (ماعدا selfFetchMore — الأمان بقى افتراضي)
+    const cfg = await getConfig();
+    const patchCfg = {};
+    if (parseInt(cfg.batchSettleMs, 10) === 5000) { patchCfg.batchSettleMs = 6500; }
+    if (parseInt(cfg.selfFetchMaxBatches, 10) === 6) { patchCfg.selfFetchMaxBatches = 9; }
+    if (cfg.selfFetchMore === false) { patchCfg.selfFetchMore = true; }
+    if (Object.keys(patchCfg).length) { await setConfig(patchCfg); }
+  }
+  if (version < 8) {
+    // ⚡ v1.21.20 (طلب المستخدم: «20 كلمة في نص ساعة بطيء»): الافتراضيات التقيلة القديمة
+    // (settle 6.5ث / rescan 1.8ث / settle 1.8ث) بتتحدّث للقيم السريعة الجديدة — بس لو
+    // المستخدم سابها زي الافتراضي؛ أي قيمة عدّلها بإيده بتفضل محمية
+    const cfg8 = await getConfig();
+    const patch8 = {};
+    if (parseInt(cfg8.batchSettleMs, 10) === 6500) { patch8.batchSettleMs = 2600; }
+    if (parseInt(cfg8.rescanMs, 10) === 1800) { patch8.rescanMs = 800; }
+    if (parseInt(cfg8.settleMs, 10) === 1800) { patch8.settleMs = 1100; }
+    if (Object.keys(patch8).length) { await setConfig(patch8); }
+  }
+  if (version < 9) {
+    // ⚡ 1.21.36: اللي سابعين الاستراحة على الافتراضي القديم (30+20) ياخدوا الجديد (25+15)؛
+    // أي رقم عدّله المستخدم بإيده محمي زي ما هو
+    const cfg9 = await getConfig();
+    const patch9 = {};
+    if (parseInt(cfg9.cooldownMs, 10) === 30000 || parseInt(cfg9.cooldownMs, 10) === 25000) {
+      patch9.cooldownMs = 10000; patch9.cooldownJitterMs = 0; // 1.21.37: اللي سيبها على الافتراضي ياخد الثابتة القصيرة
+    }
+    if (Object.keys(patch9).length) { await setConfig(patch9); }
+  }
+  if (version < 11) {
+    // 🧼 1.21.38 (طلب المستخدم الصريح): مسح كامل قبل كل رن + دورة مسح/استراحة كل 10 كلمات.
+    // اللي سابها على جلسة .37 الدافية أو الدور القديم (8) يترقّى للأمر الجديد؛
+    // اللي سطّر 0 بنفسه (معطّل المسح الدوري) محترم ومابيتلمسش
+    const cfgB = await getConfig();
+    const patchB = {};
+    if (cfgB.clearBeforeRun !== true) { patchB.clearBeforeRun = true; }
+    if (parseInt(cfgB.cooldownEvery, 10) === 8) { patchB.cooldownEvery = 10; }
+    const cn11 = parseInt(cfgB.clearEveryN, 10);
+    if (cn11 === 8 || !Number.isFinite(cn11)) { patchB.clearEveryN = 10; }
+    if (Object.keys(patchB).length) { await setConfig(patchB); }
+  }
   await local.set(K.SCHEMA, SCHEMA_VERSION);
   return SCHEMA_VERSION;
 }
@@ -308,8 +402,8 @@ export async function migrate() {
 /* ------------------------------- نسخة شاملة ------------------------------- */
 
 export async function snapshot() {
-  const [config, keywords, results, run, logs] = await Promise.all([
-    getConfig(), getKeywords(), getResults(), getRun(), getLogs()
+  const [config, keywords, results, run, logs, stats] = await Promise.all([
+    getConfig(), getKeywords(), getResults(), getRun(), getLogs(), getRunStats()
   ]);
   return {
     version: C.VERSION,
@@ -318,11 +412,19 @@ export async function snapshot() {
     results: results.slice(0, 300),
     run,
     logs: logs.slice(-150),
-    stats: computeStats(results, keywords)
+    // v1.21.40: 🔴 الإحصاءات (متفحص/ظهور/متوسط) كانت بتتحسب من آخر 300 صف
+    // **قديم-أول** — يعني بعد 300 فحص الرقم بيثبت غلط (ومتوسط الترتيب بيبقى
+    // متوسط فحوصات قديمة مش الحالة الحالية). دلوقتي من كل النتائج المحفوظة + الفحص الحالي.
+    stats: Object.assign(computeStats(results, keywords, run), {
+      // v1.21.40: «كابتشا اتحلت» في اللوحة كانت بتقرا run.captchaSolves (بيتصفّر مع
+      // كل start) فبتقول صفر بعد كل تشغيل. التراكمي = سجل آخر 20 رن + الرن الشغال،
+      // لأن سجل الرنات بيتكتب بعد الإنهاء بس (الرن الحالي مش فيه).
+      captchaSolvesTotal: stats.reduce((n, r) => n + (Number(r && r.captchaSolves) || 0), 0) + ((run && run.captchaSolves) || 0)
+    })
   };
 }
 
-function computeStats(results, keywords) {
+function computeStats(results, keywords, run) {
   const checked = results.length;
   const foundRows = results.filter((r) => r.found);
   const positions = foundRows.map((r) => r.position).filter((p) => typeof p === 'number');
@@ -335,6 +437,10 @@ function computeStats(results, keywords) {
     best: positions.length ? Math.min(...positions) : null,
     pending: keywords.filter((k) => k.status === C.STATUS.KW.PENDING).length,
     done: keywords.filter((k) => k.status === C.STATUS.KW.DONE).length,
-    total: keywords.length
+    total: keywords.length,
+    // v1.21.40: عدّاد الكابتشا في اللوحة كان بيقرا run.captchaSolves اللي بيتصفّر
+    // مع كل start() — يعني «كابتشا اتحلت» كان بيقول صفر بعد كل رن رغم إن فيه كابتشا
+    // اتحلت. snapshot بيضيف الإجمالي التراكمي من سجل الرنات (captchaSolvesTotal).
+    captchaSolves: (run && run.captchaSolves) || 0
   };
 }

@@ -31,10 +31,14 @@ export class CaptchaOrchestrator {
     });
   }
 
-  /** أمر لكل إطارات التبويب — أول رد يصل يكفي (command to all tab frames — first reply suffices) */
+  /** أمر لكل إطارات التبويب — أول رد يصل يكفي، ولو مفيش رد خلال 3 ثوانٍ بنرجع null
+   *  (command to all tab frames — first reply suffices; timeout guard so we never hang) */
   async command(tabId, type, payload) {
     try {
-      return await chrome.tabs.sendMessage(tabId, Object.assign({ type }, payload || {}));
+      return await Promise.race([
+        chrome.tabs.sendMessage(tabId, Object.assign({ type }, payload || {})),
+        new Promise((resolve) => setTimeout(() => resolve(null), 3000))
+      ]);
     } catch (err) {
       await logger.debug('captcha', `تعذر إرسال أمر للتبويب ${tabId}: ${err && err.message}`);
       return null;
@@ -64,25 +68,30 @@ export class CaptchaOrchestrator {
    * @returns {Promise<{outcome:'solved'|'failed'|'no-buster'|'aborted', attempts:number, detail?:string}>}
    */
   async solve(tabId, cfg, signal) {
-    const max = Math.max(1, cfg.captchaMaxAttempts || 4);
-    const attemptTimeout = cfg.captchaAttemptTimeoutMs || 35000;
+    const max = Math.max(1, cfg.captchaMaxAttempts || 2);
+    // مهلة الجولة لازم تستوعب دورة الآلة الذاتية كاملة:
+    // ظهور الصوت (~12ث) + نسخ الصوت (~60ث كحد أقصى أول مرة) + الحكم (~5ث)
+    const attemptTimeout = Math.max(cfg.captchaAttemptTimeoutMs || 0, 120000);
     this.active = { tabId, attempts: 0, startedAt: Date.now() };
 
-    await logger.warn('captcha', `كابتشا مرصودة (تبويب ${tabId}) — Buster يقود ذاتياً والمنسّق يراقب (حتى ${max} محاولات)`);
+    await logger.warn('captcha', `كابتشا مرصودة (تبويب ${tabId}) — ندي الصفحة نفس أول، وبعدها الآلة تشتغل بهدوء (محاولتين بس)`);
+    // رتم هادي: الصفحة وإطار التحدي لازم يلحقوا يتحملوا قبل أي فحص أو ضغطة
+    await sleep(2500, signal);
 
-    // تأكيد وجود زر Buster قبل البدء (confirm Buster button exists before starting)
+    // تأكد إن التحدي فاتح أصلاً (الآلة الذاتية هي اللي بتحل — مش لازم زر Buster)
     let probe = await this.probe(tabId);
-    if (!probe || probe.busterFound !== true) {
-      await logger.warn('captcha', 'زر Buster غير مرئي بعد — انتظار حتى 8 ثوانٍ…');
-      const grace = await this.waitBuster(tabId, 8000);
+    const solverActive = (p) => !!(p && (p.busterFound === true || p.challengeOpen === true || p.audioOpen === true || p.imageOpen === true));
+    if (!solverActive(probe)) {
+      await logger.warn('captcha', 'التحدي لسه مفتحش — انتظار حتى 12 ثانية…');
+      const grace = await this.waitChallenge(tabId, 20000);
       if (!grace) {
-        // ربما حُلّت الكابتشا قبل ظهور Buster أصلاً — تحقق من الرابط قبل إعلان الفشل
+        // لو الصفحة سابت /sorry/ يبقى حُلّت قبل ما التحدي يفتح أصلاً
         const u0 = await tabctl.getUrl(tabId);
         this.active = null;
         if (u0 && !/\/sorry\//.test(u0)) {
-          return { outcome: 'solved', attempts: 0, detail: 'solved-before-buster' };
+          return { outcome: 'solved', attempts: 0, detail: 'solved-before-challenge' };
         }
-        return { outcome: 'no-buster', attempts: 0, detail: 'buster-button-not-found' };
+        return { outcome: 'no-buster', attempts: 0, detail: 'challenge-not-open' };
       }
       probe = grace;
     }
@@ -97,7 +106,7 @@ export class CaptchaOrchestrator {
         if (signal && signal.aborted) { offFail(); this.active = null; return { outcome: 'aborted', attempts: round - 1 }; }
         const roundStart = Date.now();
         this.active.attempts = round;
-        await logger.info('captcha', `جولة انتظار الحل ${round}/${max} — Buster يستمع ويحاول…`);
+        await logger.info('captcha', `جولة انتظار الحل ${round}/${max} — الآلة الذاتية شغالة…`);
 
         const solved = await this.waitSolved(tabId, attemptTimeout, signal);
         if (solved) {
@@ -105,31 +114,22 @@ export class CaptchaOrchestrator {
           return { outcome: 'solved', attempts: round };
         }
         if (failedReport) {
-          await logger.error('captcha', `أعلن إطار التحدي الفشل بعد ${failedReport.attempts || round} محاولات`);
+          await logger.warn('captcha', `إطار التحدي خلّص محاولاته (${failedReport.attempts || round}) — بنسلّم للخطة الاحتياطية: مسح بيانات + تبويب جديد لنفس الكلمة`);
           return { outcome: 'failed', attempts: failedReport.attempts || round };
         }
 
-        // اقرأ الحالة مباشرة بدل التخمين (read state directly instead of guessing)
-        const p = await this.probe(tabId);
-        if (p && p.role === 'buster') {
-          if (p.attempts >= max) {
-            return { outcome: 'failed', attempts: p.attempts };
-          }
-          // الإطار يقود نفسه (أعاد المحاولة ذاتياً) — امنحه جولة انتظار إضافية (frame drives itself (retried automatically) — grant it an extra waiting round)
-          await logger.info('captcha', `Buster أعاد المحاولة ذاتياً (${p.attempts}/${max}) — متابعة المراقبة`);
+        // الآلة عملت محاولة حقيقية جوه الجولة دي؟ هي بتقود — جولة إضافية من غير أي تدخل
+        const lastAtt2 = this.lastAttemptTs.get(tabId) || 0;
+        if (lastAtt2 >= roundStart - 500) {
+          await logger.info('captcha', '🟠 محاولة حل نشطة من الإطار — جولة انتظار إضافية بدون أي تدخل');
           continue;
         }
 
-        // روح v1.4.2: محاولة Buster لسه ساخنة؟ أو الزر مرصود وسائقه شغال؟ ما نتدخلش خالص
-        const lastAtt2 = this.lastAttemptTs.get(tabId) || 0;
-        if (lastAtt2 >= roundStart - 500 || this.busterSeen(tabId, 6000)) {
-          await logger.info('captcha', '🟠 Buster مرصودة وشغالة — جولة انتظار إضافية بدون أي تدخل');
-          continue;
-        }
-        // لا استجابة من إطار التحدي: نتدخل احتياطياً بتحدي جديد (no response from challenge frame: intervene as backup with a new challenge)
-        await logger.warn('captcha', 'لا استجابة من إطار Buster — تدخل احتياطي: تحدي جديد ثم محاولة');
+        // مفيش أي نشاط (تحمّل ناقص أو تحدّي مات) — استحثاث تحدٍّ جديد والآلة هتكمّل
+        await logger.warn('captcha', 'لا استجابة من إطار التحدي — استحثاث تحدي جديد');
         await this.command(tabId, C.MSG.CAPTCHA_CMD_NEXT);
-        await sleep(cfg.captchaGapMs || 2500, signal);
+        // رتم هادي بين الجولات: التحدي الجديد ياوقته يترسم — والدوسات تلاجيه جاهز
+        await sleep(Math.max(cfg.captchaGapMs || 0, 8000), signal);
       }
       // فحص أخير: ربما اكتمل الحل لحظة انتهاء آخر جولة انتظار
       const finalUrl = await tabctl.getUrl(tabId);
@@ -142,6 +142,20 @@ export class CaptchaOrchestrator {
       offFail();
       this.active = null;
     }
+  }
+
+  /** انتظار فتح التحدي (صوتي/صوري/زر Buster) عبر probe دوري (waiting for the challenge to open (periodic probe)) */
+  async waitChallenge(tabId, timeoutMs) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const probe = await this.probe(tabId);
+      if (probe && (probe.busterFound === true || probe.challengeOpen === true || probe.audioOpen === true || probe.imageOpen === true)) {
+        if (probe.busterFound === true) { this.lastBusterSeenTs.set(tabId, Date.now()); }
+        return probe;
+      }
+      await sleep(800);
+    }
+    return null;
   }
 
   /** انتظار ظهور زر Buster (probe دوري) (waiting for Buster button to appear (periodic probe)) */
@@ -165,12 +179,19 @@ export class CaptchaOrchestrator {
         settled = true;
         clearTimeout(timer);
         clearInterval(poller);
+        if (onAbort && signal) { try { signal.removeEventListener('abort', onAbort); } catch (_) {} }
         offs.forEach((off) => off());
         resolve(value);
       };
 
+      // v1.21.40: نفس تسريب مستمع الإلغاء (once بيتشال بس لو الإلغاء حصل) — يتشال في finish
+      const onAbort = signal ? () => finish(false) : null;
       const timer = setTimeout(() => finish(false), timeoutMs);
-      if (signal) { signal.addEventListener('abort', () => finish(false), { once: true }); }
+      if (onAbort) {
+        signal.addEventListener('abort', onAbort, { once: true });
+        // ولو الإشارة ملغاة أصلًا قبل ما نسجّل: finish فورًا من غير ما نستنى مهلة 120 ث
+        if (signal.aborted) { finish(false); }
+      }
 
       // 1) تغيّر الرابط بعيداً عن /sorry/ (polling + event معاً) (URL change away from /sorry/ (polling + event together))
       offs.push(tabctl.onUrlChange(tabId, (url) => {
@@ -197,6 +218,11 @@ export class CaptchaOrchestrator {
 
       // 4) إغلاق التبويب = فشل (tab closed = failure)
       offs.push(tabctl.onRemoved(tabId, () => finish(false)));
+
+      // 5) الآلة الذاتية أعلنت استنفاد المحاولات → انتهى فوراً (self-solving machine announced exhausted attempts → finish now)
+      offs.push(bus.on(C.MSG.CAPTCHA_FAILED, (m) => {
+        if (m && m.tabId === tabId) { finish(false); }
+      }));
     });
   }
 

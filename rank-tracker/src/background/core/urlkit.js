@@ -18,12 +18,25 @@ export function isSearch(url) {
 
 export function buildSearchUrl(keyword, cfg) {
   const config = cfg || {};
-  const u = new URL('https://www.google.com/search');
+  const gl = String(config.gl || 'sa').toLowerCase();
+  // 🌍 v1.21.28 (طلب المستخدم: «حاسس إنه بيستهدف منطقة تانية»): بحث بـgl=sa على
+  // www.google.com بيدي سيرب «دولي بالمقاطعة» — قريب من سيرب google.com.sa بس مش هو:
+  // البلوك المحلي والترتيب بيتفارقوا، فالتحقق اليدوي للمستخدم بيبان مختلف. نطابق الدومين
+  // مع المنطقة — بس في حدود اللي السكربتات محقونة فيه فعلًا (com.sa و .sa)؛ أي منطقة
+  // تانية تفضل على google.com عشان الحقن ما يقعش. cfg.googleHost override يدوي للأذكياء.
+  // ⚠️ v1.21.40: قرار 1.21.28 («غير السعودية يفضل google.com») **متساب زي ما هو عن قصد**:
+  // الحقن مضمون على com/com.sa، وأي دومين مش محقون فيه معناه أداة بتفتح سيرب ومش شايفة
+  // صفحاته. gl=eg مثلًا بيتفتح على google.com — والفرق بيظهر للمستخدم في تحذير
+  // regionFromFooter (لوج «جوجل قدّم النتايج من منطقة...»)، مش في تغيير دومين صامت.
+  // اللي عايز دومين تاني بيكتبه في cfg.googleHost بنفسه.
+  const host = (gl === 'sa') ? (config.googleHost || 'www.google.com.sa') : (config.googleHost || 'www.google.com');
+  const u = new URL('https://' + host + '/search');
   u.searchParams.set('q', String(keyword || '').trim());
-  u.searchParams.set('gl', config.gl || 'sa');
+  u.searchParams.set('gl', gl);
   u.searchParams.set('hl', config.hl || 'ar');
-  u.searchParams.set('num', String(config.num || 100));
-  u.searchParams.set('pws', '0');
+  // 🚫 v1.21.33 (طلب المستخدم: «مليش دعوه إنك بتعمل كده num=100»): مفيش num=100 ولا
+  // pws=0 في الرابط — دول بصمة بوت بتستدعي الكابتشا عند جوجل. التوسيع لـ100 بياوله
+  // «Show 100 Results» المدمج (beyondten/content) — وكل حاجة بحركة طبيعية.
   u.searchParams.set('ie', 'utf-8');
   return u.toString();
 }

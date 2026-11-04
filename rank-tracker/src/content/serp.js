@@ -1,10 +1,11 @@
 /**
  * serp.js — Content Script لصفحة نتائج جوجل — الإصدار 1.4
  *
- * الإصدار 1.9 — الاستيل القديم الموثوق + قاعدة الـ20 ثانية:
+ * الإصدار 1.9 — الاستيل القديم الموثوق + قاعدة الـ20 ثانية «الواعية بالتقدّم»:
  *  ─ نزول تدريجي بشري + مسح حي بعد كل دفعة نتائج.
- *  ─ أول ما المتجر يظهر بين النتائج → ترتيب فوري وانتقال فوري للكلمة التالية.
- *  ─ 20 ثانية بدون ترتيب = الكلمة تُسجل غير موجود (-) وننتقل.
+ *  ─ أول ما الموقع يظهر بين النتائج → ترتيب فوري وانتقال فوري للكلمة التالية.
+ *  ─ العدّاد بيقولف (نتائج جديدة بتنزل)؟ كمّل لحد سقف scanHardCapMs — المراكز
+ *    الغويط (#30-#100) ما تتقطعش في النص. العدّاد واقع 20 ثانية؟ غير موجود (-) وننتقل.
  *  ─ AI Overview: توسيع بالنقر المزدوج + مطابقة بالاسم العربي.
  *  ─ صفحات الخطأ → ريفرش تلقائي، و403/404 → تاب جديد. نص كابتشا → إعلان دوري.
  */
@@ -52,7 +53,7 @@
       live.reloads += 1;
       session.set(RELOAD_KEY, String(live.reloads));
       await D.msg.send(C.MSG.SERP_ERROR, { kind: kind, keyword: keyword, reload: true, attempt: live.reloads });
-      await D.humanSleep(2200, 900);
+      await D.humanSleep(900, 400); // ⚡ 1.21.20: إعادة الرسم بعد الكتابة فورية — التاني كانت ضريبة على هواها
       location.reload();
       return true;
     }
@@ -98,6 +99,10 @@
   D.msg.on(C.MSG.SERP_CMD_SEARCH, async (m) => {
     const kw = String(m.keyword || '').trim();
     if (!kw) { return { ok: false, reason: 'empty-keyword' }; }
+    // v1.21.27: كلمة جديدة بتلغي أي تحليل سابق — لا استرجاع قديم ولا محاذاة غلط
+    live.parsedSent = false;
+    live.lastPayload = null;
+    live.lastPayloadKeyword = null;
     if (!typeIntoSearchBox(kw)) { return { ok: false, reason: 'no-box' }; }
     await D.humanSleep(260, 130);
     const ok = submitSearchForm();
@@ -111,11 +116,12 @@
     results: live.results,
     reloads: live.reloads,
     early: live.early,
-    href: location.href
+    href: location.href,
+    lastPayload: live.lastPayload || null,
+    lastPayloadKeyword: live.lastPayloadKeyword || null
   }));
 
   /* --------------- القارئ المقاوم لتغييرات جوجل (درس Serp Counter) --------------- */
-  const BAD_HREF = /google\.com\/(search|url|maps|imgres)|googleads\.g\.doubleclick\.net|\/aclk\?|\/services\//;
 
   function extractFrom(root, isLive) {
     const scope = root || document;
@@ -151,7 +157,10 @@
         url: url,
         host: D.url.hostOf(url),
         title: D.textOf(h3),
-        snippet: sn ? D.textOf(sn) : ''
+        snippet: sn ? D.textOf(sn) : '',
+        // نص البلوك كامل (سطر اسم الموقع المعروض/المسار/براند جوه كرت المنتج) —
+        // محرك المطابقة بيركّب item.text أصلاً؛ كده «الاسم باين قدامك» = لقاوة
+        text: blockText(block || a)
       });
     }
     return items;
@@ -183,6 +192,14 @@
       }
     } catch (_) {}
     if (!url && a && a.href && /^https?:/i.test(a.href) && !/\/(goto|url)\?/i.test(a.href)) { url = a.href; }
+    // صفحة ثابتة (مجلوبة خلفيًا) بلا cite؟ الرابط الحقيقي مستور في /url?q= — نفكّه
+    if (!url && a && a.href && /\/goto\/?\?|\/url\/?\?/i.test(a.href)) {
+      try {
+        const uu = new URL(a.href);
+        const q = uu.searchParams.get('q') || uu.searchParams.get('url');
+        if (q && /^https?:/i.test(q)) { url = q; }
+      } catch (_) {}
+    }
     if (!display) { display = url; }
     return { url: url, display: display };
   }
@@ -252,25 +269,122 @@
     return { items: items, adsCount: adsCount };
   }
 
-  /* ---------------- AI Overview: توسيع حسب الموجود ثم قراءة ---------------- */
+  /* ---------------- AI Overview: كشف قوي + توسيع ثم قراءة ---------------- */
+  /*
+   * درس الشكاوى المتكررة: بلوك «نبذة الذكاء الاصطناعي» بيتم رسمه بعد أول
+   * نتيجة، والمحددات الثابتة بتاع جوجل بتتبدل كل فترة. الخطة:
+   *  1) محددات معروفة  2) عناوين نصية عربي/إنجليزي (زي ما بتظهر قدام المستخدم)
+   *  3) أصناف معروفة حديثة  4) انتظار قصير للظهور — والطريقة الآمنة دي
+   * بتفضل محمية بنفس الحرس: أي جذر بيحتوي النتائج العضوية نفسها مرفوض.
+   */
+  const AI_HEADS = [
+    'نبذة الذكاء الاصطناعي', 'نبذة باستخدام الذكاء الاصطناعي',
+    'لمحة الذكاء الاصطناعي', 'لمحة عن الذكاء الاصطناعي',
+    'نظرة عامة على الذكاء الاصطناعي', 'وضع الذكاء الاصطناعي',
+    'ملخص الذكاء الاصطناعي', 'AI Overview', 'AI overviews',
+    'AI summary', 'About this result', 'لمحة عن هذه النتيجة'
+  ];
   let aiExpanded = false;
+  let aiRootEl = null;
 
-  /** جذر بلوك الذكاء الاصطناعي: محددات معروفة أو البحث عن عنوان «نبذة باستخدام الذكاء الاصطناعي» */
-  function aiRoot() {
-    let root = D.first(C.SEL.serp.ai);
-    if (root) { return root; }
-    const head = D.byText('h1, h2, h3, h4, div, span', 'نبذة باستخدام الذكاء الاصطناعي')
-      || D.byText('h1, h2, h3, h4, div, span', 'AI Overview');
-    if (!head) { return null; }
-    root = head.closest('ai-overview, div[data-hveid], div[jscontroller], section, div.uVnmJb');
-    if (!root) {
-      root = head.parentElement;
-      for (let up = 0; up < 4 && root && root.parentElement; up++) {
-        root = root.parentElement;
-        if (root.querySelectorAll('a[href^="http"]').length >= 1) { break; }
+  function hasOrganicInside(e) {
+    return !!(e && e.querySelector && e.querySelector('#rso, #res, #center_col, #search'));
+  }
+
+  /** حجم البلوك الجاهز: فيه لينكات استشهاد أو نص ملخص حقيقي */
+  function aiBoxReady(e) {
+    if (!e) { return false; }
+    try {
+      if (e.querySelectorAll('a[href^="http"]').length >= 1) { return true; }
+      const t = e.innerText || '';
+      return t.length >= 160;
+    } catch (_) { return false; }
+  }
+
+  /** من أي مرساة (عنوان/لينك) نطلع فوق لأقرب حاوية آمنة فيها محتوى */
+  function safeBoxUp(el, hops) {
+    let cur = el && el.parentElement ? el.parentElement : el;
+    let last = null;
+    for (let i = 0; cur && i < (hops || 12); i++) {
+      if (hasOrganicInside(cur)) { break; }
+      if (aiBoxReady(cur)) { last = cur; }
+      cur = cur.parentElement;
+    }
+    return last;
+  }
+
+  /** البحث عن مرساة نصية: عناصر صغيرة فقط (عشان ما يطابقش الحاويات العملاقة) */
+  function headAnchor() {
+    const nrm = (D.match && D.match.normalizeArabic) ? D.match.normalizeArabic : (s) => String(s || '').toLowerCase();
+    const needles = AI_HEADS.map((h) => nrm(h));
+    const nodes = document.querySelectorAll('h1, h2, h3, h4, span, div, a');
+    for (const node of nodes) {
+      if (node.childElementCount > 2) { continue; }
+      const own = nrm((node.textContent || '').trim());
+      if (!own || own.length > 64) { continue; }
+      for (const nd of needles) {
+        if (nd && own.indexOf(nd) !== -1) { return node; }
       }
     }
-    return root || null;
+    return null;
+  }
+
+  /** جذر بلوك الذكاء الاصطناعي — طبقات كشف متتالية كلها بحرس مضاد للتلوث العضوي */
+  let aiMissTs = 0; // كاش سلبي: الماسح الكامل متيتكررش كل 250ms عبثًا
+  function aiRoot() {
+    if (aiRootEl && document.contains(aiRootEl) && !hasOrganicInside(aiRootEl)) { return aiRootEl; }
+    aiRootEl = null;
+    if (Date.now() - aiMissTs < 1200) { return null; }
+    // 1) المحددات المعروفة
+    aiMissTs = 0;
+    const sels = (C.SEL.serp.ai || []);
+    for (const sel of sels) {
+      let e = null;
+      try { e = document.querySelector(sel); } catch (_) { e = null; }
+      if (e && !hasOrganicInside(e)) { aiRootEl = e; return e; }
+    }
+    // 2) مرساة نصية → صندوق آمن فوقها
+    const head = headAnchor();
+    if (head) {
+      const box = safeBoxUp(head.closest('div, section'), 12) || safeBoxUp(head, 12);
+      if (box) { aiRootEl = box; return box; }
+    }
+    aiMissTs = Date.now();
+    return null;
+  }
+
+  /** بوادر البلوك في الـHTML قبل الترطيب: placeholder الـasync بتاع جوجل للـAI */
+  function aiHint() {
+    try {
+      if (document.querySelector('[id*="ai-overview" i], [id*="aiOverview"]')) { return true; }
+    } catch (_) {}
+    return false;
+  }
+
+  /** استجابة فورية من الكاش/الـDOM، ولو فيه بوادر نفضل مستنيين ظهوره لحد timeoutMs */
+  async function waitForAiRoot(timeoutMs) {
+    const immediate = aiRoot();
+    if (immediate && aiBoxReady(immediate)) { return immediate; }
+    if (!immediate && !aiHint()) { return null; } // مفيش AI خالص — من غير ما نعلّش أي كلمة بثواني
+    try {
+      return await D.waitFor(() => {
+        const r = aiRoot();
+        return (r && aiBoxReady(r)) ? r : null;
+      }, { timeoutMs: timeoutMs || 0, intervalMs: 400, desc: 'ai-block' });
+    } catch (_) { return immediate || null; }
+  }
+
+  /** زرار «عرض المزيد / عرض الكل / View all sources» بأي صيغة كانت */
+  function expandBtn(root) {
+    const re = /عرض\s+المزيد|عرض\s+الكل|عرض\s+كل\s+المصادر|show\s+more|show\s+all|view\s+all\s+sources|view\s+sources|المصادر|sources/i;
+    const cands = D.qsa('button, [role="button"], div[jsaction], a', root);
+    for (const b of cands) {
+      const t = (b.textContent || '').trim();
+      const al = b.getAttribute ? (b.getAttribute('aria-label') || '') : '';
+      if (!t && !al) { continue; }
+      if (re.test(t) || re.test(al)) { return b; }
+    }
+    return null;
   }
 
   async function expandAi() {
@@ -278,41 +392,86 @@
     const root = aiRoot();
     if (!root) { return; }
     aiExpanded = true;
-    // دوس «عرض المزيد / عرض الكل» مرة أو مرتين حسب اللي ظاهر قدامنا
     for (let round = 0; round < 2; round++) {
-      const btn = D.byText('button, [role="button"]', 'عرض المزيد', root)
-        || D.byText('button, [role="button"]', 'عرض الكل', root)
-        || D.byText('button, [role="button"]', 'Show more', root)
-        || D.byText('button, [role="button"]', 'Show all', root);
+      const btn = expandBtn(root);
       if (!btn) { break; }
       D.click(btn, 'ai-expand');
-      await D.humanSleep(900, 300);
+      await D.humanSleep(600, 250); // v1.21.9: إعادة الرسم فورية عمليًا — الطويل كان هدية
     }
+  }
+
+  /** فك تحويلات جوجل (google.com/url?q=...) — بنقارن المصدر الحقيقي مش عنوان التحويل */
+  function unwrapRedirect(h) {
+    try {
+      const u = new URL(h);
+      if (/google\./.test(u.hostname || '')) {
+        const q = u.searchParams.get('q') || u.searchParams.get('url');
+        if (q && /^https?:/i.test(q)) { return q; }
+      }
+    } catch (_) {}
+    return h;
+  }
+
+  /** قبل أي حكم: نستنى بلوك AI يترسم (async) → نوسّع «عرض المزيد/الكل» → نعيد القراءة.
+   *  كده الاستشهادات المخفية أو اللي لسه مجتش متتفوتش في أي مسار (حتى الخروج المبكر). */
+  async function finalizeAi(aiSnap, budgetMs) {
+    // 🤖 v1.21.16 (إلحاح المستخدم — «لو في بلوك AI في السيرب يحمل فعلًا»):
+    // الميزانية القصيرة البدرية مالهاش محل لو البلوك لسه بيترسم. البلوك موجود؟
+    // بيتقرا فورًا. مش موجود بس بوادره باينة (aiHint)؟ بنستناه بالميزانية الكاملة
+    // زي المسار الطويل — مفيش مقامرة بدقّة الـAI. مفيش بوادر خالص؟ هنا وبس
+    // الـ1.2 ثانية كفاية، ومفيش انتظار على هواه
+    let budget;
+    if (aiRoot()) { budget = 0; }
+    else if (aiHint()) { budget = 5000; }
+    else { budget = budgetMs || 1500; }
+    const root = await waitForAiRoot(budget);
+    if (!root) {
+      if (aiHint()) {
+        D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: 'ℹ️ الصفحة فيها بوادر بلوك AI لكنه مترسّمش جوه الـDOM — شكّل السجل ده لو تكرر، معناه جوجل غيّرت الشكل' });
+      }
+      return aiSnap;
+    }
+    await expandAi();
+    return collectAi();
   }
 
   function collectAi() {
     const root = aiRoot();
     if (!root) { return { items: [], text: '' }; }
-    const links = D.qsa('a[href^="http"]', root);
+    const scopes = [root];
+    // بعد «عرض الكل» قائمة المصادر بتتفتح في dialog خارج البلوك — بنلمّ كمان اللي فيه
+    if (aiExpanded) {
+      for (const dlg of D.qsa('jsdialog, [role="dialog"]')) { scopes.push(dlg); }
+    }
     const seen = new Set();
     const items = [];
-    for (const a of links) {
-      if (!a.href || a.href.indexOf('http') !== 0 || seen.has(a.href)) { continue; }
-      seen.add(a.href);
-      items.push({
-        url: a.href,
-        host: D.url.hostOf(a.href),
-        title: D.textOf(a),
-        snippet: D.textOf(a.parentElement || a)
-      });
+    for (const scope of scopes) {
+      for (const a of D.qsa('a[href^="http"]', scope)) {
+        if (!a.href || a.href.indexOf('http') !== 0) { continue; }
+        const real = unwrapRedirect(a.href);
+        if (seen.has(real)) { continue; }
+        seen.add(real);
+        items.push({
+          url: real,
+          host: D.url.hostOf(real),
+          title: D.textOf(a),
+          snippet: D.textOf(a.parentElement || a)
+        });
+      }
     }
     let text = '';
-    try { text = (root.innerText || '').slice(0, 8000); } catch (_) {}
+    try {
+      text = (root.innerText || '').slice(0, 8000);
+      // وكمان: أسماء المواقع جوه dialog المصادر جزء من الحكم الصارم
+      for (let i = 1; i < scopes.length; i++) {
+        try { const dt = scopes[i].innerText || ''; if (dt) { text += '\n' + dt.slice(0, 4000); } } catch (_) {}
+      }
+    } catch (_) {}
     return { items: items, text: text };
   }
 
   function hasTarget(cfg) {
-    return !!(cfg && ((cfg.storeDomain || '').trim() || (cfg.storeName || '').trim()));
+    return !!(cfg && ((cfg.storeDomain || '').trim() || (cfg.storeName || '').trim() || (cfg.storeNameEn || '').trim()));
   }
 
   function quickFind(items, aiItems, cfg) {
@@ -324,41 +483,131 @@
     return null;
   }
 
+  /* 👁 v1.21.39 (طلب المستخدم: «بأشوفه في الصفحة والأداة بتقول مفيش نتيجة»):
+     القانون ثابت — الإعلان وبلوكات التسوّق مش بتتحسب رنك عضوي. لكن الاختفاء
+     التام من التقرير كان بيحسّس المستخدم إن الأداة عمياء. الدالة دي بتعمل
+     presence-scan للروابط اللي بره الـ100 عضوي (تads إعلانات + كاروسيل تسوّق
+     + أي بلوك تاني) بنفس مطابقة matchLib (دومين بالظبط، أو اسم بالـOR)،
+     والنتيجة بتتسجل «ظهرت خارج العضوي» في اللوج والصف — من غير أي رنك. */
+  function presenceScan(cfg, seenItems) {
+    if (!hasTarget(cfg) || !D.match) { return null; }
+    try {
+      const seen = new Set((seenItems || []).map((i) => i.url));
+      const pool = [];
+      const els = D.qsa('a[href^="http"]') || [];
+      for (let i = 0; i < els.length && pool.length < 220; i++) {
+        const a = els[i];
+        let href = '';
+        try { href = a.href || ''; } catch (_) { continue; }
+        if (!href || seen.has(href)) { continue; }
+        let kind = 'other';
+        try {
+          if (a.closest('#tads, #tadsb, #bads, #topads, .ads-visurl, [data-text-ad], .uZ3Aoe')) { kind = 'ad'; }
+          else if (a.closest('#mbEnd, .sh__d, .RjDIuf, .EkjREb, .cu-container, [data-jiis*="shopping"]')) { kind = 'shopping'; }
+        } catch (_) {}
+        let snippet = '';
+        try {
+          const card = a.closest('.g, li, .sh__d, div');
+          snippet = card ? String(card.textContent || '').replace(/\s+/g, ' ').slice(0, 300) : '';
+          if (kind === 'other' && /تسوق|تسوّق|Shopping|السعر|ر\.س/.test(snippet.slice(0, 120))) { kind = 'shopping'; }
+        } catch (_) {}
+        if (kind === 'ad' || kind === 'shopping' || kind === 'other') {
+          pool.push({ title: String(a.innerText || a.title || '').replace(/\s+/g, ' ').trim().slice(0, 200), url: href, snippet: snippet });
+        }
+      }
+      if (!pool.length) { return null; }
+      let hit = D.match.matchItems(pool, Object.assign({}, cfg, { matchMode: 'domain' }));
+      if (!hit || !hit.found) {
+        const byName = D.match.matchItems(pool, Object.assign({}, cfg, { matchMode: 'name' }));
+        if (byName && byName.found) { hit = byName; }
+      }
+      if (!hit || !hit.found) { return null; }
+      const m = hit.matched || {};
+      let kind = 'other';
+      try {
+        const el = Array.prototype.find.call(els, (x) => x.href === m.url);
+        if (el && el.closest('#tads, #tadsb, #bads, #topads, .ads-visurl, [data-text-ad], .uZ3Aoe')) { kind = 'ad'; }
+        else if (el && el.closest('#mbEnd, .sh__d, .RjDIuf, .EkjREb, .cu-container')) { kind = 'shopping'; }
+      } catch (_) {}
+      return { kind: kind, url: m.url, title: String(m.title || '').slice(0, 120) };
+    } catch (_) { return null; }
+  }
+
   /* --------- جلب باقي الدفعات خلفيةً (بدون تنقّل) عندما لا تكفي الصفحة --------- */
   async function selfFetchMore(cfg, baseItems, aiItems) {
     const merged = baseItems.slice();
     const seen = new Set(merged.map((i) => i.url));
     let start = Math.ceil(merged.length / 10) * 10;
-    const maxBatches = cfg.selfFetchMaxBatches || 6;
+    const maxBatches = cfg.selfFetchMaxBatches || 9;
+    let attempts = 0;
+
+    // دفعة فاشلة كانت بتمحو تغطية المراكز الغويط بصمت (شكوى: «موقعي في #20 واتسجل مش
+    // موجود») — بقى فيه إعادة محاولة عاقلة للدفعة نفسها، وتوقيت ذاتي-التصحيح
+    // v1.21.35: نفس لغم الـCSP اللي كان بيفجّر كونصول المستخدم — أي HTML مجلوب
+    // بيتحلل بـDOMParser بيرث سياسة صفحة جوجل (strict-dynamic+nonce) وكل on*= انتهاك
+    // أحمر. الدفعة دي بتتقرأ كنصوص بس، فننزع المقابض والسكربتات قبل البارسر.
+    const cleanSERPHTML = (s) => {
+      try {
+        return String(s || '')
+          .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+          .replace(/ on[a-z]{2,24}\s*=\s*"[^"]*"/gi, ' ')
+          .replace(/ on[a-z]{2,24}\s*=\s*'[^']*'/gi, ' ')
+          .replace(/ on[a-z]{2,24}\s*=\s*[^\s>]+/gi, ' ');
+      } catch (_) { return s; }
+    };
+    async function grab(s) {
+      const u = new URL(href);
+      u.searchParams.set('start', String(s));
+      u.searchParams.set('num', '20'); // للصفحات المجلوبة بس — تاب المستخدم يفضل بلا بصمة
+      const resp0 = await fetch(u.toString(), { credentials: 'include', redirect: 'follow' });
+      if (!resp0.ok) { return { err: 'http-' + resp0.status }; }
+      const html = await resp0.text();
+      if (/\/sorry\/|unusual traffic|حركة مرور غير عادية/i.test(html)) {
+        D.msg.send(C.MSG.SERP_FETCH_BLOCKED, { reason: 'captcha', pageUrl: u.toString() });
+        return { blocked: true };
+      }
+      return { doc: new DOMParser().parseFromString(cleanSERPHTML(html), 'text/html') };
+    }
 
     for (let batch = 0; batch < maxBatches && merged.length < expectedNum; batch++) {
-      const u = new URL(href);
-      u.searchParams.set('start', String(start));
-      let doc = null;
-      try {
-        const resp = await fetch(u.toString(), { credentials: 'include', redirect: 'follow' });
-        if (!resp.ok) { break; }
-        const html = await resp.text();
-        if (/\/sorry\/|unusual traffic|حركة مرور غير عادية/i.test(html)) {
-          D.msg.send(C.MSG.SERP_FETCH_BLOCKED, { reason: 'captcha', pageUrl: u.toString() });
-          break;
+      let res = null;
+      try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
+      if (res.blocked) { attempts++; break; }
+      if (res.err) {
+        await D.sleep(1200); // سكتة ثم فرصة تانية لنفس الدفعة — 1.21.20: أقصر، الدفعة التانية جاية كمان ثانية وشوية
+        try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
+        if (res.err) {
+          attempts++;
+          if (attempts >= 2) { break; }
+          start += 10;
+          continue;
         }
-        doc = new DOMParser().parseFromString(html, 'text/html');
-      } catch (_) { break; }
-      const more = extractFrom(doc, false);
-      if (!more.length) { break; }
+      }
+      const more = extractFrom(res.doc, false);
       let added = 0;
       for (const item of more) {
         if (!seen.has(item.url)) { seen.add(item.url); merged.push(item); added++; }
       }
-      if (!added) { break; }
-      start += 10;
+      if (!more.length || !added) {
+        attempts++;
+        if (attempts >= 2) { break; } // صفحتين ورا بعض فاضيتين = جوجل قافل الجلب، كفاية أدب
+        start += 10;
+        await D.humanSleep(550, 250);
+        continue;
+      }
+      attempts = 0;
+      start = Math.ceil(merged.length / 10) * 10; // تصحيح ذاتي لو الصفحة جت 20 أو 10
       const hit = quickFind(merged, aiItems, cfg);
       if (hit) {
         live.early = true;
         return { items: merged, aiItems: aiItems, early: true, hit: hit, selfFetched: true };
       }
-      await D.humanSleep(900, 400);
+      // v1.21.9: 0.9–1.8 ثانية — لسه فوق سرعة قراءة البشر، بس الرن ما يقعدش على الدفعات
+      await D.humanSleep(550, 300); // ⚡ 1.21.20 (طلب السرعة): فاصل دفعات خلفي — الصفحة الحقيقية متقفلش عليه
+    }
+    if (merged.length > baseItems.length || attempts) {
+      D.msg.send(C.MSG.LOG, { level: attempts ? 'warn' : 'info', scope: 'serp',
+        text: `🛰 الجلب الخلفي: التغطية بقت ${merged.length} نتيجة (من ${expectedNum})${attempts ? ' — جوجل قفل الجلب بعد ' + attempts + ' محاولات، وقَفنا بأدب' : ''}` });
     }
     return { items: merged, aiItems: aiItems, early: false, selfFetched: true };
   }
@@ -372,12 +621,24 @@
     try { txt = (root.innerText || '').toLowerCase(); } catch (_) { txt = ''; }
     if (!txt) { return false; }
     const d = String(cfg.storeDomain || '').trim().toLowerCase();
-    if (d && txt.includes(d)) { return true; }
-    const n = String(cfg.storeName || '').trim();
-    if (n && D.match && D.match.normalizeArabic) {
+    if (d) {
+      // v1.21.17: حدود مش substring — «myshop.com» جوه «notmyshop.com» مش لقيوة؛
+      // سوبدومين تحت ملكي (نقطة قبلها) مسموح، ولا letter/digit/hyphen قبل ولا بعدها
+      try {
+        const esc = d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const dRe = new RegExp('(^|[^a-z0-9-])' + esc + '($|[^a-z0-9.])');
+        if (dRe.test(txt)) { return true; }
+      } catch (_) { if (txt.includes(d)) { return true; } }
+    }
+    // الدومين مضبوط ولسه مش على الشاشة؟ الاسم لوحده ما يفتحش البوابة — نفس سياسة المحرك
+    if (d && String(cfg.matchMode || 'both') !== 'name') { return false; }
+    const names = (D.match && D.match.storeNames) ? D.match.storeNames(cfg) : [String(cfg.storeName || '').trim()].filter(Boolean);
+    if (names.length && D.match && D.match.normalizeArabic) {
       const hay = D.match.normalizeArabic(txt);
-      const needle = D.match.normalizeArabic(n);
-      if (needle && needle.length >= 3 && hay.includes(needle)) { return true; }
+      for (const n of names) {
+        const needle = D.match.normalizeArabic(n);
+        if (needle && needle.length >= 3 && hay.includes(needle)) { return true; }
+      }
     }
     return false;
   }
@@ -386,12 +647,14 @@
   function positionByText(cfg, items) {
     const blocks = D.qsa('#search .yuRUbf');
     const d = String(cfg.storeDomain || '').trim().toLowerCase();
-    const nNorm = (D.match && D.match.normalizeArabic) ? D.match.normalizeArabic(String(cfg.storeName || '')) : '';
+    const nameGate = !d || String(cfg.matchMode || 'both') === 'name';
+    const namesList = nameGate ? ((D.match && D.match.storeNames) ? D.match.storeNames(cfg) : [String(cfg.storeName || '')].filter(Boolean)) : [];
+    const nNorms = (D.match && D.match.normalizeArabic) ? namesList.map((x) => D.match.normalizeArabic(x)).filter((x) => x.length >= 3) : [];
     for (let i = 0; i < blocks.length; i++) {
       let t = '';
       try { t = (blocks[i].innerText || '').toLowerCase(); } catch (_) { t = ''; }
       const hitD = d && t.includes(d);
-      const hitN = nNorm && nNorm.length >= 3 && D.match.normalizeArabic(t).includes(nNorm);
+      const hitN = !!nNorms.length && nNorms.some((nn) => D.match.normalizeArabic(t).includes(nn));
       if (hitD || hitN) {
         const cPos = readCounterPos(blocks[i]);
         const matched = (items || []).find((it) => it.counterPos === (cPos || i + 1)) || (items || [])[i] || null;
@@ -416,49 +679,74 @@
   }
 
 
-  /* -------- قفل السكرول: الصفحة تفضل فوق من لحظة فتحها لحد ما نقرأ ونكتب --------
-     ممنوع أي غوص (منّا أو من أداة تحميل الـ100 نتيجة) إلا لو قررنا نحن النزول
-     لأن المتجر مش على الشاشة. بعد القراءة: قفل تاني نهائي. */
-  let scrollLocked = true;
-  function lockScroll() { try { window.scrollTo({ top: 0, behavior: 'auto' }); } catch (_) {} }
+  /* 🕊 v1.21.15 (طلب المستخدم): القفل اتلغى — «عايز الصفحة تفضل فوق وحر الحركة»
+     القفل القديم (snap كل 250ms + مستمع scroll) كان بيخطف الماوس من المستخدم نفسه
+     ويرميه لفوق. القراءة أصلا بتتم من الـDOM مش من الشاشة، فالقفل كان مسرح بصرية
+     بلا لازمة. القاعدتان الجديدتان: 1) المستخدم يلمس العجلة/اللمس/الكيبورد؟ الأداة
+     سحبت إيدها نهائيًا عن السكرول في الكلمة دي، والتغطية بتتكفل بيها الدُفعات
+     الخلفية (selfFetchMore) من غير أي حركة. 2) من غير لمس: غوصة واحدة بس للآخر
+     وقت ما التحميل الكسول محتاج تنبيه — ومفيش رجوع قسري لفوق في أي لحظة.
+     relock/releaseScroll فضلّوا أسماء فاضية عشان نداءاتهم القديمة ما تتكسرش. */
+  let userOwns = false;
   try {
-    window.addEventListener('scroll', () => { if (scrollLocked) { lockScroll(); } }, { passive: true });
-    setInterval(() => { if (scrollLocked) { lockScroll(); } }, 250);
+    const claimScroll = () => { userOwns = true; };
+    window.addEventListener('wheel', claimScroll, { passive: true });
+    window.addEventListener('touchstart', claimScroll, { passive: true });
+    window.addEventListener('keydown', claimScroll, { passive: true });
   } catch (_) {}
-  function relock() { scrollLocked = true; lockScroll(); }
-  function releaseScroll() { scrollLocked = false; }
+  function relock() { if (userOwns) { return; } }
+  function releaseScroll() {}
+
+  function logger_serp(text) {
+    try { D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: text }); } catch (_) {}
+  }
 
   function logEarly(hit, items) {
     relock();
     const pos = hit && hit.match && hit.match.position ? hit.match.position : (hit && hit.match ? 'AI' : '?');
     D.msg.send(C.MSG.LOG, {
       level: 'info', scope: 'serp',
-      text: `⛏ المتجر اتلقى عند #${pos} — وقفنا المسح فوراً (${items.length} نتيجة مقروءة) وانتقلنا للكلمة التالية`
+      text: `⛏ الموقع اتلقى عند #${pos} — وقفنا المسح فوراً (${items.length} نتيجة مقروءة) وانتقلنا للكلمة التالية`
     });
   }
 
   async function waitForResults(cfg) {
     const maxWait = cfg.maxWaitResultsMs || 20000;
     const batchSettle = cfg.batchSettleMs || 5000;
-    const rescan = cfg.rescanMs || 1800;
-    const settleMs = cfg.settleMs || 1800;
+    // v1.21.4: الرقم دول بيتلمسوا بس في كلمة «المتجر مش على أول شاشة» — الصف بيبقى
+    // مترسم فعلًا من أول ثانية (num=100 سيرفر-سايد)، فالسكتة الطويلة كانت ضريبة على هواها
+    const rescan = cfg.rescanMs || 800; // v1.21.9: القراءات ما محتاجةش سكتة أطول من كده
+    const settleMs = cfg.settleMs || 1100;
 
     let early = null;
 
-    // 1) من أول نتيجة بتظهر: فحص مطابقة كل 250ms — المتجر فوق؟ خروج فوري
+    // 1) من أول نتيجة بتظهر: فحص مطابقة كل 250ms — الموقع فوق؟ خروج فوري
     //    بدون أي توسيع AI أو تمرير قبل كده (التوسيع بيتأجل لوقت الحكم بعدم وجوده)
+    let aiSeenLogged = false;
+    let firstPolls = 0;
     const firstHit = await D.waitFor(() => {
       const snap = collect();
       if (!snap.items.length) { return D.first(C.SEL.serp.noResults); }
       const ai = collectAi();
       const h = immediateFind(cfg, snap, ai.items);
-      if (h) { early = { items: snap.items, ai: ai, hit: h }; }
-      return true;
+      // ضربة «AI» لوحدها مش خروج — ترتيبك العضوي ممكن يكون تحت في #20+؛ بنعلّم وبس
+      if (h && h.where === 'organic') { early = { items: snap.items, ai: ai, hit: h }; return true; }
+      if (h && !aiSeenLogged) { aiSeenLogged = true; D.msg.send(C.MSG.LOG, { level: 'info', scope: 'serp', text: '🤖 الموقع باين في AI Overview — كمّل نزول بحثاً عن الترتيب العضوي' }); }
+      // v1.21.5: «الموقع ظاهر قدامه وهو بيغوص على الـ100» — صفحة جوجل بتوصل على 2-3
+      // دفعات؛ لو حكمنا على أول لقطة ناقصة وطينا، بلوك #1-#10 اللي كان هيطلع بعد
+      // مللي كان بيتفوّت والدورة تقيلة بـ60 ثانية سكرول. نلف polling خفيف لحد
+      // ما أول شاشة تجهز (8 بلوكات) أو 4 ثواني كحد أقصى — على نفس الـ250ms الأرخص
+      if (snap.items.length >= 8) { return true; }
+      firstPolls += 1;
+      return firstPolls >= 16;
     }, { timeoutMs: Math.min(maxWait, 20000), intervalMs: 250, desc: 'first-result' });
 
     if (early) {
       logEarly(early.hit, early.items);
-      return { items: early.items, aiItems: early.ai.items, aiText: early.ai.text, adsCount: 0, early: true, hit: early.hit };
+      // v1.21.15 (طلب المستخدم): ظهر في الأول؟ بنقرا ونمشي — مفيش انتظار 5 ثواني
+      // للبلوك يت رسم؛ لو موجود بينقرأ فورًا، ولو لأ: 1.2 ثانية بس ومحسوب عليك AI لأ
+      const aiE = await finalizeAi(early.ai, 1200);
+      return { items: early.items, aiItems: aiE.items, aiText: aiE.text, adsCount: 0, early: true, hit: early.hit };
     }
     if (firstHit && firstHit !== true && firstHit.nodeType) {
       return { early: false, settled: true, noResults: true, items: [], aiItems: [], aiText: '' };
@@ -471,6 +759,8 @@
     let gaveCompanionExtra = false;
     let companionSeen = false;
     let aiText = '';
+    let diveStarted = false; // 👁 v1.21.9: قفزة واحدة للآخر بدل المقافزة المتقطعة
+    let diveNudges = 0;
 
     function companionActive() {
       return /Loaded \d+|Scroll for more|Show 100 results|Done \d+ results/i.test(bodySample());
@@ -485,9 +775,15 @@
       if (companionActive()) { companionSeen = true; }
 
       const hit = immediateFind(cfg, snapshot, ai.items);
-      if (hit) {
+      if (hit && hit.where === 'organic') {
         logEarly(hit, snapshot.items);
-        return { items: snapshot.items, aiItems: ai.items, aiText: aiText, adsCount: snapshot.adsCount, early: true, hit: hit };
+        const aiF = await finalizeAi(ai, 1200); // v1.21.15: نفس مبدأ «لقيت؟ امشي» أثناء النزول
+        return { items: snapshot.items, aiItems: aiF.items, aiText: aiF.text || aiText, adsCount: snapshot.adsCount, early: true, hit: hit };
+      }
+      if (hit && !aiSeenLogged) {
+        // AI بس؟ علّم وكَمّل — الخروج البدري هنا بيضيّع ترتيب المراكز البعيدة
+        aiSeenLogged = true;
+        await logger_serp('🤖 الموقع باين في AI Overview — كمّل نزول بحثاً عن الترتيب العضوي');
       }
       // الهدف مش على الشاشة خالص؟ فقط حينها نفك القفل وننزل ندور
       const now = Date.now();
@@ -508,33 +804,49 @@
         settled = true;
         break;
       }
-      // قاعدة الـ20 ثانية: مفيش ترتيب بعدها = نكتفي بالمقروء
-      if (now - started >= maxWait) { break; }
+      // قاعدة الـ20 ثانية «واعية بالتقدّم»: العدّاد واقف؟ خلاص نكتفي بالمقروء.
+      // لسه النتيجة الجديدة بتيجي واحدة ورا التانية؟ كمّل نزول لحد السقف
+      // (scanHardCapMs — 60 ثانية افتراضياً) — عشان المراكز الغويط (#30-#100) متضيعش.
+      if (count === lastCount && now - started >= maxWait) { break; }
+      if (now - started >= Math.max(cfg.scanHardCapMs || 60000, maxWait)) { break; }
 
       releaseScroll();
-      const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 400;
-      if (!nearBottom) {
-        window.scrollBy({ top: 600 + Math.round(Math.random() * 500), behavior: 'auto' });
-        window.dispatchEvent(new Event('scroll'));
-      } else {
+      // 👁 v1.21.15: لو المستخدم لمس الصفحة — مفيش ولا حركة من ناحيتنا خالص؛
+      // الدفعات الجاية تتجيب من ورا الظهر (selfFetchMore) والتغطية ما بتضيعش.
+      // من غير لمس: قفزة واحدة للآخر، وبعدين ربّتة كل 5 دورات لو لسه بيولّد
+      if (!userOwns) {
+        diveNudges += 1;
+        if (!diveStarted) {
+          diveStarted = true;
+          try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' }); } catch (_) {}
+        } else if (diveNudges % 5 === 0) {
+          const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 400;
+          if (!nearBottom) { try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' }); } catch (_) {} }
+        }
         window.dispatchEvent(new Event('scroll'));
       }
-      await D.sleep(rescan + Math.round(Math.random() * 500));
+      await D.sleep(rescan + Math.round(Math.random() * 300));
     }
 
-    // 3) حكم عدم الوجود: دلوقتي بس وسّع AI وافحص مرة أخيرة قبل الحكم
-    await expandAi();
+    // 👁 v1.21.9: نرجّع أول السيرة قبل أي حكم — النزول المتقطع اللي كان باين قدام
+    // المستخدم اتقفل نهائيًا؛ باقي الشغل (دفعات خلفية) مابيبينش حركة أصلًا
+    relock();
+
+    // 3) حكم عدم الوجود: دلوقتي بس — نستنى البلوك يترسم لو بطيء، نوسّع، ونفحص آخر مرة
     let items = collect().items;
-    const aiF = collectAi();
+    const aiF = await finalizeAi({ items: [], text: '' });
     let aiItems = aiF.items;
     aiText = aiF.text || aiText;
-    const lastHit = quickFind(items, aiItems, cfg);
+    // حكم النهاية بطبقتين: بلوكات محللة + مطابقة نصية مباشرة من الشاشة (Ctrl+F ستايل)
+    const lastHit = immediateFind(cfg, { items: items }, aiItems);
     if (lastHit) {
       logEarly(lastHit, items);
       return { items: items, aiItems: aiItems, aiText: aiText, adsCount: 0, early: true, hit: lastHit };
     }
 
-    if (cfg.selfFetchMore !== false && !companionSeen && items.length < expectedNum) {
+    if (cfg.selfFetchMore !== false && items.length < expectedNum) {
+      // حتى لو الـ companion كان شغال: لو وقفنا عند نص الطريق، الدفعات الجاية تتجيب
+      // من ورا الظهر (dedupe بالـ URL مضمون — مفيش تكرار بيغيّر الترتيب)
       const sf = await selfFetchMore(cfg, items, aiItems);
       items = sf.items;
       aiItems = sf.aiItems || aiItems;
@@ -543,13 +855,28 @@
       }
     }
 
+    // شبكة الأمان الأخيرة: الجلب خلّص والاسم/الدومين باين على الشاشة بس البلوك ما اتحللش؟
+    // فحص مباشر على النص الحي + عدّ الترتيب من البلوكات — قبل حكم «غير موجود» بخطوة
+    const lateHit = immediateFind(cfg, { items: items }, aiItems);
+    if (lateHit) {
+      logEarly(lateHit, items);
+      return { items: items, aiItems: aiItems, aiText: aiText, adsCount: 0, early: true, hit: lateHit, rescued: true };
+    }
+
     return { items: items, aiItems: aiItems, aiText: aiText, adsCount: 0, early: false, settled: settled };
   }
 
   /* --------------------------------- الإقلاع --------------------------------- */
   async function main() {
-    const cfgRes = await D.msg.send(C.MSG.GET_CONFIG);
-    const cfg = cfgRes && cfgRes.config ? cfgRes.config : {};
+    // v1.21.40: قراءة الإعدادات محصّنة ضد فشل واحد — الـService Worker بيقوم من النوم
+    // أحيانًا بعد أول رسالة، وأول رد ممكن ييجي فاضي. ما ينفعش مسح كامل يشتغل بـ{}
+    // (صفر بلوكات أول شاشة، صفر مصلحة من الهدف...). محاولتين بفاصل قصير.
+    let cfg = {};
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const cfgRes = await D.msg.send(C.MSG.GET_CONFIG);
+      if (cfgRes && cfgRes.ok && cfgRes.config) { cfg = cfgRes.config; break; }
+      if (attempt === 0) { await new Promise((r) => setTimeout(r, 400)); }
+    }
 
     if (await handleBadPage(cfg)) { return; }
 
@@ -570,6 +897,8 @@
       aiItems: wait.aiItems || [],
       aiText: wait.aiText || '',
       adsCount: wait.adsCount || 0,
+      // 👁 1.21.39: ظهور خارج العضوي (إعلان/تسوّق) — للمعلومية بس، مش رنك
+      presence: (wait.hit && wait.hit.where === 'organic') ? null : presenceScan(cfg, wait.items),
       total: (wait.items || []).length,
       early: !!wait.early,
       earlyWhere: wait.hit ? wait.hit.where : null,
@@ -579,9 +908,22 @@
       timedOut: !!wait.timedOut,
       settled: !!wait.settled,
       hasNext: !!D.qs('a#pnnext'),
+      // 🌍 v1.21.28 — بصمة منطقة التقديم من فوتر جوجل نفسه (نص صريح «المملكة العربية
+      // السعودية» أو «Egypt»): الباكجراوند بيطابق مع المطلوب ويصرخ لو في اختلاف.
+      regionText: (function () {
+        try {
+          var fb = D.qs('#fbar') || D.qs('#botbar') || D.qs('.tbos');
+          return fb ? String(fb.textContent || '').replace(/\s+/g, ' ').slice(0, 240) : '';
+        } catch (_) { return ''; }
+      })(),
       parsedAt: Date.now()
     };
     live.parsedSent = true;
+    // 🧊 v1.21.27 — نسخة حية من آخر تحليل: لو حدث SERP_PARSED ضاع في التوقيت (أول
+    // برود بعد مسح البيانات أحيانًا بتسبق تركيب المستمعين)، الباكجراوند يقراها من
+    // SERP_CMD_STATE ويخلص في ثانية ونص بدل تايم‌آوت وريفشرات بتغيّر الجلسة والنتايج.
+    live.lastPayload = payload;
+    live.lastPayloadKeyword = keyword;
     const res = await D.msg.send(C.MSG.SERP_PARSED, payload);
     if (payload.early) {
       // قرأنا وكتبنا: قفل نهائي — الصفحة مش هتنزل تاني لحد ما نتنقل للكلمة الجاية

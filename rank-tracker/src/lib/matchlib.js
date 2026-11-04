@@ -1,7 +1,7 @@
 /**
  * matchlib.js — نسخة Classic من منطق المطابقة (تُحقن في صفحة SERP)
  * تسمح لـ serp.js بعمل "بحث Ctrl+F" ذكي داخل الصفحة والخروج المبكر
- * أول ما يظهر المتجر، بدون انتظار تحميل كل الدفعات.
+ * أول ما يظهر الموقع، بدون انتظار تحميل كل الدفعات.
  * (المنطق نفسه موجود كـ module في background/core/match.js ومُختبر هناك)
  */
 (function (global) {
@@ -38,18 +38,15 @@
   }
 
   function hostMatches(urlHost, targetDomain) {
+    // v1.21.17 — صارم زي موديول الخلفية حرفيًا: صفر تسامح أحرف (دومين تاني = متجر تاني)
     const target = normalizeHost(targetDomain);
     const host = normalizeHost(urlHost);
     if (!target || !host) { return false; }
     if (!target.includes('.')) {
-      const label = registrable(host).split('.')[0] || '';
-      return label === target || (label.length >= 6 && editDistance(label, target) <= 2);
+      return (registrable(host).split('.')[0] || '') === target;
     }
     if (host === target || host.endsWith('.' + target)) { return true; }
-    if (registrable(host) === registrable(target)) { return true; }
-    const a = registrable(host).split('.')[0] || '';
-    const b = registrable(target).split('.')[0] || '';
-    return a.length >= 6 && b.length >= 6 && editDistance(a, b) <= 2;
+    return registrable(host) === registrable(target);
   }
 
   /** مسافة Damerau-Levenshtein محدودة */
@@ -98,26 +95,38 @@
   }
 
   /** مطابقة سريعة تستخدمها صفحة SERP للخروج المبكر ورصد AI Overview */
+  function storeNames(cfg) {
+    const c = cfg || {};
+    return [c.storeName, c.storeNameEn]
+      .map((s) => String(s == null ? '' : s).trim())
+      .filter(Boolean)
+      .filter((s, i, arr) => arr.indexOf(s) === i);
+  }
+
   function matchItems(items, cfg) {
     const config = cfg || {};
     const mode = config.matchMode || 'both';
     const hasDomain = !!String(config.storeDomain || '').trim();
-    const hasName = !!String(config.storeName || '').trim();
+    const names = storeNames(config);
+    // سياسة 1.19.7 — نفس قواعد موديول الخلفية حرفيًا (الدومين أولاً)
+    const nameAllowed = mode === 'name' || (mode === 'both' && !hasDomain);
     const list = Array.isArray(items) ? items : [];
     for (let i = 0; i < list.length; i++) {
       const item = list[i];
       if (hasDomain && (mode === 'domain' || mode === 'both')) {
         if (hostMatches(item.host || '', config.storeDomain)) { return { found: true, position: i + 1, matched: item }; }
       }
-      if (hasName && (mode === 'name' || mode === 'both')) {
+      if (nameAllowed && names.length) {
         const text = (item.title || '') + ' ' + (item.snippet || '') + ' ' + (item.url || '') + ' ' + (item.text || '');
-        if (nameMatches(text, config.storeName)) { return { found: true, position: i + 1, matched: item }; }
+        for (const nm of names) {
+          if (nameMatches(text, nm)) { return { found: true, position: i + 1, matched: item }; }
+        }
       }
     }
     return { found: false, position: null, matched: null };
   }
 
   global.SRT = Object.assign(global.SRT || {}, {
-    match: { normalizeArabic, normalizeHost, hostMatches, nameMatches, matchItems }
+    match: { normalizeArabic, normalizeHost, hostMatches, nameMatches, matchItems, storeNames }
   });
 })(globalThis);

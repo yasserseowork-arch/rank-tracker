@@ -16,12 +16,14 @@ test('setConfig: تطهير الأنواع والحدود الآمنة', async (
   assert.equal(cfg.verbose, true);
 });
 
-test('addKeywords: حذف المكرر بدون حساسية لحالة الأحرف', async () => {
+test('addKeywords v1.21.1: المكررات بتفضل صفوف مستقلة بنفس الترتيب — مفيش حذف', async () => {
   await state.clearKeywords();
   await state.addKeywords(['عبايات', 'عبايات ', 'OBAYAT']);
   const list = await state.getKeywords();
-  // 'عبايات ' تُقصّ إلى نفس المفتاح، لكن OBAYAT مختلفة نصياً
-  assert.equal(list.length, 2);
+  // كل سطر في الشيت = صف، حتى لو مكرر حرفيًا — عشان النسخ للترتيب يمشي سطر بسطر
+  assert.equal(list.length, 3);
+  assert.equal(list[1].keyword, 'عبايات');
+  assert.notEqual(list[0].id, list[1].id);
 });
 
 test('start: بدون كلمات → no-keywords', async () => {
@@ -92,15 +94,117 @@ test('setConfig: تنظيف الدومين من https والمسار', async () 
   assert.equal(cfg.storeDomain, 'berhatayer.org.sa');
 });
 
-test('addKeywords: المكرر يرجع للانتظار بدل التجاهل الصامت', async () => {
+test('addKeywords v1.21.1: إضافة نفس الكلمة تاني = صف جديد مش إعادة تدوير القديم', async () => {
   await state.clearKeywords();
   const first = await state.addKeywords(['كلمة مكررة']);
   assert.equal(first.added.length, 1);
   await state.updateKeyword(first.added[0].id, { status: 'done' });
   const second = await state.addKeywords(['كلمة مكررة']);
-  assert.equal(second.added.length, 0);
-  assert.equal(second.reset, 1);
+  assert.equal(second.added.length, 1);
+  assert.equal(second.reset, 0);
   const list = await state.getKeywords();
-  assert.equal(list.length, 1);
-  assert.equal(list[0].status, 'pending');
+  assert.equal(list.length, 2);
+  assert.equal(list[0].status, 'done'); // القديم بسّطره بيتلمسش
+  assert.equal(list[1].status, 'pending'); // والجديد في الطابور
+});
+
+test('handleCaptcha v1.21.25: فشل المحاولة + 15 ث تأكيد بلا حل = استرجاع «شغال» وتسليم للمسح الموحد (علة البانر العالق)', async () => {
+  const engine = new QueueEngine();
+  engine.orchestrator.solve = async () => ({ outcome: 'failed', attempts: 1 });
+  await state.setRun({ status: 'captcha', captcha: { tabId: 999, attempts: 0 } });
+  const t0 = Date.now();
+  const r = await engine.handleCaptcha(
+    999, { id: 'k1', keyword: 'اختبار' },
+    { pauseOnCaptchaFail: true },
+    new AbortController().signal,
+    false // allowPause = false (الوضع التلقائي)
+  );
+  const waited = Date.now() - t0;
+  // النافذة 15 ثانية فعلًا — مش تسليم لحظي زي السباقات القديمة
+  assert.ok(waited >= 14000, 'نافذة التأكيد ما اتستناش: ' + waited + 'ms');
+  assert.ok(!engine.orchestrator.solve.toString().includes('Promise'), 'المحلل الوهمي لازم يفضل بسيط');
+  assert.equal(r, 'stale-expired'); // بعد التأكيد الفاشل: نفس إشارة المسح الموحد — مفيش abandon
+  const run = await state.getRun();
+  assert.equal(run.status, 'running');
+  assert.equal(run.captcha, null);
+});
+
+test('maybePeriodicClear: بيمسح عند بلوغ كل N كلمة وبيسجل المؤشر عشان ما يكررش', async () => {
+  const engine = new QueueEngine();
+  await state.clearKeywords();
+  await state.setRun({ clearMarker: 0 });
+  const kws = [];
+  for (let i = 0; i < 10; i++) { kws.push({ id: 'k' + i, keyword: 'كلمة ' + i, status: 'done' }); }
+  await state.setKeywords(kws);
+  await engine.maybePeriodicClear({ clearEveryN: 10 });
+  let run = await state.getRun();
+  assert.equal(run.clearMarker, 10);
+  // مفيش كلمات جديدة مفحوصة → مش هيمسح تاني
+  await engine.maybePeriodicClear({ clearEveryN: 10 });
+  run = await state.getRun();
+  assert.equal(run.clearMarker, 10);
+  // كلمتين كمان → تعدي الـ 10 → مسح تاني
+  await state.addKeywords(['كلمة 11', 'كلمة 12']);
+  const more = await state.getKeywords();
+  const upd = more.filter((k) => k.keyword.indexOf('كلمة 1') === 0);
+  for (const k of upd) { await state.updateKeyword(k.id, { status: 'done' }); }
+  await engine.maybePeriodicClear({ clearEveryN: 10 });
+  run = await state.getRun();
+  assert.ok(run.clearMarker >= 10);
+});
+
+test('v119 setConfig: تطبيع الاسم العربي والإنجليزي — trim وسقف 80 حرف، والدومين زي ما هو', async () => {
+  const cfg = await state.setConfig({
+    storeDomain: 'HTTPS://WWW.MySite.COM/offer?x=1',
+    storeName: '  موقعي  ',
+    storeNameEn: '  My Site ' + 'X'.repeat(120) + '  ',
+  });
+  assert.equal(cfg.storeDomain, 'mysite.com');
+  assert.equal(cfg.storeName, 'موقعي');
+  assert.equal(cfg.storeNameEn.length, 80);
+  assert.ok(cfg.storeNameEn.startsWith('My Site '));
+  // مسحه بالكامل مقبول — الحقل اختياري «إن وُجد»
+  const cleared = await state.setConfig({ storeNameEn: '' });
+  assert.equal(cleared.storeNameEn, '');
+});
+
+test('v1191 DEFAULTS: السقف والجلب الخلفي والقيم الجديدة في الإعدادات المدموجة', async () => {
+  const cfg = await state.setConfig({});
+  assert.equal(cfg.scanHardCapMs, 60000);
+  assert.equal(cfg.selfFetchMore, true);
+  assert.equal(cfg.selfFetchMaxBatches, 9);
+  assert.equal(cfg.batchSettleMs, 2600);
+  const num = await state.setConfig({ scanHardCapMs: '45000' });
+  assert.equal(num.scanHardCapMs, 45000);
+});
+
+test('notify v1.21.26: مكرر فوري جوه 40 ثانية بيتتجاهل — والحرج بيقطع الإيقاع دايمًا', async () => {
+  const engine = new QueueEngine();
+  await state.setRun({ notice: null });
+  await engine.notify('🔄 إعادة محاولة', 'نص تجربة أ');
+  const n1 = (await state.getRun()).notice;
+  assert.ok(n1 && n1.title === '🔄 إعادة محاولة', 'الأولى لازم تظهر');
+  await engine.notify('🔄 إعادة محاولة', 'نص تجربة أ');
+  assert.equal((await state.getRun()).notice.ts, n1.ts, 'المكرر الفوري ما بيقطعش العرض');
+  await engine.notify('⚠️ الأداة وقفت', 'حرج فوري');
+  assert.equal((await state.getRun()).notice.title, '⚠️ الأداة وقفت', 'الحرج بيمر مهما كان الإيقاع');
+  await engine.notify('🧩 كابتشا', 'روتيني يستنى دوره');
+  assert.equal((await state.getRun()).notice.title, '⚠️ الأداة وقفت', 'الروتيني ورا الحرج بيستنى الـ12 ثانية');
+  await state.setRun({ notice: null });
+});
+
+test('regionFromFooter v1.21.28: بتلمح اسم الدولة من رجل صفحة جوجل وتطابق بالمطلوب', () => {
+  const engine = new QueueEngine();
+  const okSa = engine.regionFromFooter('المملكة العربية السعودية    ٢٠٢٦', 'sa');
+  assert.equal(okSa.known, true, 'لازم تتعرف على السعودية');
+  assert.equal(okSa.gl, 'sa');
+  assert.equal(okSa.matched, true, 'sa مطلوب = تطابق');
+  const wrong = engine.regionFromFooter('Egypt', 'sa');
+  assert.equal(wrong.gl, 'eg');
+  assert.equal(wrong.matched, false, 'مصر مش السعودية — اختلاف');
+  const empty = engine.regionFromFooter('', 'sa');
+  assert.equal(empty.known, false, 'مفيش فوتر = مفيش حكم');
+  assert.equal(empty.matched, true, 'والمجهول ما يتحسبش غلط');
+  const unknown = engine.regionFromFooter('Settings Help Privacy', 'sa');
+  assert.equal(unknown.known, false, 'فوتر بلا دولة = سكوت');
 });

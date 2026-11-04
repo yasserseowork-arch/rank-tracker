@@ -68,20 +68,6 @@ function renderStatus() {
   $('btnResume').disabled = run.status !== 'paused';
   $('btnStop').disabled = run.status === 'idle';
 
-  const banner = $('captchaBanner');
-  const showBanner = run.status === 'captcha' || (run.status === 'paused' && run.pauseReason === 'captcha-failed');
-  banner.classList.toggle('hidden', !showBanner);
-  if (showBanner) {
-    const attempts = run.captcha && run.captcha.attempts ? run.captcha.attempts : 0;
-    $('captchaAttempts').textContent = t('captchaAttemptsLabel') + ' ' + attempts;
-    if (run.status === 'paused') {
-      $('captchaBannerTitle').textContent = t('captchaFailedTitle');
-      $('captchaBannerText').textContent = t('captchaFailedText');
-    } else {
-      $('captchaBannerTitle').textContent = t('captchaLiveTitle');
-      $('captchaBannerText').textContent = t('captchaLiveText');
-    }
-  }
 }
 
 function renderStats() {
@@ -89,13 +75,78 @@ function renderStats() {
   $('statChecked').textContent = s.checked || 0;
   $('statFound').textContent = s.found || 0;
   $('statAvg').textContent = s.avgPosition == null ? '—' : '#' + s.avgPosition;
-  $('statCaptcha').textContent = (snapshot.run && snapshot.run.captchaSolves) || 0;
+  // v1.21.40: كان بيقرا run.captchaSolves اللي بيتصفّر مع كل «بدء فحص» — يعني
+  // بعد أي رن جديد كان بيقول صفر كأنه مفيش كابتشا اتحلت أبداً. بقى الإجمالي التراكمي.
+  $('statCaptcha').textContent = s.captchaSolvesTotal != null
+    ? s.captchaSolvesTotal
+    : ((snapshot.run && snapshot.run.captchaSolves) || 0);
+  renderRestStrip();
+}
+
+/* شريط الاستراحة التفاعلي: بيظهر بس لما استراحة فعلًا جارية دلوقتي، وعدّاد حي
+   بينزل بالثواني زي شريط التحميل — مفيش «تيزر» دائم وملل. */
+function renderRestStrip() {
+  const strip = $('restStrip');
+  const fill = $('restFill');
+  const txt = $('restText');
+  if (!fill || !txt || !strip) { return; }
+  const run = snapshot.run || {};
+  const until = run.breakUntil || 0;
+  const total = Math.max(1, run.breakTotalMs || 1);
+  const left = until ? Math.max(0, until - Date.now()) : 0;
+  if (!until || left <= 0) {
+    strip.classList.add('hidden');
+    return;
+  }
+  strip.classList.remove('hidden');
+  const cfg = snapshot.config || {};
+  const withClear = Number(cfg.clearEveryN || 0) > 0;
+  txt.textContent = t('restNow').replace('{s}', String(Math.ceil(left / 1000))) + (withClear ? t('restNowClear') : '');
+  fill.style.width = Math.max(2, Math.round((left / total) * 100)) + '%';
+}
+
+/* إشعارات الأداة — جوه اللوحة مكان الشريط، بتختفي لوحدها بعد 45 ثانية أو بالخ ✓ */
+function renderNotice() {
+  const box = $('srtNotice');
+  if (!box) { return; }
+  const n = (snapshot.run || {}).notice;
+  const fresh = n && (Date.now() - (n.ts || 0) < 45000);
+  if (!fresh) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  const titleEl = $('noticeTitle');
+  const textEl = $('noticeText');
+  if (titleEl) { titleEl.textContent = n.title || '🔔'; }
+  if (textEl) { textEl.textContent = n.text || ''; }
+}
+
+function bindRestStrip() {
+  renderRestStrip();
+  renderNotice();
+  let tickBeat = 0;
+  const tick = () => {
+    if (typeof document !== 'undefined' && document.hidden) { return; } // 🪶 اللوحة مخفية — مفيش رسم خالص
+    const run = (snapshot && snapshot.run) || {};
+    const live = (run.breakUntil && Date.now() < run.breakUntil + 1500)
+      || (run.notice && (Date.now() - (run.notice.ts || 0) < 46000));
+    if (!live && (tickBeat++ % 4)) { return; } // ⚡ في الهدوء: فحص كل ثانيتين بدل كل نص — نفس الشكل بربع اللمس
+    renderRestStrip();
+    renderNotice();
+  };
+  setInterval(tick, 500);
+  const btn = $('noticeClose');
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      await send('srt/notice-clear', {});
+      const box = $('srtNotice');
+      if (box) { box.classList.add('hidden'); }
+    });
+  }
 }
 
 function displayPos(row) {
-  // ظهر عضوياً وكمان في AI Overview → «4 AI» / ظهر في AI بس → «2 AI» أو «AI»
-  if (row.found) { return row.aiFound ? row.position + ' AI' : '#' + row.position; }
-  if (row.aiFound) { return row.aiPosition != null ? row.aiPosition + ' AI' : 'AI'; }
+  // ظهر عضوياً وكمان في AI Overview → «1ai» / ظهر في الـAI بس → «ai»
+  if (row.found) { return row.aiFound ? row.position + 'ai' : '#' + row.position; }
+  if (row.aiFound) { return 'ai'; }
   return t('notFound');
 }
 
@@ -107,6 +158,14 @@ function renderKeywords() {
   const body = $('kwBody');
   body.textContent = '';
   const list = snapshot.keywords || [];
+  // عدّاد دقيق: «المتفحص/الإجمالي» من مصدر الحقيقة نفسه — مش رقم إجمالي مبهم
+  const cntEl = $('kwCount');
+  if (cntEl) {
+    const KW = C.STATUS.KW;
+    const done = list.filter((k) => k.status === KW.DONE || k.status === KW.FAILED || k.status === KW.SKIPPED).length;
+    cntEl.textContent = String(done) + '/' + String(list.length);
+    cntEl.title = t('kwCountTip').replace('{d}', String(done)).replace('{t}', String(list.length));
+  }
   if (!list.length) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
@@ -134,12 +193,42 @@ function renderKeywords() {
     badge.className = 'kw-status ' + (kw.status || 'pending');
     badge.textContent = (KW_STATUS_TEXT[kw.status] || KW_STATUS_TEXT.pending)();
     tdStatus.appendChild(badge);
+    if (kw.needsReview) {
+      // ⚠️ v1.21.7: «محتاج مراجعة» — مش حكم «مش موجود»، هتتعاد في آخر الرن
+      const rv = document.createElement('span');
+      rv.className = 'kw-status review';
+      rv.textContent = '⚠️';
+      rv.title = 'اتعلمت مراجعة (خطأ شبكة/بلوك وقت الفحص) — مش حكم نهائي';
+      tdStatus.appendChild(rv);
+    }
+
+    // 🎯 v1.21.30 (طلب المستخدم): زرار ↻ تحت شارة الحالة — يدوس، الكلمة الشغالة
+    // تخلص براحتها، وبعدين اللي اتعلّمت أولوية تتنفذ الأول، والرن يكمل عادي.
+    const recheck = document.createElement('button');
+    recheck.type = 'button';
+    recheck.className = 'icon-btn kw-recheck';
+    recheck.textContent = '\u21BB';
+    recheck.title = t('btnRecheck');
+    recheck.addEventListener('click', async () => {
+      const r = await send(C.MSG.QUEUE_RECHECK, { id: kw.id });
+      if (r && r.ok === false && r.reason === 'running') {
+        recheck.title = 'هي دي اللي شغالة دلوقتي — استناها تخلص وبعدين دوسها';
+      }
+      await refresh();
+    });
+    tdStatus.appendChild(recheck);
 
     const tdPos = document.createElement('td');
     const pos = document.createElement('span');
     const kwAi = kw.lastPosition == null && kw.lastAiPosition != null;
-    pos.className = 'pos-badge ' + (kw.lastFound ? 'hit' : (kwAi ? 'ai' : (kw.lastCheckedAt ? 'miss' : '')));
-    pos.textContent = kw.lastPosition != null ? (kw.lastAiPosition != null || kw.lastAiFound ? kw.lastPosition + ' AI' : '#' + kw.lastPosition) : (kwAi ? (kw.lastAiPosition != null ? kw.lastAiPosition + ' AI' : 'AI') : (kw.lastCheckedAt ? '—' : '·'));
+    const kwPresence = kw.lastPosition == null && !kwAi && kw.lastPresence && kw.lastPresence.kind;
+    pos.className = 'pos-badge ' + (kw.lastFound ? 'hit' : (kwAi ? 'ai' : (kwPresence ? 'presence' : (kw.lastCheckedAt ? 'miss' : ''))));
+    pos.textContent = kw.lastPosition != null ? (kw.lastAiFound || kw.lastAiPosition != null ? kw.lastPosition + 'ai' : '#' + kw.lastPosition) : (kwAi ? 'ai' : (kwPresence ? '👁' : (kw.lastCheckedAt ? '—' : '·')));
+    if (kwPresence) {
+      pos.title = (kw.lastPresence.kind === 'ad' ? 'ظهرت في خانة إعلان — مش محتسبة رنك (قانون الإعلانات)'
+                   : kw.lastPresence.kind === 'shopping' ? 'ظهرت في بلوك التسوّق/المنتجات — مش محتسبة رنك'
+                   : 'ضايفينك في الصفحة خارج العضوي — مش محتسبة رنك') + (kw.lastPresence.url ? ' — ' + kw.lastPresence.url : '');
+    }
     tdPos.appendChild(pos);
 
     const tdDel = document.createElement('td');
@@ -175,7 +264,7 @@ function renderResults() {
   for (const row of list) {
     const tr = document.createElement('tr');
     if (row.topHosts && row.topHosts.length) {
-      tr.title = 'أول النطاقات المقروءة: ' + row.topHosts.join(' | ');
+      tr.title = 'أول النطاقات اللي ظهرت: ' + row.topHosts.join(' | ');
     }
 
     const tdKw = document.createElement('td');
@@ -222,7 +311,20 @@ function renderChart() {
   drawPositionChart(canvas, points);
 }
 
+let lastRenderSig = '';
 function renderAll() {
+  //  v1.21.7: ريندر خفيف — بصمة بتلمس اللي بيتغير فعليًا بس؛ Broadcast كل 1.2 ثانية
+  // في الكابتشا كان بيرسم اللستة كلها من الصفر (تهنيج مع 200+ كلمة). نفس البصمة = مفيش DOM
+  const r = snapshot.run || {};
+  const sig = JSON.stringify([
+    r.status, r.currentIndex, r.checked, r.total, r.breakUntil || 0, (snapshot.stats || {}).captchaSolvesTotal || 0,
+    (r.captcha && r.captcha.attempts) || 0,
+    (snapshot.keywords || []).length,
+    (snapshot.keywords || []).map((k) => (k.status || '') + '|' + (k.lastPosition == null ? '' : k.lastPosition) + '|' + (k.needsReview ? 1 : 0)).join(';'),
+    (snapshot.results || []).length
+  ]);
+  if (sig === lastRenderSig) { return; }
+  lastRenderSig = sig;
   renderStatus();
   renderStats();
   renderKeywords();
@@ -234,6 +336,7 @@ function renderAll() {
 const CONFIG_FIELDS = [
   ['cfgDomain', 'storeDomain', 'string'],
   ['cfgName', 'storeName', 'string'],
+  ['cfgNameEn', 'storeNameEn', 'string'],
   ['cfgMatch', 'matchMode', 'string'],
 ];
 
@@ -299,10 +402,9 @@ async function addFromInput() {
     alert(t('kwAddFail') + ': ' + ((res && (res.error || res.__err)) || '?'));
     return;
   }
-  const n = (res.added || 0) + (res.reset || 0);
   $('kwInput').value = '';
   await refresh();
-  alert(t('kwAddedOk').replace('{n}', String(n)));
+  // بدون اشعار: عدّاد الكلمات فوق الجزء نفسه هو الرد — دايما صحيح وحي
 }
 
 async function importCsvFile(file) {
@@ -315,38 +417,80 @@ async function importCsvFile(file) {
 }
 
 /* --------------------------------- النتائج --------------------------------- */
+
+/* ترتيب التصدير دايماً = ترتيب الكلمات اللي المستخدم حاطها في القائمة (مش العكس).
+   كل كلمة مرة واحدة بآخر نتيجة ليها، واللي ملهاش بوزيشن (أو لسه متفحصتش) بتاخد
+   «—» الشرطة نفسها اللي باينة في الجدول — عشان الشيت يبقى صورة طبق الأصل من اللوحة. */
+function exportEntriesInUserOrder() {
+  const byKw = new Map();
+  for (const r of (snapshot.results || [])) { // المخزّن: الأحدث الأول — أول ظهور للواحد = الأحدث
+    const key = String((r && r.keyword) || '').trim().toLowerCase();
+    if (key && !byKw.has(key)) { byKw.set(key, r); }
+  }
+  const list = (snapshot.keywords || []).filter((k) => k && String(k.keyword || '').trim());
+  if (list.length) {
+    return list.map((k) => {
+      const key = String(k.keyword).trim().toLowerCase();
+      return { keyword: String(k.keyword).trim(), result: byKw.get(key) || null };
+    });
+  }
+  // القائمة اتلمست؟ نرجع لآخر نتيجة لكل كلمة بترتيب الفحص الأصلي (الأقدم الأول)
+  return Array.from(byKw.entries()).map((e) => ({ keyword: e[1].keyword, result: e[1] })).reverse();
+}
+
+/* خانة الترتيب الموحدة: «1ai» / «4» / «ai» / «—» — نفس شكل اللوحة بالظبط */
+function posCellForExport(r) {
+  if (!r) { return '—'; }
+  // 🚩 v1.21.40: «بحث مفيش» (شبكة/403/تايم‌آوت) مش حكم «مش موجودة» — بيتصدّر «—» زي
+  // الكلمة اللي لسه ما اتفحصتش، بدل ما يكذب على المستخدم في عمود الترتيب.
+  if (r.inconclusive) { return '—'; }
+  const pos = Number(r.position);
+  const okPos = r.position != null && Number.isFinite(pos);
+  if (r.found) { return okPos ? (r.aiFound ? pos + 'ai' : String(pos)) : (r.aiFound ? 'ai' : '—'); }
+  return r.aiFound ? 'ai' : '—';
+}
+
 function resultRowsForExport() {
   const header = [t('thKeyword'), t('thPosition'), 'found', 'ai_overview', 'url', 'title', 'total', 'checked_at'];
-  const rows = (snapshot.results || []).map((r) => [
-    r.keyword,
-    r.found ? (r.aiFound ? r.position + ' AI' : String(r.position)) : (r.aiFound ? (r.aiPosition != null ? r.aiPosition + ' AI' : 'AI') : ''),
-    r.found ? 'yes' : (r.aiFound ? 'ai' : 'no'),
-    r.aiFound ? r.aiPosition : '',
-    r.urlDisplay || r.url || '',
-    r.title || '',
-    r.total || 0,
-    new Date(r.checkedAt || Date.now()).toISOString()
-  ]);
+  const rows = exportEntriesInUserOrder().map((e) => {
+    const r = e.result || {};
+    return [
+      e.keyword,
+      posCellForExport(e.result),
+      r.inconclusive ? 'unknown' : (r.found ? 'yes' : (r.aiFound ? 'ai' : 'no')),
+      r.aiFound ? (r.aiPosition != null ? r.aiPosition : '') : '',
+      r.urlDisplay || r.url || '',
+      r.title || '',
+      r.total || 0,
+      r.checkedAt ? new Date(r.checkedAt).toISOString() : ''
+    ];
+  });
   return [header].concat(rows);
 }
 
 async function makeXlsx(silent) {
-  const rows = [[t('thKeyword'), t('thPosition'), 'AI', 'محلي', 'URL', t('thTime')]];
-  (snapshot.results || []).forEach((r) => {
+  const entries = exportEntriesInUserOrder();
+  if (!entries.some((e) => e.result)) {
+    if (!silent) { alert(t('copyEmpty')); }
+    return;
+  }
+  const rows = [[t('thKeyword'), t('thPosition'), 'AI', t('thLocal'), 'URL', t('thTime')]]; // v1.21.12: «محلي» اتترجمت في الإنجليزي
+  entries.forEach((e) => {
+    const r = e.result || {};
     rows.push([
-      r.keyword,
-      r.found ? (r.aiFound ? r.position + ' AI' : r.position) : (r.aiFound ? (r.aiPosition != null ? r.aiPosition + ' AI' : 'AI') : t('notFound')),
+      e.keyword,
+      posCellForExport(e.result),
       r.aiFound ? (r.aiPosition != null ? r.aiPosition : 'AI') : '',
       r.localFound ? '#' + r.localPosition : '',
       r.url || '',
-      new Date(r.checkedAt || Date.now()).toLocaleString('ar-SA')
+      r.checkedAt ? new Date(r.checkedAt).toLocaleString('ar-SA') : ''
     ]);
   });
   const bytes = SRT.xlsx.buildXlsx(rows, 'الترتيب');
   const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'srt-ranks-' + new Date().toISOString().slice(0, 10) + '.xlsx';
+  a.download = exportFileName('xlsx'); // v1.21.14: tracking-اسم-تاريخ بدل الاسم الأتوماتيكى
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -354,13 +498,31 @@ async function makeXlsx(silent) {
   if (!silent) { alert(t('makeXlsxOk')); }
 }
 
+// 📛 v1.21.14 (طلب المستخدم): اسم ملف التنزيل بقى tracking-<اسم الموقع بالإنجليزي>-<DD-MM-YYYY>
+// — للـXLSX اليدوي، وللتلقائي آخر الرن (نفس الدالة)، ولملف CSV. لو الاسم الإنجليزي فاضي
+// بنرجع للدومين، ولو الاتنين فاضييين الاسم بييجي tracking-بالتاريخ وبس
+function exportFileName(ext) {
+  const cfg = snapshot.config || {};
+  let store = String(cfg.storeNameEn || cfg.storeDomain || '').trim()
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, '-')
+    .replace(/[-. ]+$/g, '')
+    .slice(0, 40)
+    .replace(/[-. ]+$/g, '');
+  const d = new Date();
+  const p2 = (n) => (n < 10 ? '0' : '') + n;
+  const date = p2(d.getDate()) + '-' + p2(d.getMonth() + 1) + '-' + d.getFullYear();
+  return 'tracking' + (store ? '-' + store : '') + '-' + date + '.' + ext;
+}
+
 async function exportCsv() {
+  if (!(snapshot.results || []).length) { alert(t('copyEmpty')); return; }
   const rows = resultRowsForExport();
   const csv = SRT.csv.withBom(SRT.csv.build(rows, ','));
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'srt-results-' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.download = exportFileName('csv'); // v1.21.14: نفس نمط التسمية للـCSV كمان
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -368,20 +530,28 @@ async function exportCsv() {
 }
 
 async function copyTsv() {
-  const rows = (snapshot.results || []).map((r) => [r.keyword, r.found ? (r.aiFound ? r.position + ' AI' : String(r.position)) : (r.aiFound ? (r.aiPosition != null ? r.aiPosition + ' AI' : 'AI') : '')]);
+  // v1.21.12 (طلب المستخدم): النسخ للشيت بياخد الكلمات اللي اتفحصت فعلًا بس —
+  // لسه الرن في الكلمة الـ20 من 40؟ دول العشرين يروحوا، مش 40 سطر منهم 20 «—» فارغة.
+  // «مش موجودة» بعد الفحص لسه بتتنسخ بـ«—» (دي نتيجة محسومة، مش كلمة مستنية)
+  const entries = exportEntriesInUserOrder().filter((e) => e.result);
+  if (!entries.length) { alert(t('copyEmpty')); return; }
+  const rows = entries.map((e) => [e.keyword, posCellForExport(e.result)]);
   const tsv = SRT.csv.toTsv(rows);
   try {
     await navigator.clipboard.writeText(tsv);
-    alert(t('copyDone'));
+    alert(t('copyDone').replace('{n}', String(entries.length)));
   } catch (_) {
-    // fallback: textarea مؤقت
-    const ta = document.createElement('textarea');
-    ta.value = tsv;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-    alert(t('copyDone'));
+    // fallback: textarea مؤقت — ولو هو كمان فشل نقول بوضوح بدل ما نكذب «اتنسخ»
+    let ok = false;
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = tsv;
+      document.body.appendChild(ta);
+      ta.select();
+      ok = document.execCommand('copy');
+      ta.remove();
+    } catch (__) { ok = false; }
+    alert(ok ? t('copyDone').replace('{n}', String(entries.length)) : t('copyFail'));
   }
 }
 
@@ -394,7 +564,7 @@ function maybeAutoXlsx(run, config) {
   if (!config || config.autoXlsx === false) { return; }
   if (!(snapshot.results || []).length) { return; }
   makeXlsx(true);
-  appendLog({ level: 'info', time: new Date().toTimeString().slice(0, 8), scope: 'panel', text: '📊 نُزّل شيت Excel بالترتيب تلقائياً' });
+  appendLog({ level: 'info', time: new Date().toTimeString().slice(0, 8), scope: 'panel', text: '📊 اتجهز شيت Excel بالترتيب واتحمّل لوحده' });
 }
 
 /* --------------------------------- التحديث --------------------------------- */
@@ -419,8 +589,70 @@ async function main() {
   const vt = $('versionTag');
   if (vt) { vt.textContent = 'v' + C.VERSION; }
 
+  // 🧹 v1.21.13: تصفير كامل (إعدادات + كلمات + نتائج) — نص التأكيد في القاموس بيوضحها
+  const brs = $('btnReset');
+  if (brs) {
+    brs.addEventListener('click', async () => {
+      const sure = confirm(t('confirmConfigReset'));
+      if (!sure) { return; }
+      const res = await send(C.MSG.CONFIG_RESET, {});
+      if (res && res.ok === false && res.reason === 'running') { alert(t('resetBusy')); return; }
+      if (res && res.ok) { await refresh(); }
+    });
+  }
+
   // Keep-Alive: يبقي الـ Service Worker حياً طوال فتح اللوحة
   SRT.msg.connectKeepalive('srt-sidepanel');
+
+  // ⚙️ تبويبات الأدوات المدمجة (الرئيسية / الموقع / النتائج)
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.tab-pane').forEach((pane) => {
+        pane.classList.toggle('hidden', pane.id !== btn.dataset.pane);
+      });
+      window.dispatchEvent(new Event('resize')); // إعادة رسم الشارت عند العودة للرئيسية
+    });
+  });
+
+  // ⚠️ تحذير يظهر عند كل فتحة للوحة — على طول في البداية
+  $('warnOverlay').classList.remove('hidden');
+  // v1.21.11: أول ما يدوس «فهمت» الصورة بتطير من فوق البوب‌أب لمكانها في الهيدر
+  // بمسار مقوّس خفيف — Web Animations API (transforms بس على GPU، مفيش مكتبات ولا layout thrash)
+  $('btnWarnOk').addEventListener('click', () => {
+    const overlay = $('warnOverlay');
+    if (overlay.classList.contains('hidden')) { return; }
+    const hide = () => { overlay.classList.add('hidden'); };
+    let reduced = false;
+    try { reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) {}
+    const big = $('modalAvatar');
+    const slot = document.querySelector('.brand-avatar');
+    if (reduced || !big || !slot) { hide(); return; }
+    const from = big.getBoundingClientRect();
+    const to = slot.getBoundingClientRect();
+    if (!from.width || !to.width) { hide(); return; }
+    const clone = big.cloneNode(false);
+    clone.removeAttribute('id');
+    clone.className = 'modal-avatar warn-fly';
+    clone.style.cssText = 'position:fixed;left:' + from.left + 'px;top:' + from.top + 'px;width:' + from.width + 'px;height:' + from.height + 'px;margin:0;z-index:1200;';
+    document.body.appendChild(clone);
+    hide();
+    slot.style.visibility = 'hidden';
+    const dxc = (to.left + to.width / 2) - (from.left + from.width / 2);
+    const dyc = (to.top + to.height / 2) - (from.top + from.height / 2);
+    const anim = clone.animate([
+      { transform: 'translate(0px, 0px) scale(1) rotate(0deg)', offset: 0 },
+      { transform: 'translate(' + (dxc * 0.5 - (dxc >= 0 ? 20 : -20)) + 'px, ' + (dyc * 0.5 - 34) + 'px) scale(1.06) rotate(-9deg)', offset: 0.55 },
+      { transform: 'translate(' + dxc + 'px, ' + dyc + 'px) scale(' + (to.width / from.width) + ') rotate(0deg)', offset: 1 }
+    ], { duration: 560, easing: 'cubic-bezier(.33,.1,.25,1)', fill: 'forwards' });
+    anim.onfinish = () => {
+      clone.remove();
+      slot.style.visibility = '';
+      try { slot.animate([{ transform: 'scale(1.14)' }, { transform: 'scale(1)' }], { duration: 170, easing: 'ease-out' }); } catch (_) {}
+    };
+    // حرس: لو الحركة اتقطعت (تاب وراه/خلفية) الـcleanup يشتغل لوحده بعد ثانية ونص
+    setTimeout(() => { try { if (document.body.contains(clone)) { clone.remove(); slot.style.visibility = ''; } } catch (_) {} }, 1500);
+  });
 
   bindConfigForm();
 
@@ -446,6 +678,7 @@ async function main() {
     if (confirm(t('confirmClearKw'))) { await send(C.MSG.KEYWORDS_CLEAR); await refresh(); }
   });
 
+  bindRestStrip();
   $('btnMakeXlsx').addEventListener('click', makeXlsx);
   $('btnExportCsv').addEventListener('click', exportCsv);
   $('btnCopyTsv').addEventListener('click', copyTsv);
@@ -453,17 +686,6 @@ async function main() {
     if (confirm(t('confirmClearRes'))) { await send(C.MSG.RESULTS_CLEAR); await refresh(); }
   });
   $('btnClearLogs').addEventListener('click', () => { $('logConsole').textContent = ''; });
-  $('btnFocusCaptcha').addEventListener('click', async () => {
-    const tabId = snapshot.run && snapshot.run.captcha ? snapshot.run.captcha.tabId : null;
-    if (tabId) {
-      try {
-        await chrome.tabs.update(tabId, { active: true });
-        const tab = await chrome.tabs.get(tabId);
-        if (tab && tab.windowId) { await chrome.windows.update(tab.windowId, { focused: true }); }
-      } catch (_) {}
-    }
-  });
-
   // بث الحالة من الـ Service Worker
   chrome.runtime.onMessage.addListener((message) => {
     if (!message || !message.type) { return; }
@@ -471,6 +693,7 @@ async function main() {
       snapshot = Object.assign({}, snapshot, message);
       maybeAutoXlsx(message.run, snapshot.config);
       renderAll();
+      // 🔄 v1.21.9: شرايط الواجهة اتشالت — التقرير والتقدير في لوج الخادم (LOG) كفاية
     } else if (message.type === C.MSG.LOG) {
       appendLog(message);
     }

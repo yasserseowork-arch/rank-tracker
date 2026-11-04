@@ -25,6 +25,9 @@
     QUEUE_PAUSE: 'srt/queue/pause',
     QUEUE_RESUME: 'srt/queue/resume',
     QUEUE_STOP: 'srt/queue/stop',
+    PREFLIGHT: 'srt/preflight',
+    QUEUE_REVIEW: 'srt/queue/review',
+    CONFIG_RESET: 'srt/config/reset',
 
     // الكلمات المفتاحية
     KEYWORDS_SET: 'srt/keywords/set',
@@ -54,6 +57,7 @@
     CAPTCHA_BUSTER_NOT_FOUND: 'srt/captcha/buster-not-found',
     CAPTCHA_BUSTER_SEEN: 'srt/captcha/buster-seen',
     CAPTCHA_COORD_CLICK: 'srt/captcha/coord-click',
+    CAPTCHA_VERIFY_CLICK: 'srt/captcha/verify-click',
     CAPTCHA_SOLVED: 'srt/captcha/solved',
     CAPTCHA_FAILED: 'srt/captcha/failed',
     CAPTCHA_CMD_NEXT: 'srt/captcha/cmd/next',
@@ -92,7 +96,7 @@
       snippet: '.VwiC3b, [data-sncf="1"], [data-sncf="2"], .IsZvec, .MUxGbd',
       adsRoot: ['#tads', '#tadsb', '#bads', '.ads-visurl', '[data-text-ad]', '#topads'],
       noResults: ['#search .card-section', '#topstuff .medicv2c2f', 'div[data-async-type="no_results"]'],
-      ai: ['ai-overview', '#aiOverview', '[data-attrid="aiOverview"]', '[data-async-type="aiOverview"]', '.KsK2d'],
+      ai: ['ai-overview', '#aiOverview', '[data-attrid="aiOverview"]', '[data-async-type="aiOverview"]', '.KsK2d', '.w34xwb', '.YhCVmd', 'div[jsname="VZbeH"]'],
       paa: ['.related-question-pair', 'div[jsname="CpkPjb"]', '.g:not([data-hveid]) .related-question-pair']
     },
     recaptcha: {
@@ -143,12 +147,12 @@
     MAX_LOGS: 400,
     MAX_HISTORY_PER_KEYWORD: 40,
     TAB_LOAD_TIMEOUT_MS: 45000,
-    SERP_AFTER_CAPTCHA_MS: 60000,
+    SERP_AFTER_CAPTCHA_MS: 100000, // المسح الواعي-بالتقدّم + التوسيع + الدفعات الخلفية ممكن ياخدوا 90+
     KEEPALIVE_INTERVAL_MS: 15000,
     HEARTBEAT_INTERVAL_MS: 20000
   };
 
-  const VERSION = '1.14.0';
+  const VERSION = '1.21.40';
 
   global.SRT_C = { VERSION, MSG, STATUS, SEL, LIMITS };
 })(globalThis);
