@@ -5,28 +5,29 @@ const background = {
     maxplaces: 100,
     useGoogleEndpoint: false
   },
+  // 🇸🇦 v1.21.46: طبقة الـoptions page كمان — نفس لوح المستخدم بالظبط
   settings: {
-    'latitude': 37.422388,
-    'longitude': -122.0841883,
-    'location': "Google Building 40, Amphitheatre Parkway, Mountain View, CA, USA",
-    'name': "Google Building 40",
-    'placeId': "ChIJj38IfwK6j4ARNcyPDnEGa9g",
-    'enabled': false,
-    'hl': 'en',
-    'gl': 'US',
-    'regions': 'United States - English'
+    'latitude': 25.6242618,
+    'longitude': 42.3528328,
+    'location': "Saudi Arabia",
+    'name': "Saudi Arabia",
+    'placeId': "",
+    'enabled': true,
+    'hl': 'ar',
+    'gl': 'SA',
+    'regions': 'Saudi Arabia - العربية'
   },
   knownPlaces: [
     {
-      'latitude': 37.422388,
-      'longitude': -122.0841883,
-      'location': "Google Building 40, Amphitheatre Parkway, Mountain View, CA, USA",
-      'name': "Google Building 40",
-      'placeId': "ChIJj38IfwK6j4ARNcyPDnEGa9g",
-      'enabled': false,
-      'hl': 'en',
-      'gl': 'US',
-      'regions': 'United States - English'
+      'latitude': 25.6242618,
+      'longitude': 42.3528328,
+      'location': "Saudi Arabia",
+      'name': "Saudi Arabia",
+      'placeId': "",
+      'enabled': true,
+      'hl': 'ar',
+      'gl': 'SA',
+      'regions': 'Saudi Arabia - العربية'
     }
   ]
 };

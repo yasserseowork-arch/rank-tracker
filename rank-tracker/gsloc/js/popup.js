@@ -1,28 +1,28 @@
+// 🇸🇦 v1.21.46: مراية الديفولت (تُستخدم لو مخزنش حاجة فوقها) = إعدادات المستخدم
+// بالحرف: الرياض 25.6242618/42.3528328 — ar — SA — enabled
 const background = {
   settings: {
-    latitude: 37.422388,
-    longitude: -122.0841883,
-    location:
-      "Google Building 40, Amphitheatre Parkway, Mountain View, CA, USA",
-    name: "Google Building 40",
-    placeId: "ChIJj38IfwK6j4ARNcyPDnEGa9g",
-    enabled: false,
-    hl: "en",
-    gl: "US",
-    regions: "United States - English",
+    latitude: 25.6242618,
+    longitude: 42.3528328,
+    location: "Saudi Arabia",
+    name: "Saudi Arabia",
+    placeId: "",
+    enabled: true,
+    hl: "ar",
+    gl: "SA",
+    regions: "Saudi Arabia - العربية",
   },
   knownPlaces: [
     {
-      latitude: 37.422388,
-      longitude: -122.0841883,
-      location:
-        "Google Building 40, Amphitheatre Parkway, Mountain View, CA, USA",
-      name: "Google Building 40",
-      placeId: "ChIJj38IfwK6j4ARNcyPDnEGa9g",
-      enabled: false,
-      hl: "en",
-      gl: "US",
-      regions: "United States - English",
+      latitude: 25.6242618,
+      longitude: 42.3528328,
+      location: "Saudi Arabia",
+      name: "Saudi Arabia",
+      placeId: "",
+      enabled: true,
+      hl: "ar",
+      gl: "SA",
+      regions: "Saudi Arabia - العربية",
     },
   ],
 };
@@ -3410,10 +3410,10 @@ $("#place")
         $("#regions").val("");
       }
     } else {
-      // Default to US if sync is off
-      background.settings.gl = "US";
-      background.settings.regions = "United States - English";
-      $("#gl").val("US");
+      // 🇸🇦 1.21.46: فال-باك الأداة السعودي (مش US) — doctrine 1.20.0 فوق كل شيء
+      background.settings.gl = "SA";
+      background.settings.regions = "Saudi Arabia - العربية";
+      $("#gl").val("SA");
       $("#regions").prop("placeholder", background.settings.regions);
       $("#regions").val("");
     }
@@ -3503,6 +3503,10 @@ function loadHandler() {
   chrome.storage.local.get("sync-gl", function(res) {
     if (res["sync-gl"] !== undefined) {
       $("#sync-gl").prop("checked", res["sync-gl"]);
+    } else {
+      // 🇸🇦 1.21.46: SYNC ☑ ديڤولت (طلب المستخدم) — الـGL بيتلحق تلقائيًا بالموقع
+      $("#sync-gl").prop("checked", true);
+      chrome.storage.local.set({ "sync-gl": true });
     }
   });
 
@@ -3555,8 +3559,8 @@ function loadHandler() {
 
   // Manual entry of languages
   $("#hl, #gl").on("change", function () {
-    background.settings.hl = $("#hl").val() || $("#hl").attr("placeholder") || "en";
-    background.settings.gl = $("#gl").val() || $("#gl").attr("placeholder") || "US";
+    background.settings.hl = $("#hl").val() || $("#hl").attr("placeholder") || "ar";
+    background.settings.gl = $("#gl").val() || $("#gl").attr("placeholder") || "SA";
     background.settings.timestamp = new Date().getTime();
     chrome.storage.local.set({ settings: background.settings });
   });
@@ -3564,7 +3568,7 @@ function loadHandler() {
 
   $("#btn-favorite").on("click", function () {
     var currentName = $("#place").val().trim() || $("#place").attr("placeholder").trim();
-    if (currentName === "Google Building 40...") currentName = "";
+    if (currentName === "Saudi Arabia") currentName = "";
 
     var locName = prompt("Enter a name for this custom location (Favorite):", currentName);
     if (!locName) return; // Cancelled
@@ -3632,7 +3636,7 @@ function loadHandler() {
     var container = $("#favorites-container");
     container.empty();
 
-    // The very first item is often the default "Google Building 40" if never modified.
+    // The very first item is often the stock default location if never modified. (1.21.46: بقى السعودية)
     // If it's the only one, users might not think of it as a favorite they saved explicitly,
     // but returning it is fine.
     if (!background.knownPlaces || background.knownPlaces.length === 0) {

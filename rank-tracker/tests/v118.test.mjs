@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.45');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.45'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.45'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.45\]/m);
+  assert.equal(man.version, '1.21.46');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.46'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.46'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.46\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1922,4 +1922,32 @@ test('v12145: 403 في نص القراءة — تريبواير كل دفعة، 
   // الدروع ممنوع تلمسها
   const orch = read('src/background/core/captcha-orchestrator.js');
   assert.ok(orch.length > 1000, 'الأوركستراتور اتلمس — لا');
+});
+
+test('v12146: ديفولت GsLoc = لوح المستخدم (السعودية ON) — مش مقر جوجل أمريكا', () => {
+  const bg = read('gsloc/js/background.js');
+  const pp = read('gsloc/js/popup.js');
+  // القيم بالحرف من سكرينشوته: إحداثيات الرياض + ar + SA + enabled + الاسم المزدوج
+  assert.ok(bg.includes("'latitude': 25.6242618") && bg.includes("'longitude': 42.3528328"), 'إحداثيات الافتراض مش الرياض');
+  assert.ok(bg.includes("'gl': 'SA'") && bg.includes("'hl': 'ar'"), 'gl/hl الافتراض مش SA/ar');
+  assert.ok(bg.includes("'enabled': true"), 'الهوير لازم ON من أول ثانية');
+  assert.ok(bg.includes("'regions': 'Saudi Arabia - العربية'"), 'نص regions مش مطابق للوح');
+  assert.ok(bg.includes("'location': \"Saudi Arabia\""), 'location الافتراض مش السعودية');
+  assert.ok(!bg.includes('Mountain View'), 'بقايا المقر القديم لسه في الـbackground');
+  // مراية البوب-أب محمّلة بنفس القيم (وضع MV3 من غير background page)
+  assert.ok(pp.includes('latitude: 25.6242618') && pp.includes('gl: "SA"') && pp.includes('enabled: true'), 'مراية البوب-أب مش متظبطة');
+  assert.ok(!pp.includes('Google Building 40'), 'بقايا المقر القديم لسه في البوب-أب');
+  // الطبقة التالتة: options page — عندها مرايتها الخاصة، لازم هي كمان سعودية
+  const opjs = read('gsloc/js/options.js');
+  assert.ok(opjs.includes("'latitude': 25.6242618") && opjs.includes("'gl': 'SA'") && opjs.includes("'enabled': true"), 'مراية options page لسه أمريكا');
+  assert.ok(!opjs.includes('Mountain View'), 'بقايا المقر القديم في options page');
+  // SYNC ☑ ديڤولت + فال-باكاته كلها السعودية
+  assert.ok(pp.includes('chrome.storage.local.set({ "sync-gl": true })'), 'SYNC مش بيتعلّم ديڤولت');
+  assert.ok(pp.includes('background.settings.gl = "SA";'), 'فال-باك من غير sync مش Saudi');
+  assert.ok(pp.includes('|| "ar";') && pp.includes('|| "SA";'), 'فال-باك الكتابة اليدوية لسه أمريكي');
+  // وصفة .43 ساكتة فوق الديفولت الجديد: البوابة + القناة
+  assert.ok(bg.includes("area !== 'local' && area !== 'sync'"), 'بوابة .43 اتكسرت');
+  assert.ok(bg.includes("'gsloc:ensure-rules'") && pp.includes("'gsloc:ensure-rules'"), 'قناة .43 اتقطعت');
+  // genUULE: قطر المدينة التاريخي 65كم (الديفولت ما بيضيفش radius — زي جهازه بالظبط)
+  assert.ok(bg.includes('parseInt(settings.radius, 10) || 65000'), 'منطق القطر اتلمس');
 });

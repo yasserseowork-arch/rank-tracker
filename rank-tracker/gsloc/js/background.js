@@ -3,16 +3,19 @@ const options = {
   contextnumber: 3,
   maxplaces: 100
 };
+// 🇸🇦 v1.21.46 (ثابت الديفولت بطلب المستخدم — سكرينشوت 19): أول تحميل/تنظيف
+// بيانات = الرياض كنتر، عربي، GL=SA، SYNC مفعّل، الهوير ON — «Saudi Arabia
+// - العربية» كما في لوحته بالحرف. أي تعديل يدوي من اللوح بيُخزَّن فوق ده بطبيعة الحال
 const settings = {
-  'latitude': 37.422388,
-  'longitude': -122.0841883,
-  'location': "Google Building 40, Amphitheatre Parkway, Mountain View, CA, USA",
-  'name': "Google Building 40",
-  'placeId': "ChIJj38IfwK6j4ARNcyPDnEGa9g",
-  'enabled': false,
-  'hl': 'en',
-  'gl': 'US',
-  'regions': 'United States - English'
+  'latitude': 25.6242618,
+  'longitude': 42.3528328,
+  'location': "Saudi Arabia",
+  'name': "Saudi Arabia",
+  'placeId': "",
+  'enabled': true,
+  'hl': 'ar',
+  'gl': 'SA',
+  'regions': 'Saudi Arabia - العربية'
 };
 const knownPlaces = [settings];
 var gsMenuIds = []; // عناصر القائمة السياقية بتاعتنا — نمسحها بس عند إعادة البناء
