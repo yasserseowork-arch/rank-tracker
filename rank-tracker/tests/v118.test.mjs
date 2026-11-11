@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.44');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.44'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.44'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.44\]/m);
+  assert.equal(man.version, '1.21.45');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.45'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.45'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.45\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1900,4 +1900,26 @@ test('v12144: الصندوق الأسود في كل تقرير — فوتر جو
   assert.ok(queue.includes("(فوتر جوجل: ' + footShort + ')"), 'الفوتر مش مضاف لسطر 👁');
   // ومفيش أي لمس لمنطق التسجيل نفسه — اللوج زيادة مش تغيير سلوك
   assert.ok(queue.includes('kpatch.lastPosition = match.position;'), 'حقول الرنك اتلمست — ممنوع');
+});
+
+test('v12145: 403 في نص القراءة — تريبواير كل دفعة، والمتلقى بيتقيد مش بيضيع', () => {
+  const serp = read('src/content/serp.js');
+  const trips = (serp.match(/D\.errorsig\.detectError\(document\.title, bodySample\(\)\)/g) || []).length;
+  assert.ok(trips >= 4, `عدد نقاط التفتيش ${trips} — لازم 4: إقلاع/معالجة خطأ/أول شاشة/نص النزول`);
+  assert.ok(serp.includes('const midKind = D.errorsig.detectError'), 'تريبواير النزول مش موجود');
+  assert.ok(serp.includes("if (midKind === 'http-error')"), 'الرفض مش متحوَّل لمسار نجاة');
+  assert.ok(serp.includes('truncatedByBlock: true'), 'الإنقاذ مش عاملام بعلامة القطع');
+  assert.ok(serp.includes('if (firstPollBlocked)'), 'الشاشة الأولى مش محروسة');
+  assert.ok(serp.includes('if (wait && wait.blocked)'), 'المحرك مش مستقبل علامة الرفض');
+  assert.ok(serp.includes('needsNewTab: true, midRead: true'), 'رسالة الرفض مش واصلة وصفقة التاب الجديد');
+  assert.ok(serp.includes('truncatedByBlock: !!wait.truncatedByBlock'), 'العلامة مش طالعة في الـpayload');
+  assert.ok((serp.match(/relock\(\);/g) || []).length >= 3, 'قفل السكرول اتشال من مخرج —UX المحجوز اتكسر');
+  // ضمانات .42 ساكتة
+  assert.ok(serp.includes('لم يتم العثور|لا تتطابق|No results|did not match'), 'بوّابة noResults النصية اتلفت');
+  const q = read('src/background/core/queue.js');
+  assert.ok(q.includes('🚫 القراءة اتقطعت بصفحة رفض'), 'سطر ✅ مش وضيّح القطع');
+  assert.ok(q.includes('صفحة رفض (${(first.payload && first.payload.kind)'), 'مسار 1.20.2 مش حي');
+  // الدروع ممنوع تلمسها
+  const orch = read('src/background/core/captcha-orchestrator.js');
+  assert.ok(orch.length > 1000, 'الأوركستراتور اتلمس — لا');
 });

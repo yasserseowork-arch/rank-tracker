@@ -724,7 +724,10 @@
     //    بدون أي توسيع AI أو تمرير قبل كده (التوسيع بيتأجل لوقت الحكم بعدم وجوده)
     let aiSeenLogged = false;
     let firstPolls = 0;
+    let firstPollBlocked = false;
     const firstHit = await D.waitFor(() => {
+      // 🚫 v1.21.45: 403 نزل وهو لسه بيحمّل أول شاشة؟ امشِ فورًا — متستناش الـ20 ثانية
+      if (D.errorsig.detectError(document.title, bodySample()) === 'http-error') { firstPollBlocked = true; return true; }
       const snap = collect();
       if (!snap.items.length) {
         // 🧨 v1.21.42 (علة «الصفحة قدامك والأداة صفر»): الـnoResults كانت بتتأكد
@@ -759,6 +762,9 @@
       const aiE = await finalizeAi(early.ai, 1200);
       return { items: early.items, aiItems: aiE.items, aiText: aiE.text, adsCount: 0, early: true, hit: early.hit };
     }
+    if (firstPollBlocked) {
+      return { blocked: 'http-error', items: [], aiItems: [], aiText: '', adsCount: 0 };
+    }
     if (firstHit && firstHit !== true && firstHit.nodeType) {
       return { early: false, settled: true, noResults: true, items: [], aiItems: [], aiText: '' };
     }
@@ -780,6 +786,24 @@
     // 2) لسه مش موجود: نزول تدريجي + فحص بعد كل دفعة — أول ظهور = وقف فوري
     for (;;) {
       const snapshot = collect();
+      // 🚫 v1.21.45 (علة «علّقت على 403» — سكرينشوت المستخدم): جوجل قَلَب الصفحة
+      // لصفحة رفض في نص النزول (وشريط «Loading page 2~3...» فِلِس باين تحتها) —
+      // كان بيكمّل قراءة في الميت لحد السقف 60 ثانية. دلوقتي: استقبال فورًا؛
+      // لو الموقع كان اتلقى في المقروء يتقَيَّد (البلوك مابيلغيش الحكم)، وإلا
+      // خروج بعلامة blocked يودّي المحرك على مسار التاب الجديد (وصفة 1.20.2).
+      const midKind = D.errorsig.detectError(document.title, bodySample());
+      if (midKind === 'http-error') {
+        const aiB = collectAi();
+        const hitB = immediateFind(cfg, snapshot, aiB.items);
+        if (hitB && hitB.where === 'organic') {
+          logger_serp('🚫 جوجل رفض الصفحة في نص القراءة — بس الموقع كان اتلقى؛ اتقَيَّد من ' + snapshot.items.length + ' نتيجة مقروءة والباقي محسوب مقصوص بالبلوك');
+          relock();
+          return { items: snapshot.items, aiItems: aiB.items, aiText: aiB.text || aiText, adsCount: snapshot.adsCount, early: true, hit: hitB, truncatedByBlock: true };
+        }
+        logger_serp('🚫 صفحة رفض في نص النزول على «' + keyword + '» — الخروج الفوري بدل اللف على الميتة');
+        relock();
+        return { blocked: midKind, items: snapshot.items, aiItems: [], aiText: aiText, adsCount: snapshot.adsCount };
+      }
       const ai = collectAi();
       aiText = ai.text || aiText;
       const count = snapshot.items.length;
@@ -893,6 +917,13 @@
     D.msg.send(C.MSG.SERP_STARTED, { keyword: keyword, serpUrl: href, expectedNum: expectedNum });
 
     const wait = await waitForResults(cfg);
+    // 🚫 v1.21.45: رفض في نص القراءة من غير ما الموقع يتلقى — استرحني على المحرك
+    // فورًا (تاب جديد + تبريد، مسار 1.20.2) بدل ما الباكجراوند يقعد لحد التايم‌آوت
+    if (wait && wait.blocked) {
+      live.errorKind = wait.blocked;
+      await D.msg.send(C.MSG.SERP_ERROR, { kind: wait.blocked, keyword: keyword, needsNewTab: true, midRead: true });
+      return;
+    }
     const payload = {
       keyword: keyword,
       serpUrl: href,
@@ -911,6 +942,8 @@
       noResults: !!wait.noResults || ((wait.items || []).length === 0 && !wait.timedOut),
       timedOut: !!wait.timedOut,
       settled: !!wait.settled,
+      // 🚫 v1.21.45: القراءة اتقطعت بصفحة رفض — الرنك مسجّل بس العدد مقصوص، مش ناقص من نفسك
+      truncatedByBlock: !!wait.truncatedByBlock,
       hasNext: !!D.qs('a#pnnext'),
       // 🌍 v1.21.28 — بصمة منطقة التقديم من فوتر جوجل نفسه (نص صريح «المملكة العربية
       // السعودية» أو «Egypt»): الباكجراوند بيطابق مع المطلوب ويصرخ لو في اختلاف.
