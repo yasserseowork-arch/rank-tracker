@@ -250,6 +250,8 @@ export class QueueEngine {
     }
 
     // 0) مسح بيانات التصفح (كل الوقت) — نتائج غير شخصية مثل السيناريو اليدوي
+    // 🌐 1.21.40: الشفافية أولًا — اللوج يقول المصدر الفعلي قبل أول كلمة
+    await logger.info('queue', '🌐 مصدر الترتيب: ' + (String(cfg.gl || 'sa').toLowerCase() !== 'sa' ? (cfg.googleHost || 'www.google.com') : (cfg.googleHost || 'www.google.com.sa')) + (cfg.googleHost ? '' : ' (الافتراضي — قابل للتغيير من الإعدادات لو بحثك اليدوي على مصدر تاني)'));
     if (cfg.clearBeforeRun) {
       try {
         await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, history: true, cookies: true });

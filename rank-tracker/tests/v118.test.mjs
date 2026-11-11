@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.39');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.39'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.39'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.39\]/m);
+  assert.equal(man.version, '1.21.40');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.40'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.40'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.40\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1825,4 +1825,29 @@ test('v12139: presence-scan بيقرأ الإعلان والتسوّق ويسج�
   assert.ok(read('src/sidepanel/side-panel.css').includes('.pos-badge.presence'), 'لون الشارة ناقص');
   assert.ok(!/lastPosition\s*=\s*[^;\n]*presence/.test(queue), 'presence بتدخل في الرنك — ده اختراع ممنوع');
   assert.ok(!/match\.position\s*=[^;\n]*presence/.test(queue), 'presence بتدخل في الرنك — ده اختراع ممنوع');
+});
+
+/* ---------------- v1.21.40 — مصدر الترتيب بتاعك إنت: host selector + حقن .eg + شفافية اللوج ---------------- */
+
+test('v12140: مفتاح المصدر — allowlist في state، حقل في الإعدادات، .eg في الحقن، واللوج بيكتب الفعلي', () => {
+  const stm = read('src/background/core/state.js');
+  assert.ok(stm.includes("const SERP_HOSTS = ['', 'www.google.com.sa', 'www.google.com', 'www.google.com.eg'"), 'الـallowlist مش في الـsanitize');
+  assert.ok(stm.includes("if ('googleHost' in next)"), 'التطهير ما بيغطيش googleHost');
+  const optHtml = read('src/options/options.html');
+  assert.ok(optHtml.includes('id="cfgGoogleHost"'), 'الحقل مش في صفحة الإعدادات');
+  const optJs = read('src/options/options.js');
+  assert.ok(optJs.includes("['cfgGoogleHost', 'googleHost', 'string']"), 'الحقل مش مربوط بالـFIELDS');
+  const man = JSON.parse(read('manifest.json'));
+  const serpBlk = man.content_scripts[0].matches;
+  assert.ok(serpBlk.includes('https://www.google.com.eg/search*') && serpBlk.includes('https://google.com.eg/search*'), 'حقن البحث على .eg ناقص');
+  assert.ok(man.content_scripts[1].matches.includes('https://www.google.com.eg/sorry/*'), 'حقن التحدي على .eg ناقص');
+  assert.ok(serpBlk.includes('https://www.google.com.sa/search*'), 'الفهرس السعودي اتشال من الحقن — ده ممنوع (1.21.33)');
+  // urlkit: الافتراضي لسه .sa للـgl=sa، والمصدر بيتقدم من googleHost بس
+  const uk = read('src/background/core/urlkit.js');
+  assert.ok(uk.includes("(gl === 'sa') ? (config.googleHost || 'www.google.com.sa')"), 'افتراضي .sa اتبوظ — لازم يفضل هو الأصل');
+  // شفافية: اللوج بيكتب المصدر الفعلي بنفس منطق urlkit (gl||sa)
+  assert.ok(queue.includes("String(cfg.gl || 'sa').toLowerCase() !== 'sa'"), 'لوج المصدر مش مطابق لمنطق urlkit');
+  assert.ok(queue.includes('🌐 مصدر الترتيب: '), 'لوج المصدر مش موجود');
+  // الأمان: مفيش حقول حرة — الحقل قدامه select بثلاث اختيارات وبس
+  assert.ok(optHtml.indexOf('<select id="cfgGoogleHost"') < optHtml.indexOf('</select>'), 'الحقل مش select مقفول');
 });

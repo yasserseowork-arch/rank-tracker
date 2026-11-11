@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_appName__",
   "short_name": "__MSG_appShortName__",
-  "version": "1.21.39",
+  "version": "1.21.40",
   "default_locale": "ar",
   "description": "__MSG_appDesc__",
   "minimum_chrome_version": "123",
@@ -67,7 +67,9 @@
         "https://www.google.sa/search*",
         "https://google.sa/search*",
         "https://www.google.com.sa/search*",
-        "https://google.com.sa/search*"
+        "https://google.com.sa/search*",
+        "https://www.google.com.eg/search*",
+        "https://google.com.eg/search*"
       ],
       "js": [
         "src/lib/constants.js",
@@ -93,7 +95,9 @@
         "*://google.com/recaptcha/*",
         "*://recaptcha.net/*",
         "*://www.recaptcha.net/*",
-        "*://www.gstatic.com/recaptcha/*"
+        "*://www.gstatic.com/recaptcha/*",
+        "https://www.google.com.eg/sorry/*",
+        "https://google.com.eg/sorry/*"
       ],
       "js": [
         "src/lib/constants.js",

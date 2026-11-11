@@ -14,6 +14,7 @@ const send = (type, payload) => new Promise((resolve) => {
 const FIELDS = [
   ['cfgGl', 'gl', 'string'],
   ['cfgHl', 'hl', 'string'],
+  ['cfgGoogleHost', 'googleHost', 'string'],
   ['cfgNum', 'num', 'number'],
   ['cfgDailyCap', 'maxChecksPerDay', 'number'],
   ['cfgJitter', 'jitterMs', 'number'],

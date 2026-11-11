@@ -130,6 +130,9 @@ export async function setConfig(patch) {
   const booleans = ['pauseOnCaptchaFail', 'autoResumeOnManualSolve', 'foregroundTab', 'reuseTab', 'verbose', 'selfFetchMore', 'clearBeforeRun', 'sheetWriteBack', 'mapsCheck', 'autoXlsx'];
   for (const key of booleans) { next[key] = !!next[key]; }
   if (!['domain', 'name', 'both'].includes(next.matchMode)) { next.matchMode = 'both'; }
+  // 🌐 1.21.40: مصدر الترتيب — allowlist بس، والفاصل = الافتراضي حسب gl (مفيش حقول حرة)
+  const SERP_HOSTS = ['', 'www.google.com.sa', 'www.google.com', 'www.google.com.eg', 'google.com', 'google.sa', 'www.google.sa', 'google.com.eg'];
+  if ('googleHost' in next) { next.googleHost = SERP_HOSTS.includes(next.googleHost) ? next.googleHost : ''; }
   // تنظيف الدومين: المستخدم يكتبه بدون https وأحياناً بمسار أو www
   if (typeof next.storeDomain === 'string') {
     next.storeDomain = next.storeDomain.trim()

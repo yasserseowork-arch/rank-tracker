@@ -782,5 +782,8 @@
   },
   "error_internalError": {
     "message": "Something went wrong. Open the browser console for more details."
+  },
+  "lblGoogleHost": {
+    "message": "Rank page source (pick the one you verify manually)"
   }
 }

@@ -782,5 +782,8 @@
   },
   "error_internalError": {
     "message": "Something went wrong. Open the browser console for more details."
+  },
+  "lblGoogleHost": {
+    "message": "مصدر صفحة الترتيب (اختار اللي بتقارن بإيدك عليه)"
   }
 }
