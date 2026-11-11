@@ -5,7 +5,7 @@
  */
 import { C } from './bridge.js';
 
-export const SCHEMA_VERSION = 11; // v1.21.38: دورة المسح الجديدة (قبل الرن + كل 10 كلمات)
+export const SCHEMA_VERSION = 12; // v1.21.44: رجوع شكبة الطلب لـ 1.20.0 (gl/hl + دومين ثابت)
 
 export const K = {
   CONFIG: 'srt.config',
@@ -25,8 +25,8 @@ export const DEFAULT_CONFIG = {
   storeNameEn: '',
   matchMode: 'both',            // domain | name | both
   // استهداف جغرافي ولغة SERP
-  gl: '',   // 🌐 1.21.41: فاضي = إعداد جوجل الافتراضي بالظبط زي بحثك الإيدي على .com؛ اكتب sa لو عايز الفهرس السعودي الصريح (بيودّيك .sa لوحده)
-  hl: '',   // فاضي = لغة متصفحك (زي اليدوي بالظبط)؛ ar للنتايج العربية المضمونة
+  gl: 'sa',  // 🔁 1.21.44: شكبة 1.20.0 المُتحققة — جيوسرفيا السعودية على google.com (مع GsLoc بتاعك ده بالظبط سيرب إيدك)
+  hl: 'ar',  // عربي زي .20 — لغة نتائج مضمونة جوه المحرك
   num: 100,
   // الإيقاع البشري
   delayMs: 4000,                // مهلة إلزامية قبل كل كلمة (طلب المستخدم: 4 ثوانٍ)
@@ -391,6 +391,15 @@ export async function migrate() {
     const cn11 = parseInt(cfgB.clearEveryN, 10);
     if (cn11 === 8 || !Number.isFinite(cn11)) { patchB.clearEveryN = 10; }
     if (Object.keys(patchB).length) { await setConfig(patchB); }
+  }
+  if (version < 12) {
+    // 🔁 1.21.44: اللي فظّفوا gl/hl في حقبة 1.21.41 «التلقائي» يرجعلهم الافتراضي
+    // التاريخي sa/ar؛ أي قيمة تانية مكتوبة بالإيد (eg، en…) محترمة ومش بتتلمس
+    const cfgC = await getConfig();
+    const patchC = {};
+    if (!String(cfgC.gl || '').trim()) { patchC.gl = 'sa'; }
+    if (!String(cfgC.hl || '').trim()) { patchC.hl = 'ar'; }
+    if (Object.keys(patchC).length) { await setConfig(patchC); }
   }
   await local.set(K.SCHEMA, SCHEMA_VERSION);
   return SCHEMA_VERSION;

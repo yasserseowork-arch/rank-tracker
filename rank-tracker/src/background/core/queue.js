@@ -241,7 +241,7 @@ export class QueueEngine {
     // 🌍 v1.21.28: الشفافية قبل البدء — المستخدم يعرف الأداة بتبحث منين وبالظبط إزاي
     try {
       const u0 = new URL(urlkit.buildSearchUrl('اختبار', cfg));
-      await logger.info('queue', `🌍 البحث ده الرن: ${u0.host} بمنطق «${String(cfg.gl || '').toLowerCase() || 'تلقائي — زي بحثك الإيدي'}» بلغة ${String(cfg.hl || '').toLowerCase() || 'لغة متصفحك'} — لو في مدن بالاسم استخدم GsLoc Places على نفس البروفيل، ومفيش أي كروم تاني بيتفتح: نفس بروفيل الإضافة بتاعك`);
+      await logger.info('queue', `🌍 البحث ده الرن: ${u0.host} بمنطق «${String(cfg.gl || 'sa').toLowerCase()}» بلغة ${String(cfg.hl || 'ar').toLowerCase()} — لو في مدن بالاسم استخدم GsLoc Places على نفس البروفيل، ومفيش أي كروم تاني بيتفتح: نفس بروفيل الإضافة بتاعك`);
     } catch (_) {}
     const daily = await state.getDailyCount();
     if (cfg.maxChecksPerDay > 0 && daily.count >= cfg.maxChecksPerDay) {
@@ -251,7 +251,7 @@ export class QueueEngine {
 
     // 0) مسح بيانات التصفح (كل الوقت) — نتائج غير شخصية مثل السيناريو اليدوي
     // 🌐 1.21.40: الشفافية أولًا — اللوج يقول المصدر الفعلي قبل أول كلمة
-    await logger.info('queue', '🌐 مصدر الترتيب: ' + (cfg.googleHost || (String(cfg.gl || '').trim().toLowerCase() === 'sa' ? 'www.google.com.sa' : 'www.google.com')) + (cfg.googleHost ? '' : ' (الافتراضي — قابل للتغيير من الإعدادات لو بحثك اليدوي على مصدر تاني)'));
+    await logger.info('queue', '🌐 مصدر الترتيب: ' + (cfg.googleHost || 'www.google.com') + (cfg.googleHost ? '' : ' (الافتراضي — قابل للتغيير من الإعدادات لو بحثك اليدوي على مصدر تاني)'));
     if (cfg.clearBeforeRun) {
       try {
         await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, history: true, cookies: true });
@@ -1839,15 +1839,17 @@ export class QueueEngine {
       found: (run.found || 0) + (match.found ? 1 : 0)
     });
 
+    const footShort = String(serp.regionText || '').replace(/\s+/g, ' ').slice(0, 70);
+    const top15 = (serp.items || []).slice(0, 15).map((it, i) => (it.counterPos || (i + 1)) + ':' + (it.host || '?')).join(' ، ');
     if (match.found) {
       await logger.info('queue', `✅ "${kw.keyword}" → الترتيب #${match.position} من ${match.scanned} نتيجة (${match.reasons.join('+')})${match.viaCounter ? ' — وفق رقم Serp Counter ✔' : ''}${serp.early ? ' — خروج مبكر ✔' : ''}`);
     } else if (aiMatch.found) {
       await logger.info('queue', `🤖 "${kw.keyword}" → ظهر في AI Overview ${aiMatch.position ? 'باستشهاد #' + aiMatch.position : 'باسم الموقع نصياً'} (غير موجود عضوياً ضمن ${match.scanned})`);
     } else if (serp.presence) {
-      await logger.info('queue', `👁 "${kw.keyword}" → عضويًا مش موجودة ضمن ${match.scanned}، بس الصفحة مضايفاك في ${serp.presence.kind === 'ad' ? 'خانة إعلان' : serp.presence.kind === 'shopping' ? 'بلوك تسوّق/منتجات' : 'بلوك خارج العضوي'} (${serp.presence.url}) — اتسجل للمعلومية، ومش بيتحسب رنك`);
+      await logger.info('queue', `👁 "${kw.keyword}" → عضويًا مش موجودة ضمن ${match.scanned}، بس الصفحة مضايفاك في ${serp.presence.kind === 'ad' ? 'خانة إعلان' : serp.presence.kind === 'shopping' ? 'بلوك تسوّق/منتجات' : 'بلوك خارج العضوي'} (${serp.presence.url}) — اتسجل للمعلومية، ومش بيتحسب رنك${footShort ? ' (فوتر جوجل: ' + footShort + ')' : ''}`);
     } else {
       await logger.warn('queue', `⚠️ "${kw.keyword}" → غير موجود ضمن ${match.scanned} نتيجة ولا في AI Overview`);
-      await logger.info('queue', `🔎 تشخيص — أول النطاقات المقروءة: ${row.topHosts.join(' | ') || '(لا شيء)'} | إعدادك: ${cfg.storeDomain || '-'} / ${cfg.storeName || '-'} / ${cfg.storeNameEn || '-'}${serp.parseStats ? ' | 🧪 لقطة الصفحة: بلوكات ' + serp.parseStats.yu + '، عناوين h3 ' + serp.parseStats.h3s + '، والقراية ' + (serp.total || 0) + '/100' : ''}`);
+      await logger.info('queue', `🔎 تشخيص — أول النطاقات المقروءة: ${row.topHosts.join(' | ') || '(لا شيء)'} | إعدادك: ${cfg.storeDomain || '-'} / ${cfg.storeName || '-'} / ${cfg.storeNameEn || '-'}${serp.parseStats ? ' | 🧪 لقطة الصفحة: بلوكات ' + serp.parseStats.yu + '، عناوين h3 ' + serp.parseStats.h3s + '، والقراية ' + (serp.total || 0) + '/100' : ''} | فوتر جوجل: ${footShort || 'مقروء بدون فوتر'}${top15 ? ' | أول 15: ' + top15 : ''}`);
     }
     this.broadcast();
     void updated;
