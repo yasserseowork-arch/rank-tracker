@@ -18,23 +18,24 @@ export function isSearch(url) {
 
 export function buildSearchUrl(keyword, cfg) {
   const config = cfg || {};
-  // 🔁 v1.21.44 (طلب المستخدم المتحقق بمصدرين: «1.20.0 كان بيطلع السيرب زي
-  // وأنا عايز» — وراجعنا شجرة .20 فعلًا): شكل الطلب التاريخي = www.google.com
-  // ثابت + gl=sa&hl=ar دايمًا (بلا num وبلا pws — الحظر الأبدي سايد). مفيش
-  // تبديل دومين أوتوماتيك: عايز الفهرس السعودي؟ اختار .sa صريحًا من الإعدادات.
-  // الشكل ده فوق راسه هيدرز GsLoc (x-geo) هو اللي بيطلّعلك سيرب السعودية اللي
-  // بتتأكد منه بإيدك بالظبط.
-  const gl = String(config.gl || 'sa').trim().toLowerCase();
-  const hl = String(config.hl || 'ar').trim().toLowerCase();
+  // 🪞 v1.21.47 — «قاعدة الـA/B» (سكرينشوتات المستخدم #20/#21 لنفس الكلمة، إيدي
+  // مقابل الأداة): البحث الإيدي بيطلع من غير gl ولا hl خالص — أي تثبيت صريح
+  // لـsa/ar (زي ما عملنا في .44) بيقَلِب الفهرس لنتايج مختلفة. القاعدة بقت:
+  // طلب الأداة = طلب المستخدم بايت-ببايت؛ المنطقة واللغة بيجوا من نفس المتصفح:
+  // IP + كوكيز + هيدرز GsLoc (اللي اتصلّح في .43 وبقت شغالة) — زي تاب الإيدي
+  // بالظبط. شهادة «1.20.0 كانت مظبوطة» صحيحة بس هي من قبل إصلاح GsLoc، والدومين
+  // الثابت .com فضل منها. اللي عايز يثبّت gl/hl أو .sa بنفسه: الإعدادات صراحةً.
+  const gl = String(config.gl || '').trim().toLowerCase();
+  const hl = String(config.hl || '').trim().toLowerCase();
   const host = config.googleHost || 'www.google.com';
   const u = new URL('https://' + host + '/search');
   u.searchParams.set('q', String(keyword || '').trim());
-  u.searchParams.set('gl', gl);
-  u.searchParams.set('hl', hl);
+  if (gl) { u.searchParams.set('gl', gl); }
+  if (hl) { u.searchParams.set('hl', hl); }
   // 🚫 v1.21.33 (طلب المستخدم: «مليش دعوه إنك بتعمل كده num=100»): مفيش num=100 ولا
   // pws=0 في الرابط — دول بصمة بوت بتستدعي الكابتشا عند جوجل. التوسيع لـ100 بياوله
   // «Show 100 Results» المدمج (beyondten/content) — وكل حاجة بحركة طبيعية.
-  u.searchParams.set('ie', 'utf-8');
+  // 🪞 1.21.47: حتى ie=utf-8 اتشال — مش موجود في لينك الإيدي، والحرفية مطلوبة
   return u.toString();
 }
 

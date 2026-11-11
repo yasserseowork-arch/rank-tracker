@@ -161,7 +161,7 @@ test('كابتشا v1.18.3: حلّ؟ مفيش مسح مستعجل — نتحرى
 
 test('الإعدادات v1.18.3: المحاولتين إجباريًا + المسح بقى كل 8 مع الاستراحة', () => {
   assert.match(st, /clearEveryN:\s*10,/, 'ديفولت المسح مش على 10 — أمر 1.21.38');
-  assert.match(st, /export const SCHEMA_VERSION = 12;/, 'مفيش نسخة ميجريشن جديدة (1.21.20)');
+  assert.match(st, /export const SCHEMA_VERSION = 13;/, 'مفيش نسخة ميجريشن جديدة (1.21.20)');
   assert.match(st, /att > 2\) \{ patchCfg\.captchaMaxAttempts = 2; \}/, 'مفيش إجبار المحاولتين على الإعدادات القديمة');
   assert.match(st, /cn === 10\) \{ patchCfg\.clearEveryN = 8; \}/, 'المسح القديم (10) مش بيتحوّل للـ8');
 });
@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.46');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.46'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.46'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.46\]/m);
+  assert.equal(man.version, '1.21.47');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.47'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.47'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.47\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1464,7 +1464,7 @@ test('v12116: التبويبات بتفتح في الخلفية — والتنش
 });
 
 test('v12116: migration لـ schema 7 — المستخدم القديم بيتحوّل للوضع الهادي', () => {
-  assert.match(st, /export const SCHEMA_VERSION = 12;/, 'رقم السكيما مارتفعش');
+  assert.match(st, /export const SCHEMA_VERSION = 13;/, 'رقم السكيما مارتفعش');
   assert.match(st, /if \(version < 7\) \{/, 'البلوك الجديد مش في الـmigrate');
   assert.match(st, /cfg7\.foregroundTab === true.*setConfig\(\{ foregroundTab: false \}\)/, 'الترقية مش بتتدخّل صح');
 });
@@ -1550,10 +1550,10 @@ test('v12127: قاعدة الأفضل يفوز — نتيجة موجودة ما 
 });
 
 /* -------- v1.21.28 — دومين على مقاس المنطقة + بصمة فوتر جوجل -------- */
-test('v12128→12144: الدومين ثابت .com بشكبة 1.20.0 — و.sa اختيار صريح بلا كسر حقن', () => {
+test('v12128→12147: الدومين ثابت .com — ومن غير gl/hl لمّا تكون فاضية (مطابقة الإيدي)', () => {
   const uk = read('src/background/core/urlkit.js');
-  assert.match(uk, /const host = config\.googleHost \|\| 'www\.google\.com';/, 'الدومين مش ثابت على .com — شكبة 1.20.0 اتكسرت');
-  assert.match(uk, /u\.searchParams\.set\('gl', gl\);\n\s+u\.searchParams\.set\('hl', hl\);/, 'gl/hl لازم يتبعتوا دايمًا زي .20');
+  assert.match(uk, /const host = config\.googleHost \|\| 'www\.google\.com';/, 'الدومين مش ثابت على .com');
+  assert.match(uk, /if \(gl\) \{ u\.searchParams\.set\('gl', gl\); \}\n\s+if \(hl\) \{ u\.searchParams\.set\('hl', hl\); \}/, 'الفاضي لازم يتشال خالص — عقيدة A/B 1.21.47');
   assert.match(uk, /new URL\('https:\/\/' \+ host \+ '\/search'\)/, 'الرابط ما بيتبناش على الدومين المختار');
   // مسار الصندوق مش بيفرض الدومين الغلط
   const q = read('src/background/core/queue.js');
@@ -1756,7 +1756,7 @@ test('v12136: الفحص المحلي بقى ضيف مبيلفّش — race بس
 test('v12136/37: راحات قصيرة ثابتة بكل مكان — العقاب 2.5، الركن 30، الاستراحة 10+0، والجلسة الدافية', () => {
   assert.match(queue, /const extra = 2500;/, 'عقاب الحرارة مش 2.5 ثابتة (حلال 1.21.37)');
   const st = read('src/background/core/state.js');
-  assert.match(st, /export const SCHEMA_VERSION = 12;/, 'السكيما ما اترقّتش لـ10');
+  assert.match(st, /export const SCHEMA_VERSION = 13;/, 'السكيما ما اترقّتش لـ10');
   assert.match(st, /parseInt\(cfg9\.cooldownMs, 10\) === 30000 \|\| parseInt\(cfg9\.cooldownMs, 10\) === 25000/, 'هجرة الاستراحة مش موصولة');
   assert.match(st, /if \(cfgB\.clearBeforeRun !== true\) \{ patchB\.clearBeforeRun = true; \}/, 'هجرة دورة المسح الجديدة (11) مش موصولة');
   assert.ok(st.includes('cooldownJitterMs: 0'), 'جيتّر لسه شغال — الأمر: كله ثابت');
@@ -1852,24 +1852,30 @@ test('v12140: مفتاح المصدر — allowlist في state، حقل في ا�
   assert.ok(optHtml.indexOf('<select id="cfgGoogleHost"') < optHtml.indexOf('</select>'), 'الحقل مش select مقفول');
 });
 
-test('v12141→44: شكبة 1.20.0 متحققة — gl=sa&hl=ar دايمًا، والدومين ثابت إلا بالاختيار', () => {
+test('v12147: عقيدة المطابقة — لينك الأداة = لينك الإيدي حرفيًا (مفيش gl/hl/ie غير مثبّتين)', () => {
   const uk = read('src/background/core/urlkit.js');
-  assert.ok(uk.includes("String(config.gl || 'sa')"), 'جيوسرفيا .20 (sa افتراضي) ما رجعتش');
-  assert.ok(uk.includes("String(config.hl || 'ar')"), 'لغة .20 (ar افتراضي) ما رجعتش');
-  assert.ok(uk.includes("const host = config.googleHost || 'www.google.com';"), 'الدومين المفروض يكون ثابت .com');
-  assert.ok(!/gl === 'sa' \? 'www\.google\.com\.sa'/.test(uk), 'التبديل الأوتوماتيكي للـ.sa لسه قايم — اتلغى في 1.21.44');
+  assert.ok(uk.includes("String(config.gl || '')"), 'الفاضي مش راجع — sa لسه متين');
+  assert.ok(uk.includes("String(config.hl || '')"), 'الفاضي مش راجع — ar لسه متين');
+  assert.ok(!/config\.gl \|\| 'sa'/.test(uk) && !/config\.hl \|\| 'ar'/.test(uk), 'fallback sa/ar لسه في البنّاء');
+  assert.ok(uk.includes("if (gl) { u.searchParams.set('gl', gl); }"), 'الإلغاء لمّا تكون فاضية اتبوظ');
+  assert.ok(uk.includes("if (hl) { u.searchParams.set('hl', hl); }"), 'إلغاء اللغة اتبوظ');
+  assert.ok(!uk.includes("set('ie'"), 'ie=utf-8 رجع — مش في لينك الإيدي!');
+  assert.ok(uk.includes("const host = config.googleHost || 'www.google.com';"), 'الدومين مش ثابت .com');
   const st = read('src/background/core/state.js');
-  assert.ok(st.includes("gl: 'sa',"), 'ديفولت state لسه فاضي — لازم sa زي .20');
-  assert.ok(st.includes("hl: 'ar',"), 'ديفولت state للغة لسه فاضي — لازم ar');
-  assert.ok(st.includes("if (!String(cfgC.gl || '').trim()) { patchC.gl = 'sa'; }"), 'ميجريشن 12 مش واصلة');
-  assert.ok(st.includes("if (!String(cfgC.hl || '').trim()) { patchC.hl = 'ar'; }"), 'ميجريشن اللغة مش واصلة');
-  // حارس المنطقة شغال دايمًا (gl صار له قيمة دائمًا) — صرخة مصر/السعودية موجودة
-  assert.ok(queue.includes("const rchk = wantGl ? this.regionFromFooter(serp.regionText, wantGl)"), 'حارس المنطقة اتقطع');
+  assert.ok(st.includes('SCHEMA_VERSION = 13'), 'السكيما متعملهاش 13');
+  assert.ok(st.includes("gl: '',"), 'ديفولت state مش فاضي — A/B اتنكس');
+  assert.ok(st.includes("hl: '',"), 'ديفولت اللغة مش فاضي');
+  assert.ok(st.includes("String(cfgD.gl || '').trim().toLowerCase() === 'sa') { patchD.gl = ''; }"), 'ميجريشن 13 مش بيفصّي بذر sa');
+  assert.ok(st.includes("String(cfgD.hl || '').trim().toLowerCase() === 'ar') { patchD.hl = ''; }"), 'ميجريشن 13 مش بيفصّي بذر ar');
+  // حارس المنطقة بيصمت لمّا gl فاضي (مفيش مطلوب = مفيش مقارنة) — من غير ما حد يصرخ
+  assert.ok(queue.includes("const wantGl = String(cfg.gl || '')"), 'الحارس ما بقاش يقرأ من الإعدادات نفسها');
   // الحظر الأبدي ساكت: لا num ولا pws في اللينك
-  assert.ok(!/searchParams\.set\('(num|pws)'/.test(uk), 'num/pws رجعوا للّينك — الحظر الأبدي اتكسر!');
+  assert.ok(!/searchParams\.set\('(num|pws)'/.test(uk), 'num/pws رجعوا — الحظر الأبدي اتكسر!');
   assert.ok(uk.includes('pws=0'), 'تعليق الحظر اتشال — راجعه');
-});
-test('v12142: إلغاء «مفيش نتائج» بالنص الصريح بس — وقارئ العدّاد واسع، ولقطة مقيسة', () => {
+  const opt = read('src/options/options.html');
+  assert.ok(opt.includes('من غير gl/hl'), 'نص الإعدادات ما اتحدّثش لـ1.21.47');
+  assert.ok(opt.includes('www.google.com.sa'), 'اختيار .sa اتشال — ممنوع');
+});test('v12142: إلغاء «مفيش نتائج» بالنص الصريح بس — وقارئ العدّاد واسع، ولقطة مقيسة', () => {
   const serp = read('src/content/serp.js');
   assert.ok(serp.includes("/لم يتم العثور|لا تتطابق|No results|did not match/i.test(nxText)"), 'بواب الإلغاء لسه باللمسة — قنبلة الصفر قايمه');
   assert.ok(serp.includes("const blocks = D.qsa('#search .yuRUbf, #rso .yuRUbf, main .yuRUbf');"), 'قارئ العدّاد ما اتوسعش لتخطيط النظرة-سريعة');

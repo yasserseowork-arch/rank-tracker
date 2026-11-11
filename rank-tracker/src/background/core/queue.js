@@ -241,7 +241,7 @@ export class QueueEngine {
     // 🌍 v1.21.28: الشفافية قبل البدء — المستخدم يعرف الأداة بتبحث منين وبالظبط إزاي
     try {
       const u0 = new URL(urlkit.buildSearchUrl('اختبار', cfg));
-      await logger.info('queue', `🌍 البحث ده الرن: ${u0.host} بمنطق «${String(cfg.gl || 'sa').toLowerCase()}» بلغة ${String(cfg.hl || 'ar').toLowerCase()} — لو في مدن بالاسم استخدم GsLoc Places على نفس البروفيل، ومفيش أي كروم تاني بيتفتح: نفس بروفيل الإضافة بتاعك`);
+      await logger.info('queue', `🌍 البحث ده الرن: ${u0.host} بمنطق «${String(cfg.gl || '').toLowerCase() || 'تلقائي — زي بحثك الإيدي'}» بلغة ${String(cfg.hl || '').toLowerCase() || 'لغة متصفحك'} — لو في مدن بالاسم استخدم GsLoc Places على نفس البروفيل، ومفيش أي كروم تاني بيتفتح: نفس بروفيل الإضافة بتاعك`);
     } catch (_) {}
     const daily = await state.getDailyCount();
     if (cfg.maxChecksPerDay > 0 && daily.count >= cfg.maxChecksPerDay) {
