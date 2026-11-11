@@ -1847,7 +1847,7 @@ export class QueueEngine {
       await logger.info('queue', `👁 "${kw.keyword}" → عضويًا مش موجودة ضمن ${match.scanned}، بس الصفحة مضايفاك في ${serp.presence.kind === 'ad' ? 'خانة إعلان' : serp.presence.kind === 'shopping' ? 'بلوك تسوّق/منتجات' : 'بلوك خارج العضوي'} (${serp.presence.url}) — اتسجل للمعلومية، ومش بيتحسب رنك`);
     } else {
       await logger.warn('queue', `⚠️ "${kw.keyword}" → غير موجود ضمن ${match.scanned} نتيجة ولا في AI Overview`);
-      await logger.info('queue', `🔎 تشخيص — أول النطاقات المقروءة: ${row.topHosts.join(' | ') || '(لا شيء)'} | إعدادك: ${cfg.storeDomain || '-'} / ${cfg.storeName || '-'} / ${cfg.storeNameEn || '-'}`);
+      await logger.info('queue', `🔎 تشخيص — أول النطاقات المقروءة: ${row.topHosts.join(' | ') || '(لا شيء)'} | إعدادك: ${cfg.storeDomain || '-'} / ${cfg.storeName || '-'} / ${cfg.storeNameEn || '-'}${serp.parseStats ? ' | 🧪 لقطة الصفحة: بلوكات ' + serp.parseStats.yu + '، عناوين h3 ' + serp.parseStats.h3s + '، والقراية ' + (serp.total || 0) + '/100' : ''}`);
     }
     this.broadcast();
     void updated;

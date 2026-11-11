@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.41');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.41'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.41'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.41\]/m);
+  assert.equal(man.version, '1.21.42');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.42'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.42'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.42\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1868,4 +1868,15 @@ test('v12141: الافتراضي = مصدر عينك (.com بلا gl/hl مقصو
   // الثوابت: الحظر الأبدي — لا num ولا pws في الرابط
   assert.ok(!/searchParams\.set\('(num|pws)'/.test(uk), 'num/pws رجعوا للّينك — الحظر الأبدي اتكسر!');
   assert.ok(uk.includes('pws=0'), 'تعليق الحظر اتشال — راجعه');
+});
+
+test('v12142: إلغاء «مفيش نتائج» بالنص الصريح بس — وقارئ العدّاد واسع، ولقطة مقيسة', () => {
+  const serp = read('src/content/serp.js');
+  assert.ok(serp.includes("/لم يتم العثور|لا تتطابق|No results|did not match/i.test(nxText)"), 'بواب الإلغاء لسه باللمسة — قنبلة الصفر قايمه');
+  assert.ok(serp.includes("const blocks = D.qsa('#search .yuRUbf, #rso .yuRUbf, main .yuRUbf');"), 'قارئ العدّاد ما اتوسعش لتخطيط النظرة-سريعة');
+  assert.ok(serp.includes('parseStats:'), 'لقطة الإحصاء مش بتتبعت في الـpayload');
+  assert.ok(queue.includes('🧪 لقطة الصفحة: بلوكات'), 'التشخيص المقيس مش مطبوع وقت الغلط');
+  // مفيش أي لمس لتوقيتات الـ16 لفة والسقف — بس الإلغاء بقى نصي
+  assert.ok(serp.includes('return firstPolls >= 16;'), 'سقف الـ4 ثواني اتلمس — ممنوع');
+  assert.ok(serp.includes('if (snap.items.length >= 8) { return true; }'), 'سقف جاهزية أول شاشة اتلمس — ممنوع');
 });

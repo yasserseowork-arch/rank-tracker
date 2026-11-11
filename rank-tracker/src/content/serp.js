@@ -226,7 +226,7 @@
 
   /* ------- عدّاد Serp Counter المدمج: #search .yuRUbf بترتيب الظاهر ------- */
   function counterItems() {
-    const blocks = D.qsa('#search .yuRUbf');
+    const blocks = D.qsa('#search .yuRUbf, #rso .yuRUbf, main .yuRUbf'); // 1.21.42: بلوك اتنقل بره الصندوق وقت تخطيط النظرة-سريعة يتقري
     const items = [];
     const seen = new Set();
     for (const b of blocks) {
@@ -645,7 +645,7 @@
 
   /** ترتيب البلوك اللي جواه نص الدومين/الاسم مباشرة + عنصره لو جاهز */
   function positionByText(cfg, items) {
-    const blocks = D.qsa('#search .yuRUbf');
+    const blocks = D.qsa('#search .yuRUbf, #rso .yuRUbf, main .yuRUbf'); // 1.21.42: بلوك اتنقل بره الصندوق وقت تخطيط النظرة-سريعة يتقري
     const d = String(cfg.storeDomain || '').trim().toLowerCase();
     const nameGate = !d || String(cfg.matchMode || 'both') === 'name';
     const namesList = nameGate ? ((D.match && D.match.storeNames) ? D.match.storeNames(cfg) : [String(cfg.storeName || '')].filter(Boolean)) : [];
@@ -726,7 +726,18 @@
     let firstPolls = 0;
     const firstHit = await D.waitFor(() => {
       const snap = collect();
-      if (!snap.items.length) { return D.first(C.SEL.serp.noResults); }
+      if (!snap.items.length) {
+        // 🧨 v1.21.42 (علة «الصفحة قدامك والأداة صفر»): الـnoResults كانت بتتأكد
+        // بلمسة DOM بس — وأي .card-section طالع أثناء تخطيط «نظرة سريعة» (اللي
+        // بيأخر العضوي ثواني) كان بيلغي الكلمة بصفر قراءة. بقى لازم نص صريح.
+        const nx = D.first(C.SEL.serp.noResults);
+        if (nx) {
+          const nxHost = nx.closest('div') || nx;
+          const nxText = String((nxHost.textContent) || '').slice(0, 600);
+          if (/لم يتم العثور|لا تتطابق|No results|did not match/i.test(nxText)) { return nx; }
+        }
+        return false;
+      }
       const ai = collectAi();
       const h = immediateFind(cfg, snap, ai.items);
       // ضربة «AI» لوحدها مش خروج — ترتيبك العضوي ممكن يكون تحت في #20+؛ بنعلّم وبس
@@ -909,7 +920,10 @@
           return fb ? String(fb.textContent || '').replace(/\s+/g, ' ').slice(0, 240) : '';
         } catch (_) { return ''; }
       })(),
-      parsedAt: Date.now()
+      parsedAt: Date.now(),
+      // 🧪 1.21.42: إحصاء لقطة الصفحة وقت التحليل — اللوج بيطبعه وقت «غير موجود»
+      // فأي خلاف بين عينك ورقمنا يبقى مقيسًا مش تخمينًا
+      parseStats: (function () { try { return { yu: document.querySelectorAll('.yuRUbf').length, h3s: document.querySelectorAll('h3').length }; } catch (_) { return null; } })()
     };
     live.parsedSent = true;
     // 🧊 v1.21.27 — نسخة حية من آخر تحليل: لو حدث SERP_PARSED ضاع في التوقيت (أول
