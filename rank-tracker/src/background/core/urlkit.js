@@ -18,17 +18,18 @@ export function isSearch(url) {
 
 export function buildSearchUrl(keyword, cfg) {
   const config = cfg || {};
-  const gl = String(config.gl || 'sa').toLowerCase();
-  // 🌍 v1.21.28 (طلب المستخدم: «حاسس إنه بيستهدف منطقة تانية»): بحث بـgl=sa على
-  // www.google.com بيدي سيرب «دولي بالمقاطعة» — قريب من سيرب google.com.sa بس مش هو:
-  // البلوك المحلي والترتيب بيتفارقوا، فالتحقق اليدوي للمستخدم بيبان مختلف. نطابق الدومين
-  // مع المنطقة — بس في حدود اللي السكربتات محقونة فيه فعلًا (com.sa و .sa)؛ أي منطقة
-  // تانية تفضل على google.com عشان الحقن ما يقعش. cfg.googleHost override يدوي للأذكياء.
-  const host = (gl === 'sa') ? (config.googleHost || 'www.google.com.sa') : (config.googleHost || 'www.google.com');
+  // 🌐 v1.21.41 (قرار المستخدم بعد مقارنة الصورتين): التحقق الإيدي بيتم على
+  // www.google.com العادي من غير gl/hl — فبقى ده الافتراضي (فاضي = إعداد جوجل
+  // نفسه، بالضبط زي بحثك). doctrine 1.21.28 لسه شغالة للي يثبت gl=sa بنفسه:
+  // ساعتها الدومين بيتطابق لوحده على google.com.sa، والاختيار اليدوي googleHost
+  // بياخد الأولوية فوق كل ده.
+  const gl = String(config.gl || '').trim().toLowerCase();
+  const hl = String(config.hl || '').trim().toLowerCase();
+  const host = config.googleHost || (gl === 'sa' ? 'www.google.com.sa' : 'www.google.com');
   const u = new URL('https://' + host + '/search');
   u.searchParams.set('q', String(keyword || '').trim());
-  u.searchParams.set('gl', gl);
-  u.searchParams.set('hl', config.hl || 'ar');
+  if (gl) { u.searchParams.set('gl', gl); }
+  if (hl) { u.searchParams.set('hl', hl); }
   // 🚫 v1.21.33 (طلب المستخدم: «مليش دعوه إنك بتعمل كده num=100»): مفيش num=100 ولا
   // pws=0 في الرابط — دول بصمة بوت بتستدعي الكابتشا عند جوجل. التوسيع لـ100 بياوله
   // «Show 100 Results» المدمج (beyondten/content) — وكل حاجة بحركة طبيعية.

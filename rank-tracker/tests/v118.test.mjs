@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.40');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.40'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.40'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.40\]/m);
+  assert.equal(man.version, '1.21.41');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.41'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.41'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.41\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1552,8 +1552,8 @@ test('v12127: قاعدة الأفضل يفوز — نتيجة موجودة ما 
 /* -------- v1.21.28 — دومين على مقاس المنطقة + بصمة فوتر جوجل -------- */
 test('v12128: السعودية بتتبحث على google.com.sa — وغير ده يفضل google.com بلا كسر حقن', () => {
   const uk = read('src/background/core/urlkit.js');
-  assert.match(uk, /const host = \(gl === 'sa'\) \? \(config\.googleHost \|\| 'www\.google\.com\.sa'\)/, 'دومين .sa للسعودية مش متطبّق');
-  assert.match(uk, /: \(config\.googleHost \|\| 'www\.google\.com'\)/, 'باقي المناطق لازم تفضل على الدومين المحقون عنه google.com');
+  assert.match(uk, /const host = config\.googleHost \|\| \(gl === 'sa' \? 'www\.google\.com\.sa' : 'www\.google\.com'\);/, 'منطق الدومين اتبوظ — الافتراضي .com والـsa الصريح بيوصلك لـ.sa');
+  assert.match(uk, /if \(gl\) \{ u\.searchParams\.set\('gl', gl\); \}/, 'gl الفاضية لازم متتبعتش خالص — ده سر مطابقة البحث الإيدي');
   assert.match(uk, /new URL\('https:\/\/' \+ host \+ '\/search'\)/, 'الرابط ما بيتبناش على الدومين المختار');
   // مسار الصندوق مش بيفرض الدومين الغلط
   const q = read('src/background/core/queue.js');
@@ -1844,10 +1844,28 @@ test('v12140: مفتاح المصدر — allowlist في state، حقل في ا�
   assert.ok(serpBlk.includes('https://www.google.com.sa/search*'), 'الفهرس السعودي اتشال من الحقن — ده ممنوع (1.21.33)');
   // urlkit: الافتراضي لسه .sa للـgl=sa، والمصدر بيتقدم من googleHost بس
   const uk = read('src/background/core/urlkit.js');
-  assert.ok(uk.includes("(gl === 'sa') ? (config.googleHost || 'www.google.com.sa')"), 'افتراضي .sa اتبوظ — لازم يفضل هو الأصل');
+  assert.ok(uk.includes("config.googleHost || (gl === 'sa' ? 'www.google.com.sa' : 'www.google.com')"), 'الافتراضي بقى .com بأمر المستخدم 1.21.41');
   // شفافية: اللوج بيكتب المصدر الفعلي بنفس منطق urlkit (gl||sa)
-  assert.ok(queue.includes("String(cfg.gl || 'sa').toLowerCase() !== 'sa'"), 'لوج المصدر مش مطابق لمنطق urlkit');
+  assert.ok(queue.includes("cfg.googleHost || (String(cfg.gl || '').trim().toLowerCase() === 'sa' ? 'www.google.com.sa' : 'www.google.com')"), 'لوج المصدر مش مطابق لمنطق urlkit الجديد');
   assert.ok(queue.includes('🌐 مصدر الترتيب: '), 'لوج المصدر مش موجود');
   // الأمان: مفيش حقول حرة — الحقل قدامه select بثلاث اختيارات وبس
   assert.ok(optHtml.indexOf('<select id="cfgGoogleHost"') < optHtml.indexOf('</select>'), 'الحقل مش select مقفول');
+});
+
+test('v12141: الافتراضي = مصدر عينك (.com بلا gl/hl مقصوص)، والـsa الصريح بيرجّع الدومين السعودي', () => {
+  const uk = read('src/background/core/urlkit.js');
+  assert.ok(uk.includes("const gl = String(config.gl || '').trim().toLowerCase();"), 'تطبيع gl مش على الفاضي-معناه-تلقائي');
+  assert.ok(uk.includes("if (gl) { u.searchParams.set('gl', gl); }"), 'gl الفاضية لسه بتتبعت — هتفرق عن البحث الإيدي');
+  assert.ok(uk.includes("if (hl) { u.searchParams.set('hl', hl); }"), 'hl الفاضية لسه بتتبعت');
+  assert.ok(uk.includes("const host = config.googleHost || (gl === 'sa' ? 'www.google.com.sa' : 'www.google.com');"), 'تسلسل الدومين اتبوظ');
+  assert.ok(!/config\.hl \|\| 'ar'/.test(uk), 'لغة مفروضة ar لسه قايمة');
+  // حارس المنطقة: صمت تام في التلقائي، وصرخة زي الأول في الصريح
+  assert.ok(queue.includes("const rchk = wantGl ? this.regionFromFooter(serp.regionText, wantGl) : { known: false, gl: '', matched: true };"), 'حارس المنطقة ما اتكيفش مع الفاضي');
+  // 4 اختيارات في الإعدادات + النص ده بيعترف بالـ.com
+  const oh = read('src/options/options.html');
+  assert.ok(oh.includes('<option value="www.google.com.sa">'), 'خيار .sa الصريح ناقص');
+  assert.ok(oh.includes('افتراضي آلي — .com'), 'نص الافتراضي ما اتحدّتش');
+  // الثوابت: الحظر الأبدي — لا num ولا pws في الرابط
+  assert.ok(!/searchParams\.set\('(num|pws)'/.test(uk), 'num/pws رجعوا للّينك — الحظر الأبدي اتكسر!');
+  assert.ok(uk.includes('pws=0'), 'تعليق الحظر اتشال — راجعه');
 });

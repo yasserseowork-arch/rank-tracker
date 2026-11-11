@@ -241,7 +241,7 @@ export class QueueEngine {
     // 🌍 v1.21.28: الشفافية قبل البدء — المستخدم يعرف الأداة بتبحث منين وبالظبط إزاي
     try {
       const u0 = new URL(urlkit.buildSearchUrl('اختبار', cfg));
-      await logger.info('queue', `🌍 البحث ده الرن: ${u0.host} بمنطق «${String(cfg.gl || 'sa').toLowerCase()}» بلغة ${cfg.hl || 'ar'} — لو في مدن بالاسم استخدم GsLoc Places على نفس البروفيل، ومفيش أي كروم تاني بيتفتح: نفس بروفيل الإضافة بتاعك`);
+      await logger.info('queue', `🌍 البحث ده الرن: ${u0.host} بمنطق «${String(cfg.gl || '').toLowerCase() || 'تلقائي — زي بحثك الإيدي'}» بلغة ${String(cfg.hl || '').toLowerCase() || 'لغة متصفحك'} — لو في مدن بالاسم استخدم GsLoc Places على نفس البروفيل، ومفيش أي كروم تاني بيتفتح: نفس بروفيل الإضافة بتاعك`);
     } catch (_) {}
     const daily = await state.getDailyCount();
     if (cfg.maxChecksPerDay > 0 && daily.count >= cfg.maxChecksPerDay) {
@@ -251,7 +251,7 @@ export class QueueEngine {
 
     // 0) مسح بيانات التصفح (كل الوقت) — نتائج غير شخصية مثل السيناريو اليدوي
     // 🌐 1.21.40: الشفافية أولًا — اللوج يقول المصدر الفعلي قبل أول كلمة
-    await logger.info('queue', '🌐 مصدر الترتيب: ' + (String(cfg.gl || 'sa').toLowerCase() !== 'sa' ? (cfg.googleHost || 'www.google.com') : (cfg.googleHost || 'www.google.com.sa')) + (cfg.googleHost ? '' : ' (الافتراضي — قابل للتغيير من الإعدادات لو بحثك اليدوي على مصدر تاني)'));
+    await logger.info('queue', '🌐 مصدر الترتيب: ' + (cfg.googleHost || (String(cfg.gl || '').trim().toLowerCase() === 'sa' ? 'www.google.com.sa' : 'www.google.com')) + (cfg.googleHost ? '' : ' (الافتراضي — قابل للتغيير من الإعدادات لو بحثك اليدوي على مصدر تاني)'));
     if (cfg.clearBeforeRun) {
       try {
         await chrome.browsingData.remove({ since: 0 }, { cacheStorage: true, history: true, cookies: true });
@@ -1767,12 +1767,13 @@ export class QueueEngine {
     // 🌍 v1.21.28 — بصمة المنطقة من فوتر جوجل نفسه: تطابق يسكت، اختلاف يصرخ مرة
     // واحدة في الرن (وشارة في الصف للتصدير) — مش بنغيّر النتيجة، بنكشف السبب بس.
     if (serp.regionText) {
-      const rchk = this.regionFromFooter(serp.regionText, cfg.gl || 'sa');
+      const wantGl = String(cfg.gl || '').trim().toLowerCase();
+      const rchk = wantGl ? this.regionFromFooter(serp.regionText, wantGl) : { known: false, gl: '', matched: true };
       row.regionGl = rchk.known ? rchk.gl : null;
       row.regionMismatch = !!(rchk.known && !rchk.matched);
       if (row.regionMismatch && !this._regionWarned) {
         this._regionWarned = true;
-        await logger.warn('queue', `🌍 جوجل قدّم النتايج من منطقة «${rchk.gl}» المطلوبة «${String(cfg.gl || 'sa').toLowerCase()}» — لو بحثك اليدوي مختلف دي هي الفروق: شغّل GsLoc Places على نفس البروفيل ده أو ظابط الإعداد`);
+        await logger.warn('queue', `🌍 جوجل قدّم النتايج من منطقة «${rchk.gl}» المطلوبة «${wantGl || 'تلقائي (زي بحثك الإيدي)'}» — لو بحثك اليدوي مختلف دي هي الفروق: شغّل GsLoc Places على نفس البروفيل ده أو ظابط الإعداد`);
         await this.notify('🌍 بصمة المنطقة', 'في كلمات اتحسبت من منطقة غير المطلوبة — اللوج فيه التفاصيل');
       }
     }
