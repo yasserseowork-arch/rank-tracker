@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.42');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.42'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.42'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.42\]/m);
+  assert.equal(man.version, '1.21.43');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.43'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.43'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.43\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1879,4 +1879,16 @@ test('v12142: إلغاء «مفيش نتائج» بالنص الصريح بس �
   // مفيش أي لمس لتوقيتات الـ16 لفة والسقف — بس الإلغاء بقى نصي
   assert.ok(serp.includes('return firstPolls >= 16;'), 'سقف الـ4 ثواني اتلمس — ممنوع');
   assert.ok(serp.includes('if (snap.items.length >= 8) { return true; }'), 'سقف جاهزية أول شاشة اتلمس — ممنوع');
+});
+
+test('v12143: باب تخزين GsLoc بقى local+sync — والتطبيق فوري من البوب-أب للworker', () => {
+  const gb = read('gsloc/js/background.js');
+  assert.ok(gb.includes("if (area !== 'local' && area !== 'sync') {"), 'الباب لسه وحش — التغييرات بتطير');
+  assert.ok(!gb.includes("if (area !== 'sync') {\n    return;\n  }"), 'الباب القديم لسه قايم');
+  assert.ok(gb.includes("'gsloc:ensure-rules'"), 'قناة الأمان ضد انزلاق القواعد مش موجودة');
+  assert.ok(gb.includes('checkEnabled();'), 'إعادة التطبيق مش متوصلة بالرسالة');
+  const gp = read('gsloc/js/popup.js');
+  assert.ok(gp.includes("chrome.runtime.sendMessage({ type: 'gsloc:ensure-rules' }"), 'البوب-أب مابيطلبش تطبيق فوري');
+  assert.ok(gp.includes('chrome.storage.local.set({ settings: background.settings });'), 'البوب-أب لازم يفضل بيكتب local (عزل البروفيلات .37)');
+  assert.ok(!/chrome\.storage\.sync\.set/.test(gp), 'رجعت كتابة السحابة في البوب-أب!');
 });

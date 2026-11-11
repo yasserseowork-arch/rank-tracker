@@ -28,6 +28,19 @@ chrome.runtime.onInstalled.addListener(function() {
   });
 });
 
+// 🪤 v1.21.43: تأمين ضد انزلاق القواعد (session rules بتموت مع التحديث) — أي إفاقة
+// للـworker بتقري الحالة من local وتعيد التطبيق لو هوير مفقود؛ checkEnabled idempotent
+chrome.runtime.onMessage.addListener((m, s, sendRes) => {
+  if (m && m.type === 'gsloc:ensure-rules') {
+    chrome.storage.local.get(['settings'], (d) => {
+      if (d.settings) { Object.assign(settings, d.settings); }
+      checkEnabled();
+      sendRes({ ok: true, enabled: !!settings.enabled });
+    });
+    return true;
+  }
+});
+
 chrome.runtime.onStartup.addListener(function() {
   chrome.storage.local.get(null, (data) => {
     if (data.settings) {
@@ -119,7 +132,10 @@ function checkEnabled() {
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'sync') {
+  // 🧨 v1.21.43 (علة «الـVPN مش شغال»): من 1.21.37 البوب-أب بيكتب local، والباب
+  // ده كان لسه مستني sync بس — فأي مفتاح ACTIVE/OFF ما كانش بيوصل للـservice
+  // worker والقواعد ما اتطبقتش. الباب بقى يقبل الاتنين للأبد (ترحيل + أمان).
+  if (area !== 'local' && area !== 'sync') {
     return;
   }
   if (changes.settings) {

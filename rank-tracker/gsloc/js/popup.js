@@ -3454,6 +3454,8 @@ function enabler() {
   // persist settings
   background.settings.timestamp = new Date().getTime();
   chrome.storage.local.set({ settings: background.settings });
+  // ⚡ v1.21.43: طلب تطبيق فوري للـworker (قواعد x-geo) — مفيش انتظار ولا رستارت
+  try { chrome.runtime.sendMessage({ type: 'gsloc:ensure-rules' }, () => void chrome.runtime.lastError); } catch (_) {}
 }
 
 function isFloat(n) {
