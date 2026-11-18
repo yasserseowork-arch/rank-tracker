@@ -4,7 +4,7 @@
  * لكن الـ Service Worker module لا يحمّلها، لذلك نعيد تصديرها من هنا.
  */
 const fallback = {
-  VERSION: '1.21.47',
+  VERSION: '1.21.48',
   MSG: {
     PING: 'srt/ping',
     GET_CONFIG: 'srt/config/get',

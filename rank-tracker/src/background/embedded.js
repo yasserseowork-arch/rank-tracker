@@ -49,10 +49,10 @@ try {
   chrome.storage.local.get('settings', (r) => {
     const s = r && r.settings;
     const saudiDefaults = {
-      // مركز المملكة الجغرافي (نقطة عامة في عرض الجزيرة — مش نقطة مدينة) + قطر
-      // ~1000كم يغطي الرقعة: إشارة x-geo بقت «السعودية كلها» بدل «رياض سيتي سنتر 65كم»
-      latitude: 24.0,
-      longitude: 45.0,
+      // 🧷 v1.21.48: تنسّق مع ديفولت GsLoc (.46) — نفس إحداثيات لوحة المستخدم بالحرف،
+      // والقطر ~1000كم يغطي الرقعة: لا طبقتان بقيمتين مختلفتين (ملاحظة نسخة 1.23.13)
+      latitude: 25.6242618,
+      longitude: 42.3528328,
       location: 'Saudi Arabia',
       name: 'Saudi Arabia',
       placeId: 'KSA-COUNTRY',

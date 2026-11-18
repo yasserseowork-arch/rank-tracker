@@ -141,6 +141,8 @@ export function matchResults(items, cfg) {
   const config = cfg || {};
   const mode = config.matchMode || 'both';
   const hasDomain = !!String(config.storeDomain || '').trim();
+  // 🧷 1.21.48: مسار منصة متعيين؟ الدومين لوحده مابيحكمش — لازم المسار جوه رابط النتيجة
+  const needPath = String(config.storeDomainPath || '').trim().toLowerCase();
   const names = storeNames(config);
   // سياسة 1.19.7 — الدومين أولاً: الدومين مضبوط؟ الحكم بالدومين بس في both/named-mix،
   // والاسم يفضل احتياطي لوضع name أو لما الدومين مش محدد (علاج sites بنفس الاسم)
@@ -152,7 +154,10 @@ export function matchResults(items, cfg) {
     const reasons = [];
     let hit = false;
     if (hasDomain && (mode === 'domain' || mode === 'both')) {
-      if (hostMatches(item.host || '', config.storeDomain)) { hit = true; reasons.push('domain'); }
+      if (hostMatches(item.host || '', config.storeDomain)
+        && (!needPath || String(item.url || '').toLowerCase().includes('/' + needPath))) {
+        hit = true; reasons.push(needPath ? 'domain+path' : 'domain');
+      }
     }
     if (!hit && nameAllowed && names.length) {
       const text = (item.title || '') + ' ' + (item.snippet || '') + ' ' + (item.url || '') + ' ' + (item.text || '');

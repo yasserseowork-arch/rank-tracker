@@ -48,3 +48,9 @@ body {
 .btn:hover { filter: brightness(1.15); }
 .btn-danger { border-color: var(--danger); color: #fecaca; }
 .page-footer { text-align: center; color: var(--muted); font-size: .8rem; }
+
+/* 🧷 v1.21.48: صقل خفيف — نفس إيقاع اللوحة الرئيسية (مسافات ومحاذاة وفوكس ذهبي) */
+.form-grid { gap: 10px; }
+.form-grid label { gap: 6px; }
+.form-grid input, .form-grid select { line-height: 1.5; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }

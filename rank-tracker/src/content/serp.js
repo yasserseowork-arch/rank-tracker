@@ -141,7 +141,12 @@
       const infoX = citeInfo(block0 || a, a);
       const url = infoX.url;
       if (!url) { continue; }
-      if (seen.has(url)) { continue; }
+      // 🧷 v1.21.48 (بابن من فحص نسخة 1.23.13): نتيجتان على نفس الدومين من غير
+      // مسار في الـcite — زي الصفحة الرئيسية وصفحة تانية — كانتا بتتقلّصا
+      // لـ«https://host» والتانية بتتمسح من الدديوب والتراكيب اللي تحتها بتتزحزح.
+      // الهوية بقت الرابط + عنوان الظاهر: مفيش نتيجتان مختلفتان بيُدفن واحد.
+      const keyX = url + '\n' + String(h3.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (seen.has(keyX)) { continue; }
       const hostX = D.url.hostOf(url);
       if (/google\.(com|sa|com\.sa)$|googleads\.g\.doubleclick\.net/.test(hostX)) { continue; }
       if (a.closest('#tads, #tadsb, #bads, .ads-visurl, [data-text-ad], #topads')) { continue; }
@@ -150,7 +155,7 @@
         const rect = h3.getBoundingClientRect();
         if (!rect || rect.height < 8 || rect.width < 8) { continue; }
       }
-      seen.add(url);
+      seen.add(keyX);
       const block = block0;
       const sn = block ? D.first(C.SEL.serp.snippet, block) : null;
       items.push({
@@ -239,12 +244,15 @@
       const blk0 = a.closest('div.g') || a.closest('div[data-hveid]') || b;
       const info0 = citeInfo(blk0, a);
       const url = info0.url;
-      if (!url || seen.has(url)) { continue; }
+      if (!url) { continue; }
+      // 🧷 1.21.48: عدّاد بلوكات كمان — url + عنوان = هوية، مش الدومين لوحده
+      const key0 = url + '\n' + String(h3.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (seen.has(key0)) { continue; }
       const host0 = D.url.hostOf(url);
       if (/google\.(com|sa|com\.sa)$|googleads\.g\.doubleclick\.net/.test(host0)) { continue; }
       if (a.closest('#tads, #tadsb, #bads, .ads-visurl, [data-text-ad], #topads')) { continue; }
       if (a.closest(C.SEL.serp.paa.join(','))) { continue; }
-      seen.add(url);
+      seen.add(key0);
       const blk = blk0;
       const sn = D.first(C.SEL.serp.snippet, blk);
       items.push({
@@ -536,7 +544,7 @@
   /* --------- جلب باقي الدفعات خلفيةً (بدون تنقّل) عندما لا تكفي الصفحة --------- */
   async function selfFetchMore(cfg, baseItems, aiItems) {
     const merged = baseItems.slice();
-    const seen = new Set(merged.map((i) => i.url));
+    const seen = new Set(merged.map((i) => i.url + '\n' + String(i.title || '').replace(/\s+/g, ' ').trim().toLowerCase()));
     let start = Math.ceil(merged.length / 10) * 10;
     const maxBatches = cfg.selfFetchMaxBatches || 9;
     let attempts = 0;
@@ -586,7 +594,8 @@
       const more = extractFrom(res.doc, false);
       let added = 0;
       for (const item of more) {
-        if (!seen.has(item.url)) { seen.add(item.url); merged.push(item); added++; }
+        const keyM = item.url + '\n' + String(item.title || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (!seen.has(keyM)) { seen.add(keyM); merged.push(item); added++; }
       }
       if (!more.length || !added) {
         attempts++;

@@ -21,6 +21,7 @@ export const K = {
 export const DEFAULT_CONFIG = {
   // الهوية المستهدفة
   storeDomain: '',
+  storeDomainPath: '',  // 🧷 1.21.48: لو الدومين اتكتب بمسار (salla.sa/متجرك) المسار بيتحفظ هنا وبيبقا شرط حكم
   storeName: '',
   storeNameEn: '',
   matchMode: 'both',            // domain | name | both
@@ -135,8 +136,13 @@ export async function setConfig(patch) {
   if ('googleHost' in next) { next.googleHost = SERP_HOSTS.includes(next.googleHost) ? next.googleHost : ''; }
   // تنظيف الدومين: المستخدم يكتبه بدون https وأحياناً بمسار أو www
   if (typeof next.storeDomain === 'string') {
-    next.storeDomain = next.storeDomain.trim()
-      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+    const rawDom = next.storeDomain.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+    // 🧷 v1.21.48 (بابن من فحص نسخة 1.23.13): اللي بيكتب «salla.sa/متجر-فلان» كان
+    // المسار بيتشال و أي متجر سلة/زيد على نفس المنصة بيتحسب أنت! المسار بيترفع
+    // لـstoreDomainPath وبيبقا شرط جوه حكم الدومين؛ الكتابة النضيفة زي الأول
+    const pathM = rawDom.match(/^[^\/?#]+\/([^\s?#]+)/);
+    next.storeDomainPath = pathM ? pathM[1].replace(/\/+$/, '').toLowerCase().slice(0, 60) : '';
+    next.storeDomain = rawDom
       .replace(/[\/?#].*$/, '')
       .replace(/^www\./i, '')
       .toLowerCase();

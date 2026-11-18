@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.47');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.47'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.47'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.47\]/m);
+  assert.equal(man.version, '1.21.48');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.48'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.48'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.48\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -919,9 +919,9 @@ test('v1215: المسح الدوري — قبل البدء وكل N كلمات �
 const emb = read('src/background/embedded.js');
 const gsl = read('gsloc/js/background.js');
 
-test('v1216: ديفولت الأدوات المدمجة بقى قطري عام — نقطة مركز المملكة وقطر 1000كم', () => {
+test('v1216→12148: ديفولت الأدوات المدمجة قطري عام — النقطة متنسّقة مع لوحة GsLoc وقطر 1000كم', () => {
   assert.match(emb, /location: 'Saudi Arabia',\n\s+name: 'Saudi Arabia',/, 'الديفولت لسه مسمّى مدينة');
-  assert.match(emb, /latitude: 24\.0,\n\s+longitude: 45\.0,/, 'نقطة المركز الجغرافي ما اتظبطتش');
+  assert.match(emb, /latitude: 25\.6242618,\n\s+longitude: 42\.3528328,/, 'نقطة embedded مش متنسّقة مع ديفولت .46');
   assert.match(emb, /radius: 1000000,/, 'قطر البلد (1000كم) ناقص من الديفولت');
   assert.match(emb, /placeId: 'KSA-COUNTRY',/, 'الـplaceId لسه بتاع الرياض');
   // هجرة ديفولت الرياض القديم — بشرط إنه لسه ديفولتنا (مو اختيار Places ولا وضع معطّل)
@@ -1956,4 +1956,41 @@ test('v12146: ديفولت GsLoc = لوح المستخدم (السعودية ON)
   assert.ok(bg.includes("'gsloc:ensure-rules'") && pp.includes("'gsloc:ensure-rules'"), 'قناة .43 اتقطعت');
   // genUULE: قطر المدينة التاريخي 65كم (الديفولت ما بيضيفش radius — زي جهازه بالظبط)
   assert.ok(bg.includes('parseInt(settings.radius, 10) || 65000'), 'منطق القطر اتلمس');
+});
+
+test('v12148: بابن نسخة 1.23.13 المَحمّلة — هوية url+title في الدديوب، ومسار المنصة شرط، والصقل', async () => {
+  const serp = read('src/content/serp.js');
+  assert.ok(serp.includes("const keyX = url + '\\n' + String(h3.textContent || '')"), 'الماسح الأول لسه بدديوب على الرابط لوحده');
+  assert.ok(serp.includes("const key0 = url + '\\n'"), 'عداد البلوكات لسه بدديوب على الرابط لوحده');
+  assert.ok(serp.includes("merged.map((i) => i.url + '\\n'"), 'الدمج الخلفي لسه بدديوب على الرابط لوحده');
+  const st = read('src/background/core/state.js');
+  assert.ok(st.includes("storeDomainPath: '',"), 'الحقل الجديد مش في الديفولت');
+  assert.ok(st.includes('rawDom.match('), 'السانيتايز مش بيلتقط المسار');
+  const mt = read('src/background/core/match.js');
+  assert.ok(mt.includes("const needPath = String(config.storeDomainPath || '')"), 'الماتش مش واخد المسار في الحساب');
+  assert.ok(mt.includes("reasons.push(needPath ? 'domain+path' : 'domain');"), 'الحكم مش بيشترط المسار');
+  const { matchResults } = await import('../src/background/core/match.js');
+  const items = [
+    { url: 'https://salla.sa/mystore-a', host: 'salla.sa', title: 'A', snippet: '' },
+    { url: 'https://salla.sa/other-b', host: 'salla.sa', title: 'B', snippet: '' }
+  ];
+  const r1 = matchResults(items, { matchMode: 'domain', storeDomain: 'salla.sa', storeName: '', storeDomainPath: 'mystore-a' });
+  assert.ok(r1.found && r1.position === 1 && r1.reasons.includes('domain+path'), 'الفلترة بالمسار ما اشتغلتش');
+  const r2 = matchResults(items.slice(1), { matchMode: 'domain', storeDomain: 'salla.sa', storeName: '', storeDomainPath: 'mystore-a' });
+  assert.ok(!r2.found, 'متجر تاني على المنصة بيتحسب انت!');
+  const r3 = matchResults(items, { matchMode: 'domain', storeDomain: 'salla.sa', storeName: '' });
+  assert.ok(r3.found && r3.reasons[0] === 'domain', 'الدومين النضيف اتعقد — لازم يفضل بيحكم لوحده');
+  const em = read('src/background/embedded.js');
+  assert.ok(em.includes('latitude: 25.6242618') && em.includes('longitude: 42.3528328'), 'طبقة embedded لسه بقيم تانية');
+  const css = read('src/sidepanel/side-panel.css');
+  assert.ok(css.includes('--sp-1: 6px') && css.includes('--sp-4: 18px'), 'مقياس المسافات مش محطوط');
+  assert.ok(/\.tool-frame \{ display: block; \}/.test(css), 'الإطار لسه إنلاين — الفراغ تحتو قايم');
+  const ocss = read('src/options/options.css');
+  assert.ok(ocss.includes(':focus-visible'), 'فوكس صفحة الإعدادات مش متعمل');
+  // العقائد سايدة: لا num=100 رجع، ومفيش تثبيت gl — وبرفض نسخة 1.23.13
+  assert.ok(!serp.includes("set('num', '100')"), 'num=100 رجع — الحظر الأبدي اتكسر!');
+  const uk = read('src/background/core/urlkit.js');
+  assert.ok(!uk.includes("|| 'sa'"), 'تثبيت gl رجع — عقيدة A/B اتنسيت!');
+  // المسح الكامل سايد رغم «تلطيف» النسخة التانية
+  assert.ok(st.includes('clearBeforeRun') && st.includes('clearEveryN'), 'دورة المسح (1.21.38) اتلمست!');
 });
