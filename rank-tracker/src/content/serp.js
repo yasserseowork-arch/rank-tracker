@@ -582,7 +582,7 @@
       try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
       if (res.blocked) { attempts++; break; }
       if (res.err) {
-        await D.sleep(1200); // سكتة ثم فرصة تانية لنفس الدفعة — 1.21.20: أقصر، الدفعة التانية جاية كمان ثانية وشوية
+        await D.sleep(800); // 🚀 1.21.49: سكتة ثم فرصة تانية لنفس الدفعة — كانت 1200 من .20، بقت 800 (الفلسفة نفسها، أقصر)
         try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
         if (res.err) {
           attempts++;
@@ -601,7 +601,7 @@
         attempts++;
         if (attempts >= 2) { break; } // صفحتين ورا بعض فاضيتين = جوجل قافل الجلب، كفاية أدب
         start += 10;
-        await D.humanSleep(550, 250);
+        await D.humanSleep(350, 150); // 🚀 1.21.49: كانت 550±250 —_fetch خلفية على نفس الجلسة، السكتة أقصر وأدق نفس التغطية
         continue;
       }
       attempts = 0;
@@ -778,6 +778,23 @@
       return { early: false, settled: true, noResults: true, items: [], aiItems: [], aiText: '' };
     }
 
+    // 🚀 v1.21.49 (طلب السرعة المشروعة): الصفحة مترسمه كاملة الـ100 من أول دفعة
+    // (ده معناه رفيق BeyondTen شغال — 100 نتيجة إعداد جوجل نفسه، مش باراميتر
+    // في اللينك)؟ مفيش سكرول ولا دفعة خلفية ولا انتظار 1.1 ثانية: نَفَسة 350ms
+    // والقلم علي المقروء. الدقة زي ما هي — بلوكات الـ100 كلها قدامنا فعلًا.
+    const full0 = collect();
+    if (full0.items.length >= expectedNum) {
+      await D.sleep(350);
+      const aiF0 = await finalizeAi(collectAi(), 600);
+      const hit0 = immediateFind(cfg, full0, aiF0.items);
+      if (hit0) {
+        logEarly(hit0, full0.items);
+        return { items: full0.items, aiItems: aiF0.items, aiText: aiF0.text, adsCount: full0.adsCount, early: true, hit: hit0, fullPageFast: true };
+      }
+      relock();
+      return { items: full0.items, aiItems: aiF0.items, aiText: aiF0.text, adsCount: full0.adsCount, early: false, settled: true, fullPageFast: true };
+    }
+
     const started = Date.now();
     let lastCount = -1;
     let lastChange = Date.now();
@@ -844,7 +861,9 @@
         settled = true;
         break;
       }
-      if (count >= expectedNum && now - lastChange >= settleMs) {
+      // 🚀 1.21.49: العدّاد وصل 100؟ القايمة اكتملت — نَفَسة 350ms تكفي، الانتظار
+      // الكامل 1100 كان ضريبة على صفحة خلصت فعلًا
+      if (count >= expectedNum && now - lastChange >= 350) {
         settled = true;
         break;
       }

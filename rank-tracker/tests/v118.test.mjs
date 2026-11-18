@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.48');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.48'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.48'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.48\]/m);
+  assert.equal(man.version, '1.21.49');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.49'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.49'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.49\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1372,8 +1372,8 @@ test('v12120: قاعدة الـAI العامة — مترسم فوري، بوا�
 
 test('v12120: الدفعات الخلفية والبحث المتبرمج بقوا أرش من غير ما يمسوا الكابتشا', () => {
   assert.match(serp, /await D\.humanSleep\(900, 400\);\s*\/\//, 'تهيئة صندوق البحث اتغيرت عن 1.21.20؟');
-  assert.match(serp, /await D\.sleep\(1200\);/, 'سكتة إعادة المحاولة لسه 2500');
-  assert.match(serp, /await D\.humanSleep\(550, 250\);/, 'فاصل الدوران الفاضي لسه 900');
+  assert.match(serp, /await D\.sleep\(800\);/, 'سكتة إعادة المحاولة مش على إيقاع 1.21.49 (كانت 1200 من .20)');
+  assert.match(serp, /await D\.humanSleep\(350, 150\);/, 'فاصل الدوران الفاضي مش على إيقاع 1.21.49 (كان 550±250)');
   assert.match(queue, /const cool = 8000 \+ Math\.floor\(Math\.random\(\) \* 6000\);/, 'تهدئة ما بعد الحل اتغيرت — ممنوع');
   assert.ok(!/const restSec = 8 \+ captchaClears/.test(queue), 'تبريد 12/16/20 رجع — اتلغى بطلب المستخدم في 1.21.23');
 });
@@ -1993,4 +1993,30 @@ test('v12148: بابن نسخة 1.23.13 المَحمّلة — هوية url+titl
   assert.ok(!uk.includes("|| 'sa'"), 'تثبيت gl رجع — عقيدة A/B اتنسيت!');
   // المسح الكامل سايد رغم «تلطيف» النسخة التانية
   assert.ok(st.includes('clearBeforeRun') && st.includes('clearEveryN'), 'دورة المسح (1.21.38) اتلمست!');
+});
+
+test('v12149: السرعة المشروعة — فاست-لينج 100-مكتملة، تسوية 350، وإرشاد الرفيق مرة في الرن', () => {
+  const serp = read('src/content/serp.js');
+  assert.ok(serp.includes('if (full0.items.length >= expectedNum) {'), 'فاست-لينج الصفحة الكاملة مش موجود');
+  assert.ok(serp.includes('fullPageFast: true'), 'علامة الفاست لينج مش بتتقفل على الحكم');
+  assert.ok(serp.includes('await D.sleep(350);'), 'نَفَسة الفاست لينج مش 350');
+  assert.ok(serp.includes('relock();\n      return { items: full0.items'), 'فاست-لينج بلا قفل سكرول — UX المحجوز اتكسر');
+  assert.ok(serp.includes('now - lastChange >= 350) {'), 'تسوية الاكتمال لسه 1100');
+  assert.ok(serp.includes('await D.sleep(800);'), 'سكتة إعادة الدفعة مش مقصوصة');
+  assert.ok(serp.includes('await D.humanSleep(350, 150);'), 'فاصل الدفعات مش مقصوص');
+  assert.ok(!/humanSleep\(550, 250\)/.test(serp), 'الباكينج القديم لسه قايم');
+  const q = read('src/background/core/queue.js');
+  assert.ok(q.includes('this.btAdvised = false;'), 'راية الإرشاد مش بتتصفّر مع الرن');
+  assert.ok(q.includes('الرفيق BeyondTen مش محمّل'), 'إرشاد الرفيق مش موجود');
+  assert.ok(q.includes('(serp.expectedNum || cfg.num || 100) - 10'), 'شرط الإرشاد مش مقيس');
+  // الدروع العقائدية ما تتلمسش: لا باراميترات في لينك التاب، المسح، المطابقة
+  const uk = read('src/background/core/urlkit.js');
+  assert.ok(!uk.includes("|| 'sa'") && !uk.includes("set('ie'"), 'عقيدة A/B اتكسرت — ممنوع');
+  assert.ok(!/searchParams\.set\('num'/.test(uk), 'num رجع للينك التاب — الحظر الأبدي!');
+  const st = read('src/background/core/state.js');
+  assert.ok(st.includes('clearBeforeRun') && st.includes('clearEveryN'), 'دورة المسح اتلمست');
+  assert.ok(serp.includes("const keyX = url + '\\n' + String(h3.textContent || '')"), 'دديوب .48 اتفك');
+  // فاصل ما قبل الكلمة سايد بقيمه (0.6/4 ث) — قرار .37 مش للبيع
+  const sch = read('src/background/core/scheduler.js');
+  assert.ok(sch.includes('const ms = cold ? 600 : 4000;'), 'إيقاع الفواصل اتبدّل من تحتانا');
 });

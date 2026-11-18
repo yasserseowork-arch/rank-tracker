@@ -271,6 +271,7 @@ export class QueueEngine {
       this.index = 0;
     }
     this.captchaHeat = 0; // رن جديد = حرارة صفر
+    this.btAdvised = false; // 🚀 1.21.49: إرشاد BeyondTen مرة واحدة في الرن
     this.abortController = new AbortController();
     await state.setRun({
       status: C.STATUS.RUN.RUNNING,
@@ -1839,6 +1840,10 @@ export class QueueEngine {
       found: (run.found || 0) + (match.found ? 1 : 0)
     });
 
+    if (!this.btAdvised && (serp.total || 0) < ((serp.expectedNum || cfg.num || 100) - 10)) {
+      this.btAdvised = true;
+      await logger.info('queue', '🚀 الرفيق BeyondTen مش محمّل على البروفيل ده (الصفحة جت ' + (serp.total || 0) + ' من ' + (serp.expectedNum || cfg.num || 100) + ') — ركّبه من نفس الـzip (مجلد beyondten، Load unpacked) واختار 100: الصفحة تيجي دفعة واحدة، وكل كلمة بتخلص في نص الوقت تقريبًا بدون أي بصمة في اللينك');
+    }
     const footShort = String(serp.regionText || '').replace(/\s+/g, ' ').slice(0, 70);
     const top15 = (serp.items || []).slice(0, 15).map((it, i) => (it.counterPos || (i + 1)) + ':' + (it.host || '?')).join(' ، ');
     if (match.found) {
