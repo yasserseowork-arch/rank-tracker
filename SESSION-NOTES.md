@@ -21,3 +21,10 @@
 - 📟 Activity bar: rest-strip MOVED in HTML to directly under main buttons (above stats); engine `setPhase(txt,until,total)` publishes: 0.6/4s predelay (mirrors scheduler consts — display only), ☕ cooldownIfNeeded, 🧊 siege chill 30s, 🧊 post-solve cools (8-14 & 10-18), 🧩 captcha-wait (infinite no-count pulse, CSS @keyframes restPulse), 🚦 park-restart, 🧱/ refusal/wall message. Cleared on start/stop/end (setRun patches). Tick gate extended; strip hides when idle.
 - i18n added phaseLeft AR+EN. Tests: v12151 behavioral (loads errorsig via v119loadClassic, exact wall strings) + v12145 repinned to widened midKind guard. 267 tests.
 - Cyrillic slip «никогда» in CHANGELOG caught by stray-script scan (CJK scan alone insufficient — extend scans to 0x400-0x4FF!).
+
+## v1.21.52 — الرقابة الذاتية + عدّادات الصبر + استشارة الدخول (5117301, pushed; zip 6726886 B md5 1dba23c5a04fde086b4f1402b67827be; 268/268; in-zip 15/15)
+- ROLLBACK #7 happened AGAIN at turn start (HEAD 7566ab4, manifest 1.14.0); recovered via fetch + `git reset --hard origin/...` → 97d0bc1; no uncommitted work existed (only reads). ALWAYS fetch+compare before any edit in a new turn — first action of every turn from now on.
+- 🩺 «بتقف» root cause: loop wedged in long waits (post-captcha yoga/stale), panel silent — user's pause+resume = real cure; automated: broadcast() → run.beatTs stamp; watchdogTick new branch: active && looping && now-beat>180000 → pendingRestart=true + status RUNNING + abort + fresh AbortController → finally restarts loop() at same index (same keyword). All legit waits ≤66s so 3-min threshold never false-positives.
+- 📟 🧘 wait phase now Date.now()+66000 countdown; stale-cap 20s break +21000 countdown.
+- 💡 maybeAdviseSignIn(): captchaSeenThisRun>=3 once/run at both increments (609/754), reset at 1623. Counsel only (screenshots showed signed-out profile + 15 solves).
+- Pins: probes 800/1200, waited>=60, recordExhausted×8 (count asserted in v12152), preDelays 600/4000, .50/.51 suites intact.
