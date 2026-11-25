@@ -72,7 +72,7 @@ export class QueueEngine {
     const active = run.status === C.STATUS.RUN.RUNNING || run.status === C.STATUS.RUN.CAPTCHA || errored;
     if (active && !this.looping) {
       await logger.warn('queue', 'watchdog: استئناف الحلقة بعد استيقاظ Worker' + (errored ? ' — تعافي تلقائي بعد خطأ' : ''));
-      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null, pauseReason: null });
+      await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null, pauseReason: null, phaseTxt: null, phaseUntil: null, phaseTotal: null });
       this.index = run.currentIndex || 0;
       this.abortController = new AbortController();
       await this.healStaleBadges();
@@ -327,7 +327,7 @@ export class QueueEngine {
       k.status === C.STATUS.KW.RUNNING || k.status === C.STATUS.KW.CAPTCHA
         ? Object.assign({}, k, { status: C.STATUS.KW.PENDING })
         : k));
-    await state.setRun({ status: C.STATUS.RUN.IDLE, captcha: null, pauseReason: null });
+    await state.setRun({ status: C.STATUS.RUN.IDLE, captcha: null, pauseReason: null, phaseTxt: null, phaseUntil: null, phaseTotal: null });
     await logger.warn('queue', '⏹ إيقاف التشغيل');
     this.broadcast();
     return { ok: true };
@@ -406,17 +406,17 @@ export class QueueEngine {
         if ((this.captchaStreak || 0) >= 4) {
           const chill = 30000; // v1.21.37 (طلب المستخدم): من 90-120 ← 30 ثانية ثابتة — الحصار بيتكسر بردية قصيرة منتظمة أحسن من ضربة طويلة مالهاش داعي كل مرة
           await logger.warn('queue', `🧊 ${this.captchaStreak} كابتشات ورا بعض — بردية ${Math.round(chill / 1000)} ثانية قبل ما نكمّل (خصوصًا لو بروفيل تاني شغال على نفس الـIP)`);
-          await state.setRun({ breakUntil: Date.now() + chill, breakTotalMs: chill }); // الشريط السفلي يعدّيها قدامك
+          await state.setRun({ breakUntil: Date.now() + chill, breakTotalMs: chill, phaseTxt: '🧊 حصار كابتشا — بردية قبل ما نكمّل' }); // الشريط السفلي يعدّيها قدامك
           await sleep(chill, this.signal());
-          await state.setRun({ breakUntil: null, breakTotalMs: null });
+          await state.setRun({ breakUntil: null, breakTotalMs: null, phaseTxt: null, phaseUntil: null, phaseTotal: null });
           this.captchaStreak = 2; // مفيش تصفير كامل — لسه سخينة؟ الكاسحة ترجع تشتغل تاني عندها
         }
         await scheduler.cooldownIfNeeded(cfg, processed, this.signal(), async (ms) => {
           // عدّاد حي في اللوحة: وقت بداية الاستراحة ومداها — الشريط يظهر بس وإنت في واحدة بجد
-          await state.setRun({ breakUntil: Date.now() + ms, breakTotalMs: ms });
+          await state.setRun({ breakUntil: Date.now() + ms, breakTotalMs: ms, phaseTxt: '☕ استراحة دورية' });
           this.broadcast();
         });
-        await state.setRun({ breakUntil: null, breakTotalMs: null });
+        await state.setRun({ breakUntil: null, breakTotalMs: null, phaseTxt: null, phaseUntil: null, phaseTotal: null });
         this.broadcast();
       }
 
@@ -428,7 +428,7 @@ export class QueueEngine {
         await this.reviewPass();
         const runB = await state.getRun();
         if (runB.status !== C.STATUS.RUN.RUNNING) { return; }
-        await state.setRun({ status: C.STATUS.RUN.IDLE, finishedAt: Date.now(), captcha: null });
+        await state.setRun({ status: C.STATUS.RUN.IDLE, finishedAt: Date.now(), captcha: null, phaseTxt: null, phaseUntil: null, phaseTotal: null });
         await this.recordRunReport(runB);
         await logger.info('queue', '✅ انتهى فحص كل الكلمات المفتاحية');
         // «تاب واحد بس»: خلص الشغل → مفيش سبب يفضل أي تاب مفتوح للأداة
@@ -515,8 +515,11 @@ export class QueueEngine {
     // مسح دوري ذكي: بعد كل N كلمة مفحوصة (افتراضي 8 — متزامن مع الاستراحة) — بصمة أقل وكابتشا أقل
     await this.maybePeriodicClear(cfg);
 
-    // 1) المهلة الإلزامية قبل كل كلمة
+    // 1) المهلة الإلزامية قبل كل كلمة — 📟 1.21.51: «وقوف غامض» اتلغى؛ الشريط بيعرضها بعدّادها
+    const preMs = ((this.captchaHeat || 0) === 0) ? 600 : 4000; // للعرض بس — الـScheduler بيحسب قيمته بنفسه
+    await this.setPhase('⏳ مهلة أمان قبل الكلمة الجاية', Date.now() + preMs, preMs);
     await scheduler.preKeywordDelay(cfg, { index: this.index, cold: (this.captchaHeat || 0) === 0 }, signal);
+    await this.setPhase(null);
     if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
 
     // 2) تجهيز التبويب (واحد دائم + الكلمة من صندوق البحث)
@@ -658,6 +661,7 @@ export class QueueEngine {
           // 🧘 مفيش إلغاء ومفيش تأجيل لآخر الجولة (طلب 1.20.0): بنستنى الكابتشا تتحل
           // بأي طريقة — Buster متأخر أو حل يدوي من المستخدم — وبعدها بنفسّر نفس الكلمة من الأول
           await logger.warn('queue', `🧘 "${kw.keyword}" — الكابتشا لسه معلقة؛ هنستنى تتحل ونعيد نفس الكلمة تاني (مش ملغاة)`);
+          await this.setPhase('🧩 مستني حل الكابتشا — اتفضل من التاب، الكلمات مش هتتلغى'); // 📟 1.21.51
           const cleared = await this.waitCaptchaCleared(tab.id, kw, signal);
           if (cleared === 'aborted') { return this.abortKeyword(kw, 'paused'); }
           if (cleared === 'park') {
@@ -751,6 +755,10 @@ export class QueueEngine {
         this.captchaStreak = (this.captchaStreak || 0) + 1; // 🧊 1.21.25: سلسلة حية للكاسحة
         await this.notify('🚫 جوجل رفض الصفحة', `"${kw.keyword}" — الريفرش ملوش لازمة هنا؛ بنمسح البيانات ونعيد في تاب جديد نضيف`);
         await logger.warn('queue', `🚫 صفحة رفض (${(first.payload && first.payload.kind) || 'http-error'}) على "${kw.keyword}" — تبريد ثم مسح بيانات + تاب جديد بنفس الكلمة`);
+        // 📟 1.21.51: ده بالظبط اللي كان محتاج يبان — «مش واقفة، بنكنس وراجعين بنفس الكلمة»
+        await this.setPhase(first.payload && first.payload.kind === 'login-wall'
+          ? '🧱 حائط «سجّل الدخول» — تهدئة قصيرة ثم مسح بيانات وتاب جديد'
+          : '🚫 صفحة رفض — تهدئة قصيرة ثم مسح بيانات وتاب جديد', Date.now() + 2000, 2000);
         await sleep(800 + Math.floor(Math.random() * 700), signal); // ⚡ 1.21.18: «فورًا» بدل 9-15 ثانية
         if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
         const fresh = await this.openFreshTab(kw, cfg, url, tab.id);
@@ -841,6 +849,7 @@ export class QueueEngine {
     if (capRestarts >= 2) { return null; }
     const cool = 5000; // v1.21.37: من 9-18 ← 5 ثواني ثابتة — المسح والترحيبية جوه openFreshTab بياخدو 3-4 ثواني فوقها أصلًا
     await logger.warn('queue', `🔄 "${kw.keyword}" — الكابتشا ركنّت: بنبدأ بيها من الصفر (المحاولة ${capRestarts + 1}/2) بعد استقرار ${Math.round(cool / 1000)} ثانية — لا استنانة يدوية ولا إيقاف للرن`);
+    await this.setPhase('🚦 الكابتشا عنّدت — استقرار ثم إعادة نفس الكلمة من الأول', Date.now() + cool, cool); // 📟 1.21.51
     await sleep(cool, signal);
     if (signal && signal.aborted) { return 'aborted'; }
     const rTab = await this.openFreshTab(kw, cfg, url, tab && tab.id);
@@ -877,6 +886,13 @@ export class QueueEngine {
       return { ok: true, started: true };
     }
     return { ok: true, live: !!live };
+  }
+
+  /** 📟 v1.21.51 (طلب المستخدم): نبضة الحدث الرئيسي لشريط اللوحة — «إيه اللي بيحصل دلوقتي»
+   *  بدل ما الأداة تبان واقفة: نص + عدّاد رجّاعي اختياري. مفيش أي سلوك فحص بيتغيّر. */
+  async setPhase(txt, untilTs, totalMs) {
+    await state.setRun({ phaseTxt: txt || null, phaseUntil: untilTs || null, phaseTotal: totalMs || null });
+    this.broadcast();
   }
 
   /** مسح بيانات التصفح تلقائياً كل N كلمة مفحوصة (0 = معطّل) */
@@ -1118,8 +1134,10 @@ export class QueueEngine {
       // بيجيب صفعة جديدة — بس من غير استنا طويلة زي الأول (8–14 ثانية كفاية)
       const cool = 8000 + Math.floor(Math.random() * 6000);
       await logger.info('captcha', `كابتشا اتحلت — تهدئة ${Math.round(cool / 1000)} ثانية قبل متابعة الفحص`);
+      await this.setPhase('🧊 الكابتشا اتحلت — تهدئة قبل المتابعة', Date.now() + cool, cool); // 📟 1.21.51
       await sleep(cool, signal);
       if (signal && signal.aborted) { return 'paused'; }
+      await this.setPhase(null);
       return 'solved';
     }
 
@@ -1343,6 +1361,7 @@ export class QueueEngine {
     // بعد التحل: تهدئة قصيرة — الرجوع الفوري لجوجل = صفعة جديدة (نفس درس 1.18.6)
     const cool = 10000 + Math.floor(Math.random() * 8000);
     await logger.info('queue', `✅ الكابتشا اتحلت — تهدئة ${Math.round(cool / 1000)} ثانية وإعادة نفس الكلمة "${kw.keyword}"`);
+    await this.setPhase('🧊 الكابتشا اتحلت — تهدئة ثم نكمّل بنفس الكلمة', Date.now() + cool, cool); // 📟 1.21.51
     await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null });
     await state.updateKeyword(kw.id, { status: C.STATUS.KW.RUNNING });
     this.broadcast();

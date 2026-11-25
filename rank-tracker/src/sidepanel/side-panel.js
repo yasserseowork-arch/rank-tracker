@@ -87,18 +87,31 @@ function renderRestStrip() {
   const txt = $('restText');
   if (!fill || !txt || !strip) { return; }
   const run = snapshot.run || {};
-  const until = run.breakUntil || 0;
-  const total = Math.max(1, run.breakTotalMs || 1);
+  // 📟 1.21.51 (طلب المستخدم): بار أحداث تحت الأزرار الرئيسية — الاستراحات بجداولها القديمة،
+  // وكل «تهدئة/برد/كابتشا/مسح» بيكتبه المحرك في phaseTxt مع عدّاد اختياري. الشريط عمره ما
+  // بيكذب: بيظهر بس وإنت في رن جارية/متوقفة مؤقتة، ومعناه «الأداة شغالة — مستنية حاجة».
+  const idle = !run.status || run.status === 'idle';
+  const until = run.breakUntil || run.phaseUntil || 0;
+  const total = Math.max(1, run.breakTotalMs || run.phaseTotal || 1);
   const left = until ? Math.max(0, until - Date.now()) : 0;
-  if (!until || left <= 0) {
+  const counting = !!(until && left > 0);
+  const hasTxt = !idle && !!run.phaseTxt;
+  if (!counting && !hasTxt) {
     strip.classList.add('hidden');
     return;
   }
   strip.classList.remove('hidden');
   const cfg = snapshot.config || {};
   const withClear = Number(cfg.clearEveryN || 0) > 0;
-  txt.textContent = t('restNow').replace('{s}', String(Math.ceil(left / 1000))) + (withClear ? t('restNowClear') : '');
-  fill.style.width = Math.max(2, Math.round((left / total) * 100)) + '%';
+  if (counting && !run.phaseTxt) {
+    txt.textContent = t('restNow').replace('{s}', String(Math.ceil(left / 1000))) + (withClear ? t('restNowClear') : '');
+  } else if (counting) {
+    txt.textContent = run.phaseTxt + ' — ' + t('phaseLeft').replace('{s}', String(Math.ceil(left / 1000)));
+  } else {
+    txt.textContent = run.phaseTxt || '';
+  }
+  fill.style.width = counting ? Math.max(2, Math.round((left / total) * 100)) + '%' : '100%';
+  fill.classList.toggle('no-count', !counting);
 }
 
 /* إشعارات الأداة — جوه اللوحة مكان الشريط، بتختفي لوحدها بعد 45 ثانية أو بالخ ✓ */
@@ -123,6 +136,8 @@ function bindRestStrip() {
     if (typeof document !== 'undefined' && document.hidden) { return; } // 🪶 اللوحة مخفية — مفيش رسم خالص
     const run = (snapshot && snapshot.run) || {};
     const live = (run.breakUntil && Date.now() < run.breakUntil + 1500)
+      || (run.phaseUntil && Date.now() < run.phaseUntil + 1500)
+      || (run.phaseTxt && run.status !== 'idle') // 📟 1.21.51: حدث بلا عدّاد — نفس اللمس كل ثانية
       || (run.notice && (Date.now() - (run.notice.ts || 0) < 46000));
     if (!live && (tickBeat++ % 4)) { return; } // ⚡ في الهدوء: فحص كل ثانيتين بدل كل نص — نفس الشكل بربع اللمس
     renderRestStrip();

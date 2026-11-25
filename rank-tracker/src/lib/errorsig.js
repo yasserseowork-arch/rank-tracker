@@ -8,7 +8,7 @@
   /**
    * @param {string} title عنوان الصفحة
    * @param {string} bodyText عينة نص الجسم
-   * @returns {'http-error'|'network'|'google-error'|'captcha-text'|null}
+   * @returns {'http-error'|'network'|'google-error'|'captcha-text'|'login-wall'|null}
    */
   function detectError(title, bodyText) {
     const t = String(title || '').toLowerCase();
@@ -34,6 +34,14 @@
       || b.includes('حاول مرة أخرى') || b.includes('إذا كنت تواجه مشكلة في الوصول')
       || b.includes('يواجه google مشكلة') || b.includes('seems like there is a problem')) {
       return 'google-error';
+    }
+    // 🧱 v1.21.51 (سكرينشوت المستخدم): «تسجيل الدخول للمتابعة» — حائط إثبات البشرية
+    // اللي بيحطه جوجل بدل النتائج لما يحس بحاجة آلية؛ مفيش كابتشا فيه ومفيش noResults —
+    // كان بيتحسب صفحة فاضية والكلمات بتتسجل «غير موجود» غلط! تصنيفه يودّيه مسار
+    // التبريد + مسح البيانات + تاب جديد بنفس الكلمة (مسار الرفض 1.20.2 نفسه).
+    if (b.includes('تسجيل الدخول للمتابعة') || b.includes('sign in to continue')
+      || b.includes('لإثبات أنك شخص حقيقي') || b.includes('to see more results, sign in')) {
+      return 'login-wall';
     }
     if (b.includes('unusual traffic') || b.includes('حركة مرور غير عادية')
       || b.includes('abnormal traffic') || b.includes('automated queries')) {

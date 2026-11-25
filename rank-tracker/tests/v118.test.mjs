@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.50');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.50'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.50'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.50\]/m);
+  assert.equal(man.version, '1.21.51');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.51'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.51'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.51\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -1913,7 +1913,7 @@ test('v12145: 403 في نص القراءة — تريبواير كل دفعة، 
   const trips = (serp.match(/D\.errorsig\.detectError\(document\.title, bodySample\(\)\)/g) || []).length;
   assert.ok(trips >= 4, `عدد نقاط التفتيش ${trips} — لازم 4: إقلاع/معالجة خطأ/أول شاشة/نص النزول`);
   assert.ok(serp.includes('const midKind = D.errorsig.detectError'), 'تريبواير النزول مش موجود');
-  assert.ok(serp.includes("if (midKind === 'http-error')"), 'الرفض مش متحوَّل لمسار نجاة');
+  assert.ok(serp.includes("if (midKind === 'http-error' || midKind === 'login-wall')"), 'الرفض مش متحوَّل لمسار نجاة'); // 🧱 1.21.51: الحائط بقى رفضًا كمان
   assert.ok(serp.includes('truncatedByBlock: true'), 'الإنقاذ مش عاملام بعلامة القطع');
   assert.ok(serp.includes('if (firstPollBlocked)'), 'الشاشة الأولى مش محروسة');
   assert.ok(serp.includes('if (wait && wait.blocked)'), 'المحرك مش مستقبل علامة الرفض');
@@ -2049,4 +2049,38 @@ test('v12150: السرعة الكبيرة والدقة الكبيرة — است
   assert.ok(!/searchParams\.set\('num'/.test(uk) && !uk.includes("|| 'sa'"), 'عقيدة اللينك اتكسرت — ممنوع أبديًا');
   assert.ok(serp.includes("const keyX = url + '\\n' + String(h3.textContent || '')"), 'دديوب .48 اتفك');
   assert.ok(serp.includes('const ms = cold ? 600 : 4000;') || read('src/background/core/scheduler.js').includes('const ms = cold ? 600 : 4000;'), 'إيقاع الفواصل اتبدل');
+});
+
+test('v12151: حائط «تسجيل الدخول» ليش «مش موجود» — وبار أحداث تحت الأزرار ما بيكذبش', () => {
+  const esig = v119loadClassic('src/lib/errorsig.js').SRT.errorsig;
+  // سلوك حرفي من سكرينشوت المستخدم
+  assert.equal(esig.detectError('تسجيل الدخول للمتابعة', 'يُرجى تسجيل الدخول للمتابعة لإثبات أنك شخص حقيقي والاطّلاع على المزيد من النتائج.'), 'login-wall', 'الحائط بالعربي مش متصنّف');
+  assert.equal(esig.detectError('Sign in to continue', 'Please sign in to continue to see more results.'), 'login-wall', 'الحائط بالإنجليزي مش متصنّف');
+  assert.notEqual(esig.detectError('Google', 'نتائج عادية جدًا'), 'login-wall', 'الصفحة السليمة بتتلطّخ');
+  const serp = read('src/content/serp.js');
+  assert.ok(serp.includes("if (kind === 'http-error' || kind === 'login-wall')"), 'handleBadPage مابيشلش الحائط');
+  assert.ok(serp.includes("k0 === 'http-error' || k0 === 'login-wall'"), 'الحائط مش متلبَّس قبل أول نتيجة');
+  assert.ok(serp.includes('firstPollKind'), 'نوع البلوك مابقاش بيتسرق من أول شاشة');
+  assert.ok(serp.includes("تسجيل الدخول للمتابعة/i"), 'الجلب الخلفي بيمر من ورا الحائط — لا!');
+  const q = read('src/background/core/queue.js');
+  assert.ok(q.includes('async setPhase(txt, untilTs, totalMs)'), 'مساعد نبضة الشريط مش موجود');
+  const uses = (q.match(/this\.setPhase\(/g) || []).length;
+  assert.ok(uses >= 6, 'الشريط مش موصل بأحداث الرن (' + uses + ' مواقع)');
+  assert.ok(q.includes('حائط «سجّل الدخول»'), 'رسالة الحائط في مسار التاب الجديد مش موجودة');
+  // الشريط ما بيمديش حكم زور: الحائط راكب على مسار الرفض، مش على التسجيل
+  assert.ok(q.includes("recordExhausted"), 'مسار الإنهاك اتلمس');
+  const sp = read('src/sidepanel/side-panel.js');
+  assert.ok(sp.includes('run.phaseTxt'), 'اللوحة مابتقرأش الأحداث');
+  assert.ok(sp.includes("fill.classList.toggle('no-count', !counting)"), 'النبضة اللانهائية مش مربوطة');
+  const html = read('src/sidepanel/side-panel.html');
+  const iCtl = html.indexOf('id="btnReset"'); const iStrip = html.indexOf('id="restStrip"'); const iStats = html.indexOf('stats-grid');
+  assert.ok(iCtl > -1 && iStrip > iCtl && iStrip < iStats, 'البار مش تحت الأزرار الرئيسية فوق الإحصاءات');
+  assert.ok(html.indexOf('id="restStrip"', iStrip + 1) === -1, 'البار اتضاعف في الـHTML');
+  const css = read('src/sidepanel/side-panel.css');
+  assert.ok(css.includes('@keyframes restPulse'), 'نبضة الاستظار بلا ستايل');
+  // العقائد: التايمرات سايدة، والفاصل هو نفسه اللي بيبان في الشريط
+  assert.ok(q.includes("const preMs = ((this.captchaHeat || 0) === 0) ? 600 : 4000;") && read('src/background/core/scheduler.js').includes('const ms = cold ? 600 : 4000;'), 'الشريط بيكذب على الإيقاع أو الإيقاع اتبدل');
+  assert.ok(serp.includes("if (midKind === 'http-error' || midKind === 'login-wall')"), 'تريبواير .45 اتفك');
+  const uk = read('src/background/core/urlkit.js');
+  assert.ok(!/searchParams\.set\('num'/.test(uk) && !uk.includes("|| 'sa'"), 'عقيدة اللينك — لا مس');
 });

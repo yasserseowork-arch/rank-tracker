@@ -43,7 +43,7 @@
     const kind = D.errorsig.detectError(document.title, bodySample());
     live.errorKind = kind;
     if (!kind || kind === 'captcha-text') { return false; }
-    if (kind === 'http-error') {
+    if (kind === 'http-error' || kind === 'login-wall') { // 🧱 1.21.51: حائط الدخول = رفض، مساره تاب جديد بعد مسح بيانات
       // 403/404/429/5xx: لا ريفرش في نفس التبويب — المحرك يفتح تبويباً جديداً
       await D.msg.send(C.MSG.SERP_ERROR, { kind: kind, keyword: keyword, needsNewTab: true });
       return true;
@@ -572,7 +572,7 @@
       const resp0 = await fetch(u.toString(), { credentials: 'include', redirect: 'follow' });
       if (!resp0.ok) { return { err: 'http-' + resp0.status }; }
       const html = await resp0.text();
-      if (/\/sorry\/|unusual traffic|حركة مرور غير عادية/i.test(html)) {
+      if (/\/sorry\/|unusual traffic|حركة مرور غير عادية|تسجيل الدخول للمتابعة/i.test(html)) {
         if (!blockReported) { blockReported = true; D.msg.send(C.MSG.SERP_FETCH_BLOCKED, { reason: 'captcha', pageUrl: u.toString() }); }
         return { blocked: true };
       }
@@ -753,9 +753,11 @@
     let aiSeenLogged = false;
     let firstPolls = 0;
     let firstPollBlocked = false;
+    let firstPollKind = 'http-error';
     const firstHit = await D.waitFor(() => {
       // 🚫 v1.21.45: 403 نزل وهو لسه بيحمّل أول شاشة؟ امشِ فورًا — متستناش الـ20 ثانية
-      if (D.errorsig.detectError(document.title, bodySample()) === 'http-error') { firstPollBlocked = true; return true; }
+      const k0 = D.errorsig.detectError(document.title, bodySample()); // 🧱 1.21.51: الحائط بيتلبس قبل أول نتيجة
+      if (k0 === 'http-error' || k0 === 'login-wall') { firstPollBlocked = true; firstPollKind = k0; return true; }
       const snap = collect();
       if (!snap.items.length) {
         // 🧨 v1.21.42 (علة «الصفحة قدامك والأداة صفر»): الـnoResults كانت بتتأكد
@@ -791,7 +793,7 @@
       return { items: early.items, aiItems: aiE.items, aiText: aiE.text, adsCount: 0, early: true, hit: early.hit };
     }
     if (firstPollBlocked) {
-      return { blocked: 'http-error', items: [], aiItems: [], aiText: '', adsCount: 0 };
+      return { blocked: firstPollKind, items: [], aiItems: [], aiText: '', adsCount: 0 };
     }
     if (firstHit && firstHit !== true && firstHit.nodeType) {
       return { early: false, settled: true, noResults: true, items: [], aiItems: [], aiText: '' };
@@ -839,7 +841,7 @@
       // لو الموقع كان اتلقى في المقروء يتقَيَّد (البلوك مابيلغيش الحكم)، وإلا
       // خروج بعلامة blocked يودّي المحرك على مسار التاب الجديد (وصفة 1.20.2).
       const midKind = D.errorsig.detectError(document.title, bodySample());
-      if (midKind === 'http-error') {
+      if (midKind === 'http-error' || midKind === 'login-wall') { // 🧱 1.21.51: الحائط في نص القراءة = بلوك مش فراغ
         const aiB = collectAi();
         const hitB = immediateFind(cfg, snapshot, aiB.items);
         if (hitB && hitB.where === 'organic') {

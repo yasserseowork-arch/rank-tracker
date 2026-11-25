@@ -8,7 +8,7 @@
 - Doctrines standing: A/B parity (no gl/hl/ie when unset, .com fixed, googleHost explicit only), GsLoc panel-defaults SA, 403 tripwire, black-box log (footer+top15), full wipe, no captcha-internals touch, 264 tests green.
 
 ## v1.21.50 — «حل كل المشاكل + أسرع بكتير وأدق اوي اوي» (9220548, pushed; zip 6721198 B md5 f121b85495f554f3b354448ede282ed3; Drive id pending record below; 266/266; in-zip 16/16)
-- 🎯 DOIX (كان موجود من .98!): selfFetch start كان `ceil(merged.length/10)*10` في الموضعين (الانطلاق 548 والتصحيح الذاتي) — لو المقروء الحي مش من مضاعفات 10 (15 مثلًا) بتقع فجوة #16-20 وكل المراكز بعدها تنزلق 5 لفوق. بقى `floor` ×2 — الدفعة المتكررة تتغطى والدديوب (.48) يشيل التكرار. الاختبار السلبي `/Math\.ceil\(merged\.length/` في v12150 بيحميها.
+- 🎯 لغم دقة (كان موجود من .98!): selfFetch start كان `ceil(merged.length/10)*10` في الموضعين (الانطلاق 548 والتصحيح الذاتي) — لو المقروء الحي مش من مضاعفات 10 (15 مثلًا) بتقع فجوة #16-20 وكل المراكز بعدها تنزلق 5 لفوق. بقى `floor` ×2 — الدفعة المتكررة تتغطى والدديوب (.48) يشيل التكرار. الاختبار السلبي `/Math\.ceil\(merged\.length/` في v12150 بيحميها.
 - 🚀 بايبرلاين: `inflight={start,p:grabSafe(start)}` يتولّع بعد التصحيح وقبل الـsleep؛ اللوب يستهلكه لو start مطابق وإلا يستناه ويرميه (بلا rejection يتيم); `blockReported` latch — SERP_FETCH_BLOCKED مرة واحدة للرن. مهذّب 550±300 سايد (4 تربيطات)، retry 800 سايد، batchSettleMs||5000 قراءة سايد.
 - 🚀 ستل مبكر: `((companionActive() || loopN < 2) ? batchSettle : 1200)` — صفحة ساكنة بلا رفيق تتسرخص بـ1.2ث بدل 2.6؛ selfFetch يغطي #11-100 بالحرف، فمفيش خسارة دقة. loopN حارس الدورتين.
 - 🔎 وعد .47 اتسدد: لوج `الرابط اللي الأداة قريته بالحرف` لكل كلمة + شارة `.res-check` 🔎 في جدول النتائج تفتح row.serpUrl (المحفوظ أصلًا).
