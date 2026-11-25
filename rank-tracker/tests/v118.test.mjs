@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.51');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.51'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.51'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.51\]/m);
+  assert.equal(man.version, '1.21.52');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.52'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.52'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.52\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -2083,4 +2083,28 @@ test('v12151: حائط «تسجيل الدخول» ليش «مش موجود» �
   assert.ok(serp.includes("if (midKind === 'http-error' || midKind === 'login-wall')"), 'تريبواير .45 اتفك');
   const uk = read('src/background/core/urlkit.js');
   assert.ok(!/searchParams\.set\('num'/.test(uk) && !uk.includes("|| 'sa'"), 'عقيدة اللينك — لا مس');
+});
+
+test('v12152: إحياء أوتوماتيك بدل «وقّف وشغّل» + استشارة عاصفة الكابتشا', () => {
+  const q = read('src/background/core/queue.js');
+  // 1) النبضة + الحارس
+  assert.ok(q.includes('void state.setRun({ beatTs: Date.now() });'), 'البث مابيطبعش نبضة');
+  assert.ok(q.includes('Date.now() - beat > 180000'), 'مفيش تصعيد حارس للحلقة الحبسية');
+  assert.ok(q.includes('إحياء لطيف واستئناف من نفس الكلمة'), 'لوج الرقابة مش موجود');
+  assert.ok(q.includes('ben3amel') === false || q.includes('pendingRestart = true; // لما الحلقة تتفكك'), 'الإحياء ماركبش على آلية pendingRestart الرسمية');
+  assert.ok(q.includes("phaseTxt: '🩺 بنفيّق الحلقة — إعادة نفس الكلمة'"), 'الشريط مابيقولش إيه اللي بيحصل');
+  // 2) الصبر بقى بعدّاد شفاف
+  assert.ok(q.includes('Date.now() + 66000, 66000'), 'صبر الكابتشا مالبس عدّاد');
+  assert.ok(q.includes('Date.now() + 21000, 21000'), 'راحة الستالي مالبسة عدّاد');
+  // 3) الاستشارة — مرة في الرن، في النقطتين، وبتتصفّر
+  assert.ok(q.includes('async maybeAdviseSignIn()'), 'البوابة الاستشارية مش موجودة');
+  const calls = (q.match(/await this\.maybeAdviseSignIn\(\);/g) || []).length;
+  assert.ok(calls === 2, 'الاستشارة موصلتش بنقطتي الكابتشا (' + calls + ')');
+  assert.ok(q.includes('if ((this.captchaSeenThisRun || 0) < 3 || this._signInAdvised) { return; }'), 'الاستشارة مش مشروطة بمرة في الرن');
+  assert.ok(q.includes('this._signInAdvised = false;'), 'الاستشارة مش بتتصفّر مع الرن الجاي');
+  // 4) العقيدة: مسارات الحكم والمهابل سايدة
+  const ex = (q.match(/return this\.recordExhausted/g) || []).length;
+  assert.ok(ex === 8, 'عدد مسارات الإنهاك اتغير (' + ex + ') — العقيدة!');
+  assert.ok(q.includes('}, 1200);') && q.includes('}, 800);'), 'مسبار الكابتشا اتلمس — ممنوع');
+  assert.ok(q.includes('if (waited >= 60)'), 'مهلة الصبر الشرعية اتبدلت من تحت');
 });

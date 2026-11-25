@@ -77,8 +77,23 @@ export class QueueEngine {
       this.abortController = new AbortController();
       await this.healStaleBadges();
       this.loop();
-    } else if (active) {
-      this.armWatchdog();
+    } else if (active && this.looping) {
+      // 🩺 1.21.52 (طلب المستخدم: «بتقف ومش عارف ليه»): الحلقة حية بس مشربة في انتظار
+      // ميت (3 دقايق من غير أي بصمة تقدم — كل الانتظارات الشرعية أقصر من كده بكتير)؟
+      // بنعمل اللي إنت بتعمله يدويًا بالظبط، أوتوماتيك: تنفيس هادي + إعادة نفس الكلمة.
+      const beat = run.beatTs || 0;
+      if (Date.now() - beat > 180000) {
+        await logger.warn('queue', '🩺 رقابة ذاتية: مفيش أي نشاط من الحلقة 3 دقايق — إحياء لطيف واستئناف من نفس الكلمة');
+        this.pendingRestart = true; // لما الحلقة تتفكك هتعاد من فورها (نفس آلية resume الرسمية)
+        await state.setRun({ status: C.STATUS.RUN.RUNNING, captcha: null, pauseReason: null,
+          beatTs: Date.now(), phaseTxt: '🩺 بنفيّق الحلقة — إعادة نفس الكلمة' });
+        if (this.abortController) { try { this.abortController.abort(); } catch (_) {} }
+        this.abortController = new AbortController();
+        this.armWatchdog();
+        this.broadcast();
+      } else {
+        this.armWatchdog();
+      }
     } else {
       this.disarmWatchdog();
     }
@@ -192,6 +207,8 @@ export class QueueEngine {
   }
 
   broadcast() {
+    // 🫀 1.21.52: كل بصمة تقدم = ختم زمني — الحارس بيميز الحلقة الشغالة عن الحبسية
+    void state.setRun({ beatTs: Date.now() });
     state.snapshot().then((snap) => {
       try {
         chrome.runtime.sendMessage(Object.assign({ type: C.MSG.STATE_BROADCAST }, snap), () => { void chrome.runtime.lastError; });
@@ -608,6 +625,7 @@ export class QueueEngine {
         this.captchaHeat = (this.captchaHeat || 0) + 1; // 🌡 عدّاد الحرارة: يبرّد الاستراحة الجاية
         this.captchaSeenThisRun = (this.captchaSeenThisRun || 0) + 1; // 📊 للتقرير
         this.captchaStreak = (this.captchaStreak || 0) + 1; // 🧊 1.21.25: سلسلة حية للكاسحة
+        await this.maybeAdviseSignIn(); // 💡 1.21.52
         const solveStartedAt = Date.now();
         const auto = await this.handleCaptcha(tab.id, kw, cfg, signal, false);
         if (auto === 'solved') {
@@ -661,7 +679,7 @@ export class QueueEngine {
           // 🧘 مفيش إلغاء ومفيش تأجيل لآخر الجولة (طلب 1.20.0): بنستنى الكابتشا تتحل
           // بأي طريقة — Buster متأخر أو حل يدوي من المستخدم — وبعدها بنفسّر نفس الكلمة من الأول
           await logger.warn('queue', `🧘 "${kw.keyword}" — الكابتشا لسه معلقة؛ هنستنى تتحل ونعيد نفس الكلمة تاني (مش ملغاة)`);
-          await this.setPhase('🧩 مستني حل الكابتشا — اتفضل من التاب، الكلمات مش هتتلغى'); // 📟 1.21.51
+          await this.setPhase('🧩 مستني حل الكابتشا — اتفضل من التاب؛ إعادة أوتوماتيك بعد 60 ثانية', Date.now() + 66000, 66000); // 📟 1.21.51/.52
           const cleared = await this.waitCaptchaCleared(tab.id, kw, signal);
           if (cleared === 'aborted') { return this.abortKeyword(kw, 'paused'); }
           if (cleared === 'park') {
@@ -679,6 +697,7 @@ export class QueueEngine {
             // بنفس الكلمة (الكلمة ما بتتبوظش: بتتعاد من الأول في جلسة نضيفة)
             if ((this.staleWipesThisRun || 0) >= 6) {
               await logger.info('queue', `⏳ "${kw.keyword}" — مسحات الكابتشا البايّت وصلت سقفها في الرن؛ رجوع للصبر العادي على نفس التاب`);
+              await this.setPhase('⏳ راحة قصيرة قبل مواصلة الصبر على نفس التاب', Date.now() + 21000, 21000); // 📟 1.21.52
               await sleep(20000, signal);
               if (signal && signal.aborted) { return this.abortKeyword(kw, 'paused'); }
               continue;
@@ -753,6 +772,7 @@ export class QueueEngine {
         this.captchaHeat = (this.captchaHeat || 0) + 1; // النطاق اتحرق شوية — برّد الاستراحة الجاية
         this.captchaSeenThisRun = (this.captchaSeenThisRun || 0) + 1; // 📊 للتقرير
         this.captchaStreak = (this.captchaStreak || 0) + 1; // 🧊 1.21.25: سلسلة حية للكاسحة
+        await this.maybeAdviseSignIn(); // 💡 1.21.52
         await this.notify('🚫 جوجل رفض الصفحة', `"${kw.keyword}" — الريفرش ملوش لازمة هنا؛ بنمسح البيانات ونعيد في تاب جديد نضيف`);
         await logger.warn('queue', `🚫 صفحة رفض (${(first.payload && first.payload.kind) || 'http-error'}) على "${kw.keyword}" — تبريد ثم مسح بيانات + تاب جديد بنفس الكلمة`);
         // 📟 1.21.51: ده بالظبط اللي كان محتاج يبان — «مش واقفة، بنكنس وراجعين بنفس الكلمة»
@@ -838,6 +858,16 @@ export class QueueEngine {
     state.updateKeyword(kw.id, { status: C.STATUS.KW.PENDING });
     void reason;
     return 'paused';
+  }
+
+  /** 💡 v1.21.52 (من سكرينشوتات المستخدم: 15 كابتشا محلولة والبروفيل باين مش مسجّل دخول):
+   *  نصيحة واحدة في الرن — تسجيل الدخول بيقلل الحوائط والكابتشا بشكل ملحوظ لأن جوجل
+   *  بيطمّن للحسابات المعروفة. الأداة ما بتلمسش أي حساب ومابتعملش login — نصيحة بس. */
+  async maybeAdviseSignIn() {
+    if ((this.captchaSeenThisRun || 0) < 3 || this._signInAdvised) { return; }
+    this._signInAdvised = true;
+    await logger.info('queue', '💡 الكابتشات بتتكرر؟ الرن بيشتغل على بروفيل على الأغلب مش مسجّل دخول Google — تسجيل الدخول بحسابك على نفس البروفيل بيقلّل الكابتشا وحائط «سجّل الدخول» بشكل ملحوظ. الأداة مش بتلمس حسابك وبتفضل زي ما هي — دي نصيحة من واقع شاشتك.');
+    await this.notify('💡 لتقليل الكابتشا', 'سجّل دخول Google في نفس البروفيل اللي عليه الإضافة — الحوائط بتقل جدًا.');
   }
 
   /** 🚦 v1.21.30 (طلب المستخدم الحرفي: «لما الركن يظهر — اتعامل وابدأ بنفس الكلمة من
@@ -1621,6 +1651,7 @@ export class QueueEngine {
       };
       await state.appendRunStat(stat);
       this.captchaSeenThisRun = 0;
+      this._signInAdvised = false; // 💡 1.21.52: الاستشارة مرة في الرن
       this.staleWipesThisRun = 0; // v1.21.8: عدادات الرن بتترمس مع بداية رن جديد
       this.staleRevivesThisRun = 0; // 🩹 v1.21.21: وعدّاد الإحياءات معاهم
       this.captchaRevealedTab = null; // v1.21.16: و«التاب المعروض» كمان — كل رن يبدأ نضيف
