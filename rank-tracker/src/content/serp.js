@@ -545,9 +545,11 @@
   async function selfFetchMore(cfg, baseItems, aiItems) {
     const merged = baseItems.slice();
     const seen = new Set(merged.map((i) => i.url + '\n' + String(i.title || '').replace(/\s+/g, ' ').trim().toLowerCase()));
-    let start = Math.ceil(merged.length / 10) * 10;
+    let start = Math.floor(merged.length / 10) * 10; // 🎯 1.21.50: نفس لغم الانزلاق عند الانطلاق — floor + دديوب يشيل أي تكرار ويغطي أي فجوة
     const maxBatches = cfg.selfFetchMaxBatches || 9;
     let attempts = 0;
+    let inflight = null;       // 🚀 1.21.50: الدفعة الجاية شَبّاعة على الشبكة أثناء القراية والنوم
+    let blockReported = false; // الصفحة المحظورة تتبلّغ مرة واحدة حتى لو جات من دفعة استباقية
 
     // دفعة فاشلة كانت بتمحو تغطية المراكز الغويط بصمت (شكوى: «موقعي في #20 واتسجل مش
     // موجود») — بقى فيه إعادة محاولة عاقلة للدفعة نفسها، وتوقيت ذاتي-التصحيح
@@ -571,19 +573,27 @@
       if (!resp0.ok) { return { err: 'http-' + resp0.status }; }
       const html = await resp0.text();
       if (/\/sorry\/|unusual traffic|حركة مرور غير عادية/i.test(html)) {
-        D.msg.send(C.MSG.SERP_FETCH_BLOCKED, { reason: 'captcha', pageUrl: u.toString() });
+        if (!blockReported) { blockReported = true; D.msg.send(C.MSG.SERP_FETCH_BLOCKED, { reason: 'captcha', pageUrl: u.toString() }); }
         return { blocked: true };
       }
       return { doc: new DOMParser().parseFromString(cleanSERPHTML(html), 'text/html') };
     }
+    async function grabSafe(s) { try { return await grab(s); } catch (_) { return { err: 'net' }; } }
 
     for (let batch = 0; batch < maxBatches && merged.length < expectedNum; batch++) {
       let res = null;
-      try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
+      // 🚀 1.21.50: لو الدفعة المستبقة مطابقة للـstart — الشبكة اتاستهلكت فعلًا، نقرا من هنا
+      if (inflight && inflight.start === start) {
+        res = await inflight.p;
+      } else if (inflight) {
+        await inflight.p; // تنبؤ جانَب طريق التجميع — نستناه بهدوء ونطرّحه (مفيش rejection يتيم في الكونسول)
+      }
+      inflight = null;
+      if (!res) { res = await grabSafe(start); }
       if (res.blocked) { attempts++; break; }
       if (res.err) {
         await D.sleep(800); // 🚀 1.21.49: سكتة ثم فرصة تانية لنفس الدفعة — كانت 1200 من .20، بقت 800 (الفلسفة نفسها، أقصر)
-        try { res = await grab(start); } catch (_) { res = { err: 'net' }; }
+        res = await grabSafe(start);
         if (res.err) {
           attempts++;
           if (attempts >= 2) { break; }
@@ -601,15 +611,24 @@
         attempts++;
         if (attempts >= 2) { break; } // صفحتين ورا بعض فاضيتين = جوجل قافل الجلب، كفاية أدب
         start += 10;
-        await D.humanSleep(350, 150); // 🚀 1.21.49: كانت 550±250 —_fetch خلفية على نفس الجلسة، السكتة أقصر وأدق نفس التغطية
+        await D.humanSleep(350, 150); // 🚀 1.21.49: كانت 550±250 — دفعات selfFetch خلفية على نفس الجلسة، السكتة أقصر بنفس التغطية
         continue;
       }
       attempts = 0;
-      start = Math.ceil(merged.length / 10) * 10; // تصحيح ذاتي لو الصفحة جت 20 أو 10
+      // تصحيح ذاتي لو الصفحة جت 20 أو 10 — 🎯 1.21.50: كانت ceil، ولما المقروء مش من
+      // مضاعفات العشرة (15 من سكرول بطيء) كان بيكمل من #21 والخمس #16-20 بتسقط — وكل
+      // المراكز بعدها بتنزلق 5 لفوق. floor بيجيب الصفحة اللي فيها الناقص كامل، والدديوب
+      // (url+title) بيشيل التكرار: ترتيب حقيقي من غير قفزات ولا ازدواج.
+      start = Math.floor(merged.length / 10) * 10;
       const hit = quickFind(merged, aiItems, cfg);
       if (hit) {
         live.early = true;
         return { items: merged, aiItems: aiItems, early: true, hit: hit, selfFetched: true };
+      }
+      // 🚀 1.21.50: ولّع الدفعة الجاية بدري — وقت الشبكة فوقا على النوم والقياس؛ لو
+      // التصحيح جاب start تاني في الدورة الجاية، التنبؤ يتطرّح والبايبلاين بيكمل طبيعي
+      if (merged.length < expectedNum && batch + 1 < maxBatches) {
+        inflight = { start: start, p: grabSafe(start) };
       }
       // v1.21.9: 0.9–1.8 ثانية — لسه فوق سرعة قراءة البشر، بس الرن ما يقعدش على الدفعات
       await D.humanSleep(550, 300); // ⚡ 1.21.20 (طلب السرعة): فاصل دفعات خلفي — الصفحة الحقيقية متقفلش عليه
@@ -799,6 +818,7 @@
     let lastCount = -1;
     let lastChange = Date.now();
     let settled = false;
+    let loopN = 0; // 🚀 1.21.50: عدّاد دورات — يحمي قرار الاستقرار المبكر من عجلة الدفعة الأولى
     let gaveCompanionExtra = false;
     let companionSeen = false;
     let aiText = '';
@@ -811,6 +831,7 @@
 
     // 2) لسه مش موجود: نزول تدريجي + فحص بعد كل دفعة — أول ظهور = وقف فوري
     for (;;) {
+      loopN += 1;
       const snapshot = collect();
       // 🚫 v1.21.45 (علة «علّقت على 403» — سكرينشوت المستخدم): جوجل قَلَب الصفحة
       // لصفحة رفض في نص النزول (وشريط «Loading page 2~3...» فِلِس باين تحتها) —
@@ -851,7 +872,10 @@
       if (count !== lastCount) {
         lastCount = count;
         lastChange = now;
-      } else if (count > 0 && now - lastChange >= batchSettle) {
+      } else if (count > 0 && now - lastChange >= ((companionActive() || loopN < 2) ? batchSettle : 1200)) {
+        // 🚀 1.21.50: صفحة ساكنة والرفيق مش موجود — انتظار التسوية الكامل ضريبة على هواها؛
+        // الدفعات #11-100 هتتجيب كاملة بـselfFetch (تغطية بالحرف)، فنتسارع لـ1.2ث.
+        // مع رفيق أو في الدورتين الأولانيات: batchSettle الكامل زي ما هو
         if (!gaveCompanionExtra && companionSeen) {
           gaveCompanionExtra = true;
           lastChange = now;

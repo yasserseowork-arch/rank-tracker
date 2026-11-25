@@ -580,6 +580,9 @@ textarea { margin-top: 2px; }
 
 /* تركيز كيبورد ذهبي من غير ما يزحزح المحاذاة */
 .tab-btn:focus-visible, .btn:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+/* 🔎 1.21.50: شارة «نفس الرابط» في جدول النتائج — خافتة، تلمع عند اللمس */
+.res-check { margin-inline-start: 6px; font-size: 12px; line-height: 1; text-decoration: none; opacity: .45; transition: opacity .12s ease; }
+.res-check:hover, .res-check:focus-visible { opacity: 1; }
 
 @media (max-width: 430px) {
   .controls, .stats-grid { grid-template-columns: 1fr 1fr; }

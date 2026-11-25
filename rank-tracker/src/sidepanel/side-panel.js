@@ -265,6 +265,18 @@ function renderResults() {
 
     const tdKw = document.createElement('td');
     tdKw.textContent = row.keyword;
+    // 🔎 v1.21.50: يفتح نفس رابط الفحص — «شك في نتيجة؟ قارن بإيدك بضغطة»
+    if (row.serpUrl) {
+      const chk = document.createElement('a');
+      chk.className = 'res-check';
+      chk.href = row.serpUrl;
+      chk.target = '_blank';
+      chk.rel = 'noreferrer';
+      chk.dir = 'ltr';
+      chk.title = 'افتح نفس الرابط اللي الأداة قريته — قارن يدويًا';
+      chk.textContent = '🔎';
+      tdKw.appendChild(chk);
+    }
 
     const tdPos = document.createElement('td');
     const pos = document.createElement('span');

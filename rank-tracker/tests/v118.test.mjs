@@ -474,10 +474,10 @@ test('v119: السيرة الطويلة — حارس no-target وبلاغ الح
 
 test('v119: النسخة الحالية في المواضع الثلاثة والـ CHANGELOG مفتوح بيها', () => {
   const man = JSON.parse(read('manifest.json'));
-  assert.equal(man.version, '1.21.49');
-  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.49'/);
-  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.49'/);
-  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.49\]/m);
+  assert.equal(man.version, '1.21.50');
+  assert.match(read('src/lib/constants.js'), /VERSION = '1\.21\.50'/);
+  assert.match(read('src/background/core/bridge.js'), /VERSION:\s*'1\.21\.50'/);
+  assert.match(read('CHANGELOG.md'), /^## \[1\.21\.50\]/m);
 });
 
 /* ---------------- v1.19.1 — المراكز الغويط (#30+) ما تضيعش ---------------- */
@@ -582,7 +582,7 @@ test('v1198: الجلب الخلفي اتقوّى — إعادة محاولة، 
   assert.match(serp, /u\.searchParams\.set\('num', '20'\)/, 'صفحة الجلب الخلفي لسه بلا num=20');
   assert.match(serp, /uu\.searchParams\.get\('q'\) \|\| uu\.searchParams\.get\('url'\)/, 'روابط /url?q= لسه بتسقط النتيجة بدل ما تتفك');
   assert.ok(serp.includes('سكتة ثم فرصة تانية'), 'الدفعة الفاشلة لسه بتتمحو من غير إعادة محاولة');
-  assert.match(serp, /start = Math\.ceil\(merged\.length \/ 10\) \* 10; \/\/ تصحيح ذاتي/, 'التوقيت لسه +=10 أعمى');
+  assert.match(serp, /start = Math\.floor\(merged\.length \/ 10\) \* 10;/, 'التوقيت لسه ceil — فجوة الخمس مرات بتسرق المراكز! (1.21.50: floor + دديوب)');
   assert.match(serp, /selfFetchMaxBatches \|\| 9/, 'الفول-باك لسه 6 دفعات');
   assert.match(serp, /🛰 الجلب الخلفي/, 'مفيش سجل شفافية للتغطية');
   assert.ok(!/if \(!resp\.ok\) \{ break; \}/.test(serp), 'لسه break صامت على خطأ HTTP');
@@ -2019,4 +2019,34 @@ test('v12149: السرعة المشروعة — فاست-لينج 100-مكتمل
   // فاصل ما قبل الكلمة سايد بقيمه (0.6/4 ث) — قرار .37 مش للبيع
   const sch = read('src/background/core/scheduler.js');
   assert.ok(sch.includes('const ms = cold ? 600 : 4000;'), 'إيقاع الفواصل اتبدّل من تحتانا');
+});
+
+test('v12150: السرعة الكبيرة والدقة الكبيرة — استباق الدفعات، ستل مبكر بلا رفيق، و🔎 قابل للنقر', () => {
+  const serp = read('src/content/serp.js');
+  // 1) البايبرلاين: الدفعة الجاية تشحن قبل النوم، والحارس يزرع مرة واحدة
+  assert.ok(serp.includes('inflight = { start: start, p: grabSafe(start) };'), 'استباق الدفعات مش متولّع');
+  assert.ok(serp.includes('if (inflight && inflight.start === start)'), 'استهلاك الاستباق مش موجود');
+  assert.ok(serp.includes('async function grabSafe(s)'), 'grabSafe مش موجود — ريفيكشن يتيم في الكونسول');
+  assert.ok(serp.includes('if (!blockReported) { blockReported = true;'), 'بلاغ الحظر مش محروس بمرة واحدة');
+  // 2) ستل مبكر: صفحة ساكنة بلا رفيق = 1.2ث مش 2.6 — والتغطية نفسها بـselfFetch
+  assert.ok(serp.includes('((companionActive() || loopN < 2) ? batchSettle : 1200)'), 'ستل الصفحة الساكنة لسه على batchSettle الكامل');
+  assert.ok(serp.includes('let loopN = 0;') && serp.includes('loopN += 1;'), 'حارس الدورات مش معدود');
+  assert.ok(serp.includes('cfg.batchSettleMs || 5000'), 'قراءة batchSettle اتلمست — ممنوع');
+  // 3) الدقة: floor بدل ceil — مفيش فجوة بتزحلق المراكز 5 لفوق
+  assert.ok(!/Math\.ceil\(merged\.length/.test(serp), 'ceil رجع — لغم الانزلاق!');
+  assert.ok(serp.includes('start = Math.floor(merged.length / 10) * 10;'), 'floor مش متطبّق');
+  // 4) وعد .47: الرابط بالحرف في اللوج + 🔎 في الجدول
+  const q = read('src/background/core/queue.js');
+  assert.ok(q.includes('الرابط اللي الأداة قريته بالحرف'), 'سطر 🔎 مش في اللوج');
+  const sp = read('src/sidepanel/side-panel.js');
+  assert.ok(sp.includes("chk.className = 'res-check';"), 'شارة 🔎 مش في جدول النتائج');
+  assert.ok(sp.includes('chk.href = row.serpUrl;'), 'الشارة مش ماشيبة على الرابط المحفوظ');
+  const css = read('src/sidepanel/side-panel.css');
+  assert.ok(css.includes('.res-check'), 'شارة 🔎 بلا ستايل');
+  // 5) الثوابت: اللطف سايد، العقيدة سايدة
+  assert.ok(serp.includes('await D.humanSleep(550, 300);'), 'فاصل الجلب المهذب اتسرّح من تحت القرار');
+  const uk = read('src/background/core/urlkit.js');
+  assert.ok(!/searchParams\.set\('num'/.test(uk) && !uk.includes("|| 'sa'"), 'عقيدة اللينك اتكسرت — ممنوع أبديًا');
+  assert.ok(serp.includes("const keyX = url + '\\n' + String(h3.textContent || '')"), 'دديوب .48 اتفك');
+  assert.ok(serp.includes('const ms = cold ? 600 : 4000;') || read('src/background/core/scheduler.js').includes('const ms = cold ? 600 : 4000;'), 'إيقاع الفواصل اتبدل');
 });
